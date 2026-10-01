@@ -216,3 +216,11 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Local project context and environment
+/docs/reference/
+/docs/progress.md
+/AGENTS.md
+.env
+.env.*
+!.env.example
