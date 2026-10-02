@@ -1,0 +1,10 @@
+# Only these runtime inputs may enter the build context.
+**
+!Dockerfile
+!backend/
+!backend/main.py
+!backend/requirements.txt
+!frontend/
+!frontend/app.py
+!frontend/api_client.py
+!frontend/requirements.txt
