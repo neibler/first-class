@@ -1,0 +1,45 @@
+name: Create branch for new issue
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  create-branch:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      ISSUE_NUMBER: ${{ github.event.issue.number }}
+
+    steps:
+      - name: Create branch and comment
+        shell: bash
+        run: |
+          if jq -e '.issue.labels | any(.[]; .name == "docs")' "$GITHUB_EVENT_PATH" > /dev/null; then
+            prefix="docs"
+          elif jq -e '.issue.labels | any(.[]; .name == "bug")' "$GITHUB_EVENT_PATH" > /dev/null; then
+            prefix="bug"
+          else
+            prefix="feature"
+          fi
+
+          branch="${prefix}/${ISSUE_NUMBER}"
+          default_branch=$(gh api "repos/${GITHUB_REPOSITORY}" --jq '.default_branch')
+          base_sha=$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/${default_branch}" --jq '.object.sha')
+
+          if gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/${branch}" --silent > /dev/null 2>&1; then
+            echo "Branch already exists: ${branch}"
+            exit 0
+          fi
+
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/git/refs" \
+            -f ref="refs/heads/${branch}" \
+            -f sha="${base_sha}" > /dev/null
+
+          gh issue comment "${ISSUE_NUMBER}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --body "🌿 브랜치가 생성되었습니다: \`${branch}\`"
