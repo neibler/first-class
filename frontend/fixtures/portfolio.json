@@ -1,0 +1,685 @@
+{
+  "as_of": "2026-06-30",
+  "benchmark": "S&P 500 형태의 합성 벤치마크",
+  "periods_per_year": 252,
+  "annual_risk_free_rate": 0.02,
+  "assets": [
+    {
+      "ticker": "SPY",
+      "name": "미국 대형주",
+      "weight": 0.28
+    },
+    {
+      "ticker": "QQQ",
+      "name": "미국 기술주",
+      "weight": 0.2
+    },
+    {
+      "ticker": "TLT",
+      "name": "미국 장기채",
+      "weight": 0.18
+    },
+    {
+      "ticker": "GLD",
+      "name": "금",
+      "weight": 0.14
+    },
+    {
+      "ticker": "VNQ",
+      "name": "미국 리츠",
+      "weight": 0.12
+    },
+    {
+      "ticker": "IEF",
+      "name": "미국 중기채",
+      "weight": 0.08
+    }
+  ],
+  "returns": [
+    {
+      "date": "2026-01-01",
+      "portfolio_log": 0,
+      "benchmark_log": 0
+    },
+    {
+      "date": "2026-01-02",
+      "portfolio_log": 0.00280684,
+      "benchmark_log": 0.00324601
+    },
+    {
+      "date": "2026-01-05",
+      "portfolio_log": 0.00286622,
+      "benchmark_log": 0.0028257
+    },
+    {
+      "date": "2026-01-06",
+      "portfolio_log": 0.00661533,
+      "benchmark_log": 0.0050314
+    },
+    {
+      "date": "2026-01-07",
+      "portfolio_log": 0.00764233,
+      "benchmark_log": 0.00516459
+    },
+    {
+      "date": "2026-01-08",
+      "portfolio_log": 0.00390216,
+      "benchmark_log": 0.00180745
+    },
+    {
+      "date": "2026-01-09",
+      "portfolio_log": 0.00232065,
+      "benchmark_log": 0.00025486
+    },
+    {
+      "date": "2026-01-12",
+      "portfolio_log": 0.00331082,
+      "benchmark_log": 0.00088332
+    },
+    {
+      "date": "2026-01-13",
+      "portfolio_log": 0.00041282,
+      "benchmark_log": -0.00113128
+    },
+    {
+      "date": "2026-01-14",
+      "portfolio_log": -0.00422816,
+      "benchmark_log": -0.00420899
+    },
+    {
+      "date": "2026-01-15",
+      "portfolio_log": -0.00393645,
+      "benchmark_log": -0.00341642
+    },
+    {
+      "date": "2026-01-16",
+      "portfolio_log": -0.00200079,
+      "benchmark_log": -0.0013246
+    },
+    {
+      "date": "2026-01-19",
+      "portfolio_log": -0.00370638,
+      "benchmark_log": -0.00201397
+    },
+    {
+      "date": "2026-01-20",
+      "portfolio_log": -0.00413817,
+      "benchmark_log": -0.00190563
+    },
+    {
+      "date": "2026-01-21",
+      "portfolio_log": 0.00043744,
+      "benchmark_log": 0.00172195
+    },
+    {
+      "date": "2026-01-22",
+      "portfolio_log": 0.00356857,
+      "benchmark_log": 0.00399417
+    },
+    {
+      "date": "2026-01-23",
+      "portfolio_log": 0.00258942,
+      "benchmark_log": 0.00292556
+    },
+    {
+      "date": "2026-01-26",
+      "portfolio_log": 0.00387866,
+      "benchmark_log": 0.00336097
+    },
+    {
+      "date": "2026-01-27",
+      "portfolio_log": 0.0075766,
+      "benchmark_log": 0.00550241
+    },
+    {
+      "date": "2026-01-28",
+      "portfolio_log": 0.0067055,
+      "benchmark_log": 0.00423164
+    },
+    {
+      "date": "2026-01-29",
+      "portfolio_log": 0.00279845,
+      "benchmark_log": 0.0008109
+    },
+    {
+      "date": "2026-01-30",
+      "portfolio_log": 0.00248985,
+      "benchmark_log": 0.00030528
+    },
+    {
+      "date": "2026-02-02",
+      "portfolio_log": 0.00281767,
+      "benchmark_log": 0.00054318
+    },
+    {
+      "date": "2026-02-03",
+      "portfolio_log": -0.00136322,
+      "benchmark_log": -0.00233279
+    },
+    {
+      "date": "2026-02-04",
+      "portfolio_log": -0.00486215,
+      "benchmark_log": -0.00447693
+    },
+    {
+      "date": "2026-02-05",
+      "portfolio_log": -0.00318585,
+      "benchmark_log": -0.00260667
+    },
+    {
+      "date": "2026-02-06",
+      "portfolio_log": -0.0021391,
+      "benchmark_log": -0.00118723
+    },
+    {
+      "date": "2026-02-09",
+      "portfolio_log": -0.00424255,
+      "benchmark_log": -0.00222458
+    },
+    {
+      "date": "2026-02-10",
+      "portfolio_log": -0.00296701,
+      "benchmark_log": -0.0009202
+    },
+    {
+      "date": "2026-02-11",
+      "portfolio_log": 0.0020797,
+      "benchmark_log": 0.00295675
+    },
+    {
+      "date": "2026-02-12",
+      "portfolio_log": 0.00365925,
+      "benchmark_log": 0.00396078
+    },
+    {
+      "date": "2026-02-13",
+      "portfolio_log": 0.00261335,
+      "benchmark_log": 0.00275604
+    },
+    {
+      "date": "2026-02-16",
+      "portfolio_log": 0.00513851,
+      "benchmark_log": 0.00406648
+    },
+    {
+      "date": "2026-02-17",
+      "portfolio_log": 0.00797896,
+      "benchmark_log": 0.00555645
+    },
+    {
+      "date": "2026-02-18",
+      "portfolio_log": 0.00538735,
+      "benchmark_log": 0.00303207
+    },
+    {
+      "date": "2026-02-19",
+      "portfolio_log": 0.002083,
+      "benchmark_log": 0.00013852
+    },
+    {
+      "date": "2026-02-20",
+      "portfolio_log": 0.00271899,
+      "benchmark_log": 0.00044125
+    },
+    {
+      "date": "2026-02-23",
+      "portfolio_log": 0.00180775,
+      "benchmark_log": -0.00014372
+    },
+    {
+      "date": "2026-02-24",
+      "portfolio_log": -0.00304556,
+      "benchmark_log": -0.00343042
+    },
+    {
+      "date": "2026-02-25",
+      "portfolio_log": -0.00487489,
+      "benchmark_log": -0.00425866
+    },
+    {
+      "date": "2026-02-26",
+      "portfolio_log": -0.00247436,
+      "benchmark_log": -0.00182301
+    },
+    {
+      "date": "2026-02-27",
+      "portfolio_log": -0.00260566,
+      "benchmark_log": -0.0013104
+    },
+    {
+      "date": "2026-03-02",
+      "portfolio_log": -0.00436257,
+      "benchmark_log": -0.00215243
+    },
+    {
+      "date": "2026-03-03",
+      "portfolio_log": -0.00134542,
+      "benchmark_log": 0.00036405
+    },
+    {
+      "date": "2026-03-04",
+      "portfolio_log": 0.00332695,
+      "benchmark_log": 0.00385374
+    },
+    {
+      "date": "2026-03-05",
+      "portfolio_log": 0.00343711,
+      "benchmark_log": 0.00365622
+    },
+    {
+      "date": "2026-03-06",
+      "portfolio_log": 0.00302385,
+      "benchmark_log": 0.00285159
+    },
+    {
+      "date": "2026-03-09",
+      "portfolio_log": 0.00640276,
+      "benchmark_log": 0.0047666
+    },
+    {
+      "date": "2026-03-10",
+      "portfolio_log": 0.00772309,
+      "benchmark_log": 0.00512593
+    },
+    {
+      "date": "2026-03-11",
+      "portfolio_log": 0.003957,
+      "benchmark_log": 0.00177357
+    },
+    {
+      "date": "2026-03-12",
+      "portfolio_log": 0.00179928,
+      "benchmark_log": -0.0001733
+    },
+    {
+      "date": "2026-03-13",
+      "portfolio_log": 0.00276265,
+      "benchmark_log": 0.00047969
+    },
+    {
+      "date": "2026-03-16",
+      "portfolio_log": 0.00035183,
+      "benchmark_log": -0.00112626
+    },
+    {
+      "date": "2026-03-17",
+      "portfolio_log": -0.00436028,
+      "benchmark_log": -0.00422329
+    },
+    {
+      "date": "2026-03-18",
+      "portfolio_log": -0.0043718,
+      "benchmark_log": -0.00363956
+    },
+    {
+      "date": "2026-03-19",
+      "portfolio_log": -0.00201962,
+      "benchmark_log": -0.00123558
+    },
+    {
+      "date": "2026-03-20",
+      "portfolio_log": -0.00322683,
+      "benchmark_log": -0.00157018
+    },
+    {
+      "date": "2026-03-23",
+      "portfolio_log": -0.00390982,
+      "benchmark_log": -0.00168456
+    },
+    {
+      "date": "2026-03-24",
+      "portfolio_log": 0.00047838,
+      "benchmark_log": 0.00175905
+    },
+    {
+      "date": "2026-03-25",
+      "portfolio_log": 0.00404767,
+      "benchmark_log": 0.00431533
+    },
+    {
+      "date": "2026-03-26",
+      "portfolio_log": 0.00313842,
+      "benchmark_log": 0.00326153
+    },
+    {
+      "date": "2026-03-27",
+      "portfolio_log": 0.00384256,
+      "benchmark_log": 0.0032343
+    },
+    {
+      "date": "2026-03-30",
+      "portfolio_log": 0.00739704,
+      "benchmark_log": 0.00526246
+    },
+    {
+      "date": "2026-03-31",
+      "portfolio_log": -0.00015053,
+      "benchmark_log": -0.00075218
+    },
+    {
+      "date": "2026-04-01",
+      "portfolio_log": -0.00431584,
+      "benchmark_log": -0.00433642
+    },
+    {
+      "date": "2026-04-02",
+      "portfolio_log": -0.00514202,
+      "benchmark_log": -0.00518881
+    },
+    {
+      "date": "2026-04-03",
+      "portfolio_log": -0.00458341,
+      "benchmark_log": -0.00473273
+    },
+    {
+      "date": "2026-04-06",
+      "portfolio_log": -0.00835612,
+      "benchmark_log": -0.00726202
+    },
+    {
+      "date": "2026-04-07",
+      "portfolio_log": -0.01211045,
+      "benchmark_log": -0.00956907
+    },
+    {
+      "date": "2026-04-08",
+      "portfolio_log": -0.01056492,
+      "benchmark_log": -0.00778538
+    },
+    {
+      "date": "2026-04-09",
+      "portfolio_log": -0.00893968,
+      "benchmark_log": -0.00593978
+    },
+    {
+      "date": "2026-04-10",
+      "portfolio_log": -0.01075804,
+      "benchmark_log": -0.00678886
+    },
+    {
+      "date": "2026-04-13",
+      "portfolio_log": -0.00985453,
+      "benchmark_log": -0.0058022
+    },
+    {
+      "date": "2026-04-14",
+      "portfolio_log": -0.00478535,
+      "benchmark_log": -0.00195324
+    },
+    {
+      "date": "2026-04-15",
+      "portfolio_log": -0.00275416,
+      "benchmark_log": -0.00065328
+    },
+    {
+      "date": "2026-04-16",
+      "portfolio_log": -0.00399611,
+      "benchmark_log": -0.00203801
+    },
+    {
+      "date": "2026-04-17",
+      "portfolio_log": 0.00495826,
+      "benchmark_log": 0.00382719
+    },
+    {
+      "date": "2026-04-20",
+      "portfolio_log": 0.00788587,
+      "benchmark_log": 0.00538437
+    },
+    {
+      "date": "2026-04-21",
+      "portfolio_log": 0.00552854,
+      "benchmark_log": 0.00305613
+    },
+    {
+      "date": "2026-04-22",
+      "portfolio_log": 0.00177149,
+      "benchmark_log": -0.00014159
+    },
+    {
+      "date": "2026-04-23",
+      "portfolio_log": 0.00206485,
+      "benchmark_log": -5.204e-05
+    },
+    {
+      "date": "2026-04-24",
+      "portfolio_log": 0.00157655,
+      "benchmark_log": -0.00027551
+    },
+    {
+      "date": "2026-04-27",
+      "portfolio_log": -0.00304449,
+      "benchmark_log": -0.0033513
+    },
+    {
+      "date": "2026-04-28",
+      "portfolio_log": -0.00522362,
+      "benchmark_log": -0.00441942
+    },
+    {
+      "date": "2026-04-29",
+      "portfolio_log": -0.00271517,
+      "benchmark_log": -0.00189872
+    },
+    {
+      "date": "2026-04-30",
+      "portfolio_log": -0.00222223,
+      "benchmark_log": -0.00093292
+    },
+    {
+      "date": "2026-05-01",
+      "portfolio_log": -0.00395004,
+      "benchmark_log": -0.00178449
+    },
+    {
+      "date": "2026-05-04",
+      "portfolio_log": -0.0013056,
+      "benchmark_log": 0.00041044
+    },
+    {
+      "date": "2026-05-05",
+      "portfolio_log": 0.00360281,
+      "benchmark_log": 0.00403213
+    },
+    {
+      "date": "2026-05-06",
+      "portfolio_log": 0.00405453,
+      "benchmark_log": 0.00405095
+    },
+    {
+      "date": "2026-05-07",
+      "portfolio_log": 0.0032112,
+      "benchmark_log": 0.00289637
+    },
+    {
+      "date": "2026-05-08",
+      "portfolio_log": 0.00615313,
+      "benchmark_log": 0.00447368
+    },
+    {
+      "date": "2026-05-11",
+      "portfolio_log": 0.00773359,
+      "benchmark_log": 0.00503739
+    },
+    {
+      "date": "2026-05-12",
+      "portfolio_log": 0.00401768,
+      "benchmark_log": 0.0017495
+    },
+    {
+      "date": "2026-05-13",
+      "portfolio_log": 0.00130516,
+      "benchmark_log": -0.00057397
+    },
+    {
+      "date": "2026-05-14",
+      "portfolio_log": 0.00217656,
+      "benchmark_log": 5.502e-05
+    },
+    {
+      "date": "2026-05-15",
+      "portfolio_log": 0.00027094,
+      "benchmark_log": -0.00112977
+    },
+    {
+      "date": "2026-05-18",
+      "portfolio_log": -0.00443021,
+      "benchmark_log": -0.00418672
+    },
+    {
+      "date": "2026-05-19",
+      "portfolio_log": -0.00476728,
+      "benchmark_log": -0.00383149
+    },
+    {
+      "date": "2026-05-20",
+      "portfolio_log": -0.00206273,
+      "benchmark_log": -0.00116665
+    },
+    {
+      "date": "2026-05-21",
+      "portfolio_log": -0.00272866,
+      "benchmark_log": -0.00111713
+    },
+    {
+      "date": "2026-05-22",
+      "portfolio_log": -0.0036172,
+      "benchmark_log": -0.00142198
+    },
+    {
+      "date": "2026-05-25",
+      "portfolio_log": 0.00051317,
+      "benchmark_log": 0.00178411
+    },
+    {
+      "date": "2026-05-26",
+      "portfolio_log": 0.00447416,
+      "benchmark_log": 0.0045902
+    },
+    {
+      "date": "2026-05-27",
+      "portfolio_log": 0.00369595,
+      "benchmark_log": 0.0035989
+    },
+    {
+      "date": "2026-05-28",
+      "portfolio_log": 0.00382455,
+      "benchmark_log": 0.00311895
+    },
+    {
+      "date": "2026-05-29",
+      "portfolio_log": 0.00715769,
+      "benchmark_log": 0.00497858
+    },
+    {
+      "date": "2026-06-01",
+      "portfolio_log": 0.00694005,
+      "benchmark_log": 0.00422786
+    },
+    {
+      "date": "2026-06-02",
+      "portfolio_log": 0.00259636,
+      "benchmark_log": 0.00054232
+    },
+    {
+      "date": "2026-06-03",
+      "portfolio_log": 0.00123658,
+      "benchmark_log": -0.0006677
+    },
+    {
+      "date": "2026-06-04",
+      "portfolio_log": 0.00196956,
+      "benchmark_log": -3.594e-05
+    },
+    {
+      "date": "2026-06-05",
+      "portfolio_log": -0.00134126,
+      "benchmark_log": -0.00217974
+    },
+    {
+      "date": "2026-06-08",
+      "portfolio_log": -0.00528843,
+      "benchmark_log": -0.0046053
+    },
+    {
+      "date": "2026-06-09",
+      "portfolio_log": -0.00392853,
+      "benchmark_log": -0.00295243
+    },
+    {
+      "date": "2026-06-10",
+      "portfolio_log": -0.0017637,
+      "benchmark_log": -0.00071297
+    },
+    {
+      "date": "2026-06-11",
+      "portfolio_log": -0.0032322,
+      "benchmark_log": -0.00132774
+    },
+    {
+      "date": "2026-06-12",
+      "portfolio_log": -0.00268982,
+      "benchmark_log": -0.00065218
+    },
+    {
+      "date": "2026-06-15",
+      "portfolio_log": 0.00231667,
+      "benchmark_log": 0.0031047
+    },
+    {
+      "date": "2026-06-16",
+      "portfolio_log": 0.0047907,
+      "benchmark_log": 0.00469511
+    },
+    {
+      "date": "2026-06-17",
+      "portfolio_log": 0.00341851,
+      "benchmark_log": 0.00318198
+    },
+    {
+      "date": "2026-06-18",
+      "portfolio_log": 0.00477455,
+      "benchmark_log": 0.00358429
+    },
+    {
+      "date": "2026-06-19",
+      "portfolio_log": 0.00772012,
+      "benchmark_log": 0.00515992
+    },
+    {
+      "date": "2026-06-22",
+      "portfolio_log": 0.00564178,
+      "benchmark_log": 0.00306415
+    },
+    {
+      "date": "2026-06-23",
+      "portfolio_log": 0.00149621,
+      "benchmark_log": -0.00038775
+    },
+    {
+      "date": "2026-06-24",
+      "portfolio_log": 0.00139982,
+      "benchmark_log": -0.00054606
+    },
+    {
+      "date": "2026-06-25",
+      "portfolio_log": 0.00130399,
+      "benchmark_log": -0.00043159
+    },
+    {
+      "date": "2026-06-26",
+      "portfolio_log": -0.00300707,
+      "benchmark_log": -0.0032401
+    },
+    {
+      "date": "2026-06-29",
+      "portfolio_log": -0.00550751,
+      "benchmark_log": -0.00452957
+    },
+    {
+      "date": "2026-06-30",
+      "portfolio_log": -0.00296326,
+      "benchmark_log": -0.00198108
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+[theme]
+base = "dark"
+primaryColor = "#56c5ff"
+backgroundColor = "#040c17"
+secondaryBackgroundColor = "#0c1d30"
+textColor = "#eef4fc"
+borderColor = "#30475e"
+showWidgetBorder = true
+baseRadius = "10px"
+buttonRadius = "10px"
+baseFontSize = 16
+headingFontSizes = ["36px", "25px", "20px", "18px", "16px", "14px"]
+chartCategoricalColors = ["#3bbdff", "#ffd16a", "#3ed5ce", "#ae94ff", "#ed8c68", "#9dbada"]
+
+[browser]
+gatherUsageStats = false
+
+[client]
+toolbarMode = "minimal"

@@ -1,0 +1,112 @@
+{
+  "cabin-ceiling-navy": {
+    "source_size": [
+      2172,
+      724
+    ],
+    "opaque_bounds": [
+      0,
+      219,
+      2172,
+      465
+    ]
+  },
+  "cabin-window-panel": {
+    "source_size": [
+      1086,
+      1448
+    ],
+    "opaque_bounds": [
+      16,
+      51,
+      1063,
+      1383
+    ]
+  },
+  "cabin-wine-panel": {
+    "source_size": [
+      793,
+      1983
+    ],
+    "opaque_bounds": [
+      0,
+      0,
+      793,
+      1983
+    ],
+    "vertical_slices": {
+      "top": [
+        0,
+        960
+      ],
+      "body": [
+        960,
+        1740
+      ],
+      "base": [
+        1740,
+        1983
+      ]
+    }
+  },
+  "cabin-seat-armrests": {
+    "source_size": [
+      2171,
+      724
+    ],
+    "opaque_bounds": [
+      0,
+      0,
+      2171,
+      724
+    ]
+  },
+  "monitor-frame-top": {
+    "source_size": [
+      2103,
+      748
+    ],
+    "opaque_bounds": [
+      18,
+      335,
+      2085,
+      402
+    ]
+  },
+  "monitor-frame-bottom": {
+    "source_size": [
+      2103,
+      748
+    ],
+    "opaque_bounds": [
+      21,
+      336,
+      2082,
+      405
+    ]
+  },
+  "monitor-frame-left": {
+    "source_size": [
+      1060,
+      1484
+    ],
+    "opaque_bounds": [
+      495,
+      25,
+      565,
+      1460
+    ]
+  },
+  "monitor-frame-right": {
+    "source_size": [
+      1060,
+      1484
+    ],
+    "opaque_bounds": [
+      495,
+      24,
+      569,
+      1464
+    ]
+  }
+}

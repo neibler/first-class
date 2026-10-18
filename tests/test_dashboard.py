@@ -9,7 +9,8 @@ def test_page_shows_api_success_and_missing_model(monkeypatch):
         "get_health",
         lambda: api_client.HealthStatus(status="ok", model_loaded=False),
     )
-    page = AppTest.from_file("frontend/app.py").run()
+    # Cold Altair / metric-chart imports can exceed AppTest's 3-second default.
+    page = AppTest.from_file("frontend/app.py", default_timeout=10).run()
     assert not page.exception
     assert not page.error
     assert page.success[0].value == "API 연결 정상"
@@ -21,7 +22,7 @@ def test_refresh_recovers_from_api_failure(monkeypatch):
         raise api_client.APIError("API에 연결할 수 없습니다.")
 
     monkeypatch.setattr(api_client, "get_health", unavailable)
-    page = AppTest.from_file("frontend/app.py").run()
+    page = AppTest.from_file("frontend/app.py", default_timeout=10).run()
     assert not page.exception
     assert not page.success
     assert not page.warning
