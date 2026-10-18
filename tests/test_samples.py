@@ -1,10 +1,12 @@
 """Financial identities and chart semantics, independent of screenshot styling."""
 
+import json
 import math
 from statistics import mean, stdev
 
 import pytest
 
+from frontend import sample_data
 from frontend.charts import summary_plot
 from frontend.sample_data import (
     SampleDataError,
@@ -22,6 +24,37 @@ def test_weights_reproducible_and_not_mutable_across_loads():
     assert data == load_portfolio()
     data["assets"].clear()
     assert load_portfolio()["assets"]
+
+
+@pytest.mark.parametrize("count", [0, 1, 2])
+def test_portfolio_loader_rejects_insufficient_returns(monkeypatch, tmp_path, count):
+    data = load_portfolio()
+    data["returns"] = data["returns"][:count]
+    (tmp_path / "portfolio.json").write_text(json.dumps(data), encoding="utf-8")
+    monkeypatch.setattr(sample_data, "FIXTURES", tmp_path)
+
+    with pytest.raises(SampleDataError, match="기준일과 수익률 관측치 2개"):
+        load_portfolio()
+
+
+@pytest.mark.parametrize("recent", [False, True])
+def test_minimum_portfolio_sample_supports_both_periods(monkeypatch, tmp_path, recent):
+    data = load_portfolio()
+    data["returns"] = data["returns"][:3]
+    (tmp_path / "portfolio.json").write_text(json.dumps(data), encoding="utf-8")
+    monkeypatch.setattr(sample_data, "FIXTURES", tmp_path)
+
+    loaded = load_portfolio()
+    assert loaded == data
+    rows = loaded["returns"][-64:] if recent else loaded["returns"]
+    result = performance(
+        rows, loaded["periods_per_year"], loaded["annual_risk_free_rate"]
+    )
+    assert result["observations"] == 2
+    assert len(result["path"]) == 3
+    assert result["cumulative"] == pytest.approx(
+        math.expm1(sum(row["portfolio_log"] for row in rows[1:]))
+    )
 
 
 @pytest.mark.parametrize("count", [None, 64])

@@ -18,8 +18,12 @@ class SampleDataError(ValueError):
 
 def load_portfolio():
     data = json.loads((FIXTURES / "portfolio.json").read_text(encoding="utf-8"))
-    if not data or not data.get("assets") or not data.get("returns"):
+    if not data or not data.get("assets"):
         return None
+    if len(data.get("returns") or []) < 3:
+        raise SampleDataError(
+            "성과 계산에 기준일과 수익률 관측치 2개 이상이 필요합니다."
+        )
     weights = [asset["weight"] for asset in data["assets"]]
     if not all(math.isfinite(w) and w >= 0 for w in weights) or not math.isclose(
         sum(weights), 1.0, abs_tol=1e-8

@@ -1,3 +1,5 @@
+import json
+
 import pytest
 from streamlit.testing.v1 import AppTest
 
@@ -11,7 +13,7 @@ def page(monkeypatch):
         "get_health",
         lambda: api_client.HealthStatus(status="ok", model_loaded=False),
     )
-    return AppTest.from_file("frontend/app.py").run()
+    return AppTest.from_file("frontend/app.py", default_timeout=10).run()
 
 
 def test_navigation_all_six_pages_and_placeholder_scope(page):
@@ -49,6 +51,45 @@ def test_period_and_shap_filters_change_results(page):
     page.selectbox(key="shap_date").set_value("2026-04-30").run()
     assert not page.exception
     assert str(page.dataframe[0].value) != before
+
+
+@pytest.mark.parametrize("count", [0, 1, 2])
+@pytest.mark.parametrize("period", ["전체 기간", "최근 63개 관측일"])
+def test_short_portfolio_sample_shows_safe_error(
+    page, monkeypatch, tmp_path, count, period
+):
+    from frontend import sample_data
+
+    page.selectbox(key="period").set_value(period).run()
+    data = sample_data.load_portfolio()
+    data["returns"] = data["returns"][:count]
+    (tmp_path / "portfolio.json").write_text(json.dumps(data), encoding="utf-8")
+    monkeypatch.setattr(sample_data, "FIXTURES", tmp_path)
+
+    page.run()
+    assert not page.exception
+    assert "샘플 데이터 오류" in page.error[0].value
+    assert "다시 시도" in page.error[0].value
+    assert "기준일과 수익률 관측치" not in page.error[0].value
+    assert not page.metric
+    assert len(page.get("page_link")) == 6
+    assert page.button(key="retry_portfolio")
+
+
+def test_minimum_portfolio_sample_renders_both_periods(page, monkeypatch, tmp_path):
+    from frontend import sample_data
+
+    data = sample_data.load_portfolio()
+    data["returns"] = data["returns"][:3]
+    (tmp_path / "portfolio.json").write_text(json.dumps(data), encoding="utf-8")
+    monkeypatch.setattr(sample_data, "FIXTURES", tmp_path)
+
+    for period in ["전체 기간", "최근 63개 관측일"]:
+        page.selectbox(key="period").set_value(period).run()
+        assert not page.exception
+        assert not page.error
+        assert len(page.metric) == 3
+        assert any("2개 일간 수익률" in item.value for item in page.caption)
 
 
 @pytest.mark.parametrize("slug", ["portfolio", "shap"])
