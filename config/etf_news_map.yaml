@@ -1,0 +1,312 @@
+# =============================================================
+# ETF ↔ 뉴스 매핑 설정 (초안 v0.1)
+# 담당: 뉴스 AI / 기준일: 2026-10-06
+# -------------------------------------------------------------
+# 용도
+#   1) 기사 필터링: 기사가 어떤 ETF와 관련 있는지 판별
+#   2) risk_score 계산: 기사 점수 × 관련도(편입 비중 또는 노출도)
+#
+# 매핑 방식
+#   track A  편입종목 기반 — 기사에 편입 기업이 나오면 해당 ETF에 연결
+#            관련도 = 편입 비중 (원래 값 그대로 저장, 정규화는 스코어링 단계에서)
+#   track B  키워드 기반   — 편입 주식이 없는 채권·원자재 ETF
+#   (공통)   위험유형 전파 — 기사에서 판정된 risk_type을 risk_exposure로 각 ETF에 분배
+#
+# 주의
+#   - holdings는 기준일 스냅샷이다. 2019년~ 과거 구간에 그대로 쓰면 미래정보 누수
+#     → SEC N-PORT(분기별 보유내역)로 연도별 보정 예정. 미보정 시 리포트 한계점에 기술
+#   - risk_exposure 값은 이론 기반 초기값 → 과거 수익률과의 상관으로 보정 예정
+# =============================================================
+
+version: "0.1"
+as_of: "2026-10-06"
+holdings_source: "yfinance Ticker.funds_data.top_holdings"
+
+# 팀 공통 규칙 4번의 risk_type 10종
+risk_types: [recession, inflation, interest_rate, regulation, geopolitical,
+             earnings, market_risk, credit_risk, commodity_risk, currency_risk]
+
+# -------------------------------------------------------------
+# 기사 매칭 규칙
+# -------------------------------------------------------------
+matching:
+  word_boundary: true     # "Intel"이 "Intelligence"에 걸리지 않게
+  case_sensitive: true    # "Public Storage"(기업) vs "public storage"(일반명사)
+  # V, O, KO 같은 짧은 티커 오탐 방지: 티커는 아래 형식으로 나올 때만 인정 (TICKER = 실제 티커)
+  ticker_forms: ["$TICKER", "(NASDAQ: TICKER)", "(NYSE: TICKER)", "(Nasdaq: TICKER)"]
+
+# -------------------------------------------------------------
+# 편입 기업 별칭 (여러 ETF가 공유. 예: NVDA → SPY·QQQ·SMH)
+#   aliases : 기사에서 찾을 이름
+#   exclude : 이름이 같은 다른 대상 (오탐 방지)
+#   foreign : 해외 기업 → SEC 8-K 대상 아님 (6-K/현지 공시)
+#   sec_cik : 티커가 가리키는 SEC 등록번호가 2019~2025년 공시 주체와 다를 때 직접 지정
+# -------------------------------------------------------------
+companies:
+  # --- 빅테크 / 반도체 ---
+  NVDA:  {name: "NVIDIA Corp", aliases: [Nvidia, NVIDIA]}
+  AAPL:  {name: "Apple Inc", aliases: [Apple]}
+  MSFT:  {name: "Microsoft Corp", aliases: [Microsoft]}
+  AMZN:  {name: "Amazon.com Inc", aliases: [Amazon, Amazon.com, AWS], exclude: [Amazon rainforest]}
+  GOOGL: {name: "Alphabet Inc", aliases: [Alphabet, Google]}
+  META:  {name: "Meta Platforms Inc", aliases: [Meta Platforms, Facebook]}
+  AVGO:  {name: "Broadcom Inc", aliases: [Broadcom]}
+  TSLA:  {name: "Tesla Inc", aliases: [Tesla]}
+  MU:    {name: "Micron Technology Inc", aliases: [Micron]}
+  AMD:   {name: "Advanced Micro Devices Inc", aliases: [AMD, Advanced Micro Devices]}
+  TSM:   {name: "Taiwan Semiconductor Manufacturing", aliases: [TSMC, Taiwan Semiconductor], foreign: true}
+  AMAT:  {name: "Applied Materials Inc", aliases: [Applied Materials]}
+  INTC:  {name: "Intel Corp", aliases: [Intel]}
+  TXN:   {name: "Texas Instruments Inc", aliases: [Texas Instruments]}
+  KLAC:  {name: "KLA Corp", aliases: [KLA Corp, KLA Corporation]}
+  ASML:  {name: "ASML Holding NV", aliases: [ASML], foreign: true}   # SMH는 ADR, EFA는 암스테르담 상장분 보유
+  QCOM:  {name: "Qualcomm Inc", aliases: [Qualcomm]}
+
+  # --- 배당 / 방어 ---
+  PG:    {name: "Procter & Gamble Co", aliases: ["Procter & Gamble", "P&G"]}
+  MRK:   {name: "Merck & Co Inc", aliases: [Merck], exclude: [Merck KGaA]}
+  KO:    {name: "Coca-Cola Co", aliases: [Coca-Cola]}
+  AMGN:  {name: "Amgen Inc", aliases: [Amgen]}
+  UNH:   {name: "UnitedHealth Group Inc", aliases: [UnitedHealth]}
+  PEP:   {name: "PepsiCo Inc", aliases: [PepsiCo]}
+  VZ:    {name: "Verizon Communications Inc", aliases: [Verizon]}
+
+  # --- 에너지 ---
+  # SEC 티커 XOM은 2026년 신설 지주회사(CIK 2115436)로 옮겨감. 2019~2025 8-K는 Exxon Mobil Corp
+  XOM:   {name: "ExxonMobil", aliases: [Exxon, ExxonMobil, Exxon Mobil], sec_cik: 34088}
+  CVX:   {name: "Chevron Corp", aliases: [Chevron]}
+  COP:   {name: "ConocoPhillips", aliases: [ConocoPhillips]}
+  VLO:   {name: "Valero Energy Corp", aliases: [Valero]}
+  MPC:   {name: "Marathon Petroleum Corp", aliases: [Marathon Petroleum], exclude: [Marathon Oil]}
+  PSX:   {name: "Phillips 66", aliases: [Phillips 66]}
+  WMB:   {name: "Williams Companies Inc", aliases: [Williams Companies, Williams Cos]}
+  SLB:   {name: "SLB", aliases: [SLB, Schlumberger]}
+  EOG:   {name: "EOG Resources Inc", aliases: [EOG Resources]}
+  KMI:   {name: "Kinder Morgan Inc", aliases: [Kinder Morgan]}
+
+  # --- 해외 선진국 (EFA) ---
+  HSBA.L:  {name: "HSBC Holdings PLC", aliases: [HSBC], foreign: true}
+  ROP.SW:  {name: "Roche Holding AG", aliases: [Roche], foreign: true}
+  SHEL.L:  {name: "Shell PLC", aliases: [Shell plc, Royal Dutch Shell, "Shell's"], exclude: [shell company, shell companies], foreign: true}
+  NOVN.SW: {name: "Novartis AG", aliases: [Novartis], foreign: true}
+  "8306.T": {name: "Mitsubishi UFJ Financial Group", aliases: [Mitsubishi UFJ, MUFG], foreign: true}
+  AZN.L:   {name: "AstraZeneca PLC", aliases: [AstraZeneca], foreign: true}
+  NESN.SW: {name: "Nestle SA", aliases: [Nestle, Nestlé], foreign: true}
+  SIE.DE:  {name: "Siemens AG", aliases: [Siemens], exclude: [Siemens Energy, Siemens Healthineers], foreign: true}
+  BHP.AX:  {name: "BHP Group Ltd", aliases: [BHP], foreign: true}
+
+  # --- 리츠 (VNQ) ---
+  WELL:  {name: "Welltower Inc", aliases: [Welltower]}
+  PLD:   {name: "Prologis Inc", aliases: [Prologis]}
+  EQIX:  {name: "Equinix Inc", aliases: [Equinix]}
+  AMT:   {name: "American Tower Corp", aliases: [American Tower]}
+  SPG:   {name: "Simon Property Group Inc", aliases: [Simon Property]}
+  DLR:   {name: "Digital Realty Trust Inc", aliases: [Digital Realty]}
+  O:     {name: "Realty Income Corp", aliases: [Realty Income]}
+  PSA:   {name: "Public Storage", aliases: [Public Storage]}
+  # 2026-08 Equity Residential에서 사명 변경 (SEC CIK 906107 동일). 과거 기사는 옛 이름으로 나옴
+  VMRK:  {name: "Vivmark Residential", aliases: [Vivmark, Equity Residential]}
+
+# -------------------------------------------------------------
+# ETF별 매핑 (팀 공통 규칙 2번 순서 고정)
+#   holdings      : 상위 편입종목 비중 (0~1). 현금성 펀드(XTSLA, AGPXX 등)·내부 펀드(VRTPX)는 제외
+#   keywords      : ETF 직접 관련 키워드 (track B는 이것이 주 매칭 수단)
+#   nyt_tags      : (선택) NYT 기사 태그와 정확히 일치하면 연결. GDELT 검색어에는 쓰지 않음
+#   risk_exposure : 해당 위험이 커질 때 이 ETF에 불리한 정도 (0~1) → risk_score에 반영
+#   hedge_for     : 해당 위험이 커질 때 오히려 수혜인 위험유형 → risk_score에는 반영하지 않고
+#                   대시보드 설명용 (예: "경기침체 태그 증가 → TLT 비중 확대 이유")
+# -------------------------------------------------------------
+etfs:
+
+  SPY:
+    role: 미국 대표주식
+    track: A
+    holdings: {NVDA: 0.0836, AAPL: 0.0735, MSFT: 0.0576, GOOGL: 0.0550, AMZN: 0.0370,
+               AVGO: 0.0253, META: 0.0242, MU: 0.0182, TSLA: 0.0151}   # GOOGL = GOOGL + GOOG 합산
+    keywords: ["S&P 500", Wall Street, U.S. stocks, Magnificent Seven]
+    risk_exposure: {market_risk: 1.0, recession: 0.8, earnings: 0.7, interest_rate: 0.4,
+                    inflation: 0.4, geopolitical: 0.4, regulation: 0.3, credit_risk: 0.3,
+                    commodity_risk: 0.2, currency_risk: 0.2}
+    hedge_for: []
+
+  QQQ:
+    role: 기술·성장주
+    track: A
+    holdings: {NVDA: 0.0833, AAPL: 0.0735, GOOGL: 0.0590, MSFT: 0.0576, MU: 0.0502,
+               AMD: 0.0417, AMZN: 0.0407, META: 0.0326, TSLA: 0.0282}   # GOOGL = GOOGL + GOOG 합산
+    keywords: [Nasdaq, tech stocks, Big Tech, antitrust]
+    risk_exposure: {market_risk: 1.0, earnings: 0.8, interest_rate: 0.7, recession: 0.7,
+                    regulation: 0.6, inflation: 0.5, geopolitical: 0.4, credit_risk: 0.2,
+                    currency_risk: 0.2}
+    hedge_for: []
+
+  SMH:
+    role: AI·반도체
+    track: A
+    holdings: {NVDA: 0.1931, TSM: 0.0928, AMD: 0.0554, AVGO: 0.0527, MU: 0.0492,
+               AMAT: 0.0466, INTC: 0.0466, TXN: 0.0460, KLAC: 0.0459, ASML: 0.0454}
+    keywords: [semiconductor, chipmaker, chip stocks, export controls, CHIPS Act, foundry,
+               HBM, AI chips, chip tariffs, Taiwan Strait]
+    risk_exposure: {regulation: 1.0, market_risk: 1.0, earnings: 0.9, geopolitical: 0.8,
+                    recession: 0.8, interest_rate: 0.6, inflation: 0.3}
+    hedge_for: []
+
+  SCHD:
+    role: 배당·방어
+    track: A
+    holdings: {TXN: 0.0466, QCOM: 0.0456, PG: 0.0423, MRK: 0.0415, KO: 0.0415,
+               CVX: 0.0406, AMGN: 0.0403, UNH: 0.0395, PEP: 0.0386, VZ: 0.0386}
+    # SCHD는 매년 3월 종목 교체 → 과거 구간 편입종목 차이가 특히 큼
+    keywords: [dividend cut, dividend stocks, dividend suspension, value stocks]
+    risk_exposure: {market_risk: 0.7, earnings: 0.6, recession: 0.5, interest_rate: 0.5,
+                    inflation: 0.4, regulation: 0.2, credit_risk: 0.2}
+    hedge_for: []
+
+  XLE:
+    role: 유가·에너지 업황
+    track: A
+    holdings: {XOM: 0.2403, CVX: 0.1805, COP: 0.0673, VLO: 0.0473, MPC: 0.0470,
+               PSX: 0.0464, WMB: 0.0429, SLB: 0.0386, EOG: 0.0385, KMI: 0.0315}
+    keywords: [crude oil, oil prices, WTI, Brent, OPEC, OPEC+, natural gas, refining margins,
+               oil output, shale, energy stocks, Strategic Petroleum Reserve]
+    risk_exposure: {commodity_risk: 1.0, recession: 0.8, market_risk: 0.7, regulation: 0.6,
+                    earnings: 0.5, interest_rate: 0.2}
+    hedge_for: [inflation, geopolitical]   # 유가 상승 국면에서 통상 수혜
+
+  EFA:
+    role: 미국 외 선진국 분산
+    track: A
+    holdings: {ASML: 0.0325, HSBA.L: 0.0158, ROP.SW: 0.0136, SHEL.L: 0.0127, NOVN.SW: 0.0121,
+               "8306.T": 0.0116, AZN.L: 0.0114, NESN.SW: 0.0108, SIE.DE: 0.0105, BHP.AX: 0.0099}
+    # 상위 10개 합 14%로 분산이 매우 큼 → 미국 언론 커버리지도 약하므로 지역 매크로 키워드가 주력
+    keywords: [ECB, eurozone, European stocks, "Stoxx 600", Bank of Japan, BOJ, yen, Nikkei,
+               FTSE, DAX, Bank of England, sterling, developed markets]
+    risk_exposure: {market_risk: 0.9, currency_risk: 0.8, geopolitical: 0.7, recession: 0.7,
+                    earnings: 0.4, interest_rate: 0.3, inflation: 0.3, regulation: 0.3,
+                    commodity_risk: 0.3}
+    hedge_for: []
+
+  SHY:
+    role: 단기채 (현금성·방어)
+    track: B
+    holdings: {}
+    keywords: [2-year Treasury, two-year yield, fed funds rate, Treasury bills, T-bills,
+               rate cut, rate hike, FOMC]
+    risk_exposure: {interest_rate: 0.4, inflation: 0.2}
+    hedge_for: [recession, market_risk, credit_risk, geopolitical]
+
+  IEF:
+    role: 중기채 (금리·경기 대응)
+    track: B
+    holdings: {}
+    keywords: [10-year Treasury, 10-year yield, Treasury yields, bond market, Treasury auction,
+               FOMC, Federal Reserve]
+    nyt_tags: [Government Bonds]
+    risk_exposure: {interest_rate: 0.7, inflation: 0.6}
+    hedge_for: [recession, market_risk, credit_risk]
+
+  TLT:
+    role: 장기채 (장기금리 민감)
+    track: B
+    holdings: {}
+    keywords: [30-year Treasury, long bond, long-term yields, term premium, bond selloff,
+               Treasury auction, fiscal deficit, debt ceiling, Treasury refunding,
+               bond investors, bond traders, Treasuries, bond sell-off, national debt,
+               government debt]
+    nyt_tags: [Government Bonds, National Debt (US), Credit Ratings and Credit Rating Agencies]
+    risk_exposure: {interest_rate: 1.0, inflation: 0.9}
+    hedge_for: [recession, market_risk]
+
+  TIP:
+    role: 물가연동채 (인플레이션 방어)
+    track: B
+    holdings: {}
+    keywords: [TIPS, Treasury Inflation-Protected, breakeven inflation, real yields,
+               inflation expectations, CPI, PCE, Consumer Price Index, consumer prices]
+    nyt_tags: [Consumer Price Index]
+    risk_exposure: {interest_rate: 0.6, recession: 0.2, market_risk: 0.2}   # 실질금리 상승에 불리, 디플레이션 우려·유동성 위기 시 약세
+    hedge_for: [inflation]
+
+  LQD:
+    role: 투자등급 회사채 (신용시장)
+    track: B
+    holdings: {}
+    keywords: [corporate bonds, investment-grade, credit spreads, bond issuance,
+               credit rating, debt downgrade, rating downgrade, credit downgrade, "Moody's",
+               "Fitch", fallen angel, private credit,
+               debt investors]
+    nyt_tags: [Credit Ratings and Credit Rating Agencies]
+    risk_exposure: {credit_risk: 1.0, interest_rate: 0.8, inflation: 0.5, recession: 0.5,
+                    market_risk: 0.4}
+    hedge_for: []
+
+  GLD:
+    role: 금 (실질금리·위험회피)
+    track: B
+    holdings: {}
+    keywords: [gold prices, gold futures, bullion, central bank gold buying, safe haven,
+               safe-haven, real yields, price of gold, gold price, gold rally]
+    nyt_tags: [Gold]   # 금값 기사와 "황금 변기 도난" 같은 잡음이 반반 → LLM 단계에서 거름
+    risk_exposure: {interest_rate: 0.6, currency_risk: 0.6, commodity_risk: 0.3}   # 실질금리·달러 강세에 불리
+    hedge_for: [geopolitical, inflation, market_risk]
+
+  DBB:
+    role: 산업금속 (제조업·실물경기)
+    track: B
+    holdings: {}   # 실제 보유는 금속 선물(구리·알루미늄·아연) + 현금성 펀드
+    keywords: [copper, aluminum, aluminium, zinc, base metals, LME, industrial metals,
+               China PMI, metal tariffs, smelter]
+    risk_exposure: {recession: 0.9, commodity_risk: 0.9, market_risk: 0.5, currency_risk: 0.5,
+                    regulation: 0.4, geopolitical: 0.3}
+    hedge_for: [inflation]
+
+  DBA:
+    role: 농산물 (식품·공급충격)
+    track: B
+    holdings: {}   # 실제 보유는 농산물·축산물 선물 + 현금성 펀드
+    keywords: [wheat, corn, soybeans, sugar, coffee, cocoa, cattle, hogs, grain exports,
+               crop, harvest, drought, USDA, fertilizer, food prices]
+    risk_exposure: {commodity_risk: 0.9, currency_risk: 0.4, recession: 0.3, regulation: 0.3,
+                    market_risk: 0.3}
+    hedge_for: [inflation, geopolitical]   # 공급 충격 시 가격 상승으로 통상 수혜
+
+  VNQ:
+    role: 부동산 (금리·부동산)
+    track: A
+    holdings: {WELL: 0.0872, PLD: 0.0689, EQIX: 0.0545, AMT: 0.0433, SPG: 0.0364,
+               DLR: 0.0363, O: 0.0300, PSA: 0.0272, VMRK: 0.0246}
+    keywords: [REIT, REITs, commercial real estate, office vacancy, mortgage rates,
+               property market, data center leasing, cap rates, mortgage rate, office market,
+               office buildings]
+    # NYT "Real Estate (Commercial)"·"Mortgages" 태그는 생활·정치 기사가 대부분이라 제외 (2025 검토)
+    risk_exposure: {interest_rate: 1.0, market_risk: 0.7, credit_risk: 0.6, recession: 0.6,
+                    inflation: 0.4, regulation: 0.3, earnings: 0.3}
+    hedge_for: []
+
+# -------------------------------------------------------------
+# risk_type별 1차 필터 키워드 (LLM 태깅 전에 비용 절감용 / GDELT 검색어로도 사용)
+# 최종 risk_type 판정은 LLM이 한다
+# -------------------------------------------------------------
+risk_type_keywords:
+  recession:      [recession, economic slowdown, GDP contraction, layoffs, jobless claims,
+                   unemployment rate, hard landing, consumer spending falls]
+  inflation:      [inflation, CPI, PCE, price pressures, sticky inflation, wage growth,
+                   inflation expectations]
+  interest_rate:  [Federal Reserve, FOMC, rate hike, rate cut, Treasury yields, hawkish,
+                   dovish, Fed chair, bond yields, interest rates]
+  regulation:     [antitrust, export controls, tariff, tariffs, regulators, SEC probe, FTC,
+                   Justice Department, export ban, import ban, new rules]
+  geopolitical:   [war, invasion, missile, sanctions, military conflict, Middle East,
+                   Taiwan Strait, ceasefire, embargo]
+  earnings:       [earnings miss, guidance cut, profit warning, lowers forecast,
+                   revenue decline, quarterly results, misses estimates]
+  market_risk:    [selloff, sell-off, stocks plunge, VIX, volatility spike, market crash,
+                   market correction, bear market, rout]
+  credit_risk:    [debt default, default risk, debt downgrade, rating downgrade, credit spreads,
+                   bankruptcy,
+                   Chapter 11, junk bonds,
+                   distressed debt, credit crunch]
+  commodity_risk: [oil prices, OPEC, supply disruption, crude, copper prices, crop failure,
+                   drought, commodity prices, shortage]
+  currency_risk:  [dollar index, dollar surges, strong dollar, yen, euro, currency,
+                   forex, devaluation, exchange rate]
