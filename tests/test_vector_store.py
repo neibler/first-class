@@ -1,9 +1,11 @@
+import contextlib
 import hashlib
 import json
 import math
 
 import chromadb
 from chromadb.api.types import EmbeddingFunction
+from chromadb.errors import NotFoundError
 
 from backend.news_research import vector_store as vs
 
@@ -68,6 +70,9 @@ def _collection(tmp_path):
     path = tmp_path / "chunks.jsonl"
     path.write_text("\n".join(json.dumps(c) for c in chunks), encoding="utf-8")
     client = chromadb.EphemeralClient()
+    # in-memory clients share one store per process: start every test empty
+    with contextlib.suppress(NotFoundError):
+        client.delete_collection(vs.COLLECTION)
     collection = vs.open_collection(
         embedding_function=WordHashEmbedding(), client=client
     )

@@ -117,7 +117,8 @@ Planner(하위 검색 ≤3) → Researcher(ChromaDB, 기준일 이전 뉴스만)
   "risk_tags": [{"ticker": "QQQ", "risk_type": "regulation", "risk_score": 0.48, "risk_level": 0.6,
                  "direction": "increase", "confidence": 0.8, "date": "2025-04-10", "evidence": [1]}],
   "sources": [{"n": 1, "title": "...", "source": "nytimes", "date": "2025-04-03", "url": "https://..."}],
-  "plan": {...}, "log": ["[Planner] ...", "[Researcher] ...", "[Verifier] ...", "[Analyst] ..."],
+  "plan": [{"query": "...", "etf": "QQQ", "lookback_days": 30}],
+  "log": ["[Planner] ...", "[Researcher] ...", "[Verifier] ...", "[Analyst] ..."],
   "disclaimer": "본 분석은 교육 목적으로 …"
 }
 ```

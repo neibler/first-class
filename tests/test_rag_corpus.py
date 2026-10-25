@@ -86,6 +86,9 @@ def test_risk_labels_become_metadata():
     }
     assert rc.label_extra({"market_relevant": False}) == {"risk_relevant": False}
     assert rc.label_extra(None) == {}
+    # a hand-made label file may say relevant without naming a type
+    untyped = {**label, "risk_types": []}
+    assert "risk_type" not in rc.label_extra(untyped)
 
 
 def test_nyt_docs_add_the_lead_paragraph_without_repeating_the_summary(tmp_path):

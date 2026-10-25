@@ -89,7 +89,10 @@ class ClaudeLLM:
         if response.stop_reason == "max_tokens":
             raise AgentError(f"{role} 응답이 길이 제한에 걸렸습니다.")
         text = next((b.text for b in response.content if b.type == "text"), "")
-        return json.loads(text)
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError as exc:
+            raise AgentError(f"{role} 응답을 JSON으로 읽을 수 없습니다.") from exc
 
 
 class AgentState(TypedDict, total=False):
@@ -419,7 +422,18 @@ def build_graph(llm: LLM, search: Search, settings: dict, news_map: dict):
         system = ANALYST.format(etfs=etf_lines)
         result = llm.json("analyst", system, user, shapes["analyst"])
         valid = set(range(1, len(evidence) + 1))
-        cited = {int(n) for n in re.findall(r"\[(\d+)\]", result["answer"])} & valid
+        answer = result["answer"]
+        answer_refs = {int(n) for n in re.findall(r"\[(\d+)\]", answer)}
+        notes = []
+        if invalid := sorted(answer_refs - valid):
+            # a citation with no source behind it is dropped from the answer text
+            answer = re.sub(
+                r"\s?\[(\d+)\]",
+                lambda m: m.group(0) if int(m.group(1)) in valid else "",
+                answer,
+            )
+            notes.append(f"[Analyst] 근거 목록에 없는 인용 {invalid} 삭제")
+        cited = answer_refs & valid
         tags = []
         for tag in result["risk_tags"]:
             refs = sorted(set(tag["evidence"]) & valid)
@@ -451,11 +465,12 @@ def build_graph(llm: LLM, search: Search, settings: dict, news_map: dict):
             for n in sorted(cited)
         ]
         return {
-            "answer": result["answer"],
+            "answer": answer,
             "risk_tags": tags,
             "sources": sources,
             "log": log(
                 state,
+                *notes,
                 f"[Analyst] 근거 {len(evidence)}건 중 {len(sources)}건 인용,"
                 f" 위험 태그 {len(tags)}개",
             ),
@@ -528,6 +543,12 @@ def research(
         with NEWS_MAP.open(encoding="utf-8") as f:
             news_map = yaml.safe_load(f)
     as_of = as_of or datetime.now(NEW_YORK).date().isoformat()
+    try:
+        date.fromisoformat(as_of)
+    except ValueError as exc:
+        raise AgentError(
+            f"기준일 형식이 올바르지 않습니다: {as_of} (YYYY-MM-DD)"
+        ) from exc
     graph = build_graph(
         llm or default_llm(settings), search or default_search(), settings, news_map
     )

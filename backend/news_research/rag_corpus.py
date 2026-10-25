@@ -145,12 +145,14 @@ def label_extra(label: dict | None) -> dict:
         return {}
     extra = {"risk_relevant": bool(label["market_relevant"])}
     if label["market_relevant"]:
+        risk_types = label.get("risk_types") or []
         extra |= {
-            "risk_type": label["risk_types"][0],
-            "risk_types": ";".join(label["risk_types"]),
+            "risk_types": ";".join(risk_types),
             "risk_level": float(label["risk_level"]),
             "risk_direction": label["direction"],
         }
+        if risk_types:
+            extra["risk_type"] = risk_types[0]
     return extra
 
 

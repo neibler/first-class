@@ -137,6 +137,9 @@ def test_low_relevance_triggers_a_rewrite_and_only_good_hits_become_evidence(set
     )
     assert [s["n"] for s in result["sources"]] == [1, 2]
     assert result["sources"][0]["url"] == "https://example.com/3"
+    # [9] has no source behind it: it leaves the answer and the log says so
+    assert "[9]" not in result["answer"] and "[2]" in result["answer"]
+    assert "근거 목록에 없는 인용 [9] 삭제" in log
     assert result["risk_tags"] == [
         {
             "ticker": "QQQ",
@@ -210,14 +213,14 @@ def test_missing_etf_flags_fall_back_to_an_unfiltered_search(settings):
 
 
 class FakeClient:
-    def __init__(self, stop_reason="end_turn"):
+    def __init__(self, stop_reason="end_turn", text='{"ok": true}'):
         self.calls = []
 
         def create(**params):
             self.calls.append(params)
             return NS(
                 stop_reason=stop_reason,
-                content=[NS(type="thinking"), NS(type="text", text='{"ok": true}')],
+                content=[NS(type="thinking"), NS(type="text", text=text)],
                 usage=NS(input_tokens=100, output_tokens=20),
             )
 
@@ -249,6 +252,26 @@ def test_a_refusal_is_reported_as_an_agent_error():
     llm = ra.ClaudeLLM(FakeClient("refusal"), {"planner": "claude-opus-5-5"}, {})
     with pytest.raises(ra.AgentError, match="거절"):
         llm.json("planner", "S", "Q", {})
+
+
+def test_an_unreadable_answer_is_reported_as_an_agent_error():
+    llm = ra.ClaudeLLM(FakeClient(text=""), {"planner": "claude-opus-5-5"}, {})
+    with pytest.raises(ra.AgentError, match="JSON"):
+        llm.json("planner", "S", "Q", {})
+
+
+def test_a_malformed_as_of_fails_before_any_model_call(settings):
+    llm = FakeLLM(planner={"goal": "g", "focus_etfs": [], "queries": []})
+    with pytest.raises(ra.AgentError, match="기준일"):
+        ra.research(
+            "?",
+            "2025/04/10",
+            llm=llm,
+            search=FakeSearch(None),
+            settings=settings,
+            news_map=NEWS_MAP,
+        )
+    assert llm.calls == []
 
 
 def test_schemas_restrict_tickers_and_risk_types():
