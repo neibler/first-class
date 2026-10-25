@@ -22,11 +22,13 @@ import time
 from collections import Counter
 from collections.abc import Callable
 from pathlib import Path
-
-import anthropic
+from typing import TYPE_CHECKING
 
 from backend.news_research.risk_tagger import answered, user_prompt
 from backend.news_research.settings import env_value
+
+if TYPE_CHECKING:  # the SDK is slow to import; main() loads it when it runs
+    import anthropic
 
 MODEL = "claude-haiku-5-5"
 EFFORT = "low"  # classification; thinking stays adaptive but short
@@ -230,6 +232,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--poll", type=float, default=30.0, help="상태 확인 간격(초)")
     args = parser.parse_args(argv)
+    import anthropic
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
     logging.getLogger("httpx2").setLevel(logging.WARNING)
