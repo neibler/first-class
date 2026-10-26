@@ -1,0 +1,143 @@
+/* Shared analysis cabin; legacy SHAP keys preserve the established layout.
+   This stylesheet is never injected on the portfolio cockpit. */
+.stApp:has(.st-key-shap-cabin) {background:#07111f;}
+.stApp:has(.st-key-shap-cabin) .stMainBlockContainer {max-width:1600px;padding:0 24px 28px;}
+.stApp:has(.st-key-shap-cabin) [data-testid="stHeader"] {background:transparent;pointer-events:none;}
+.stApp:has(.st-key-shap-cabin) [data-testid="stHeader"] button {pointer-events:auto;}
+.st-key-shap-cabin {
+  --frame:24px; --rail:210px; --seat-height:clamp(86px,12vw,180px);
+  background:linear-gradient(100deg,#c4ab8c,#f2e1c6 16%,#bea180 18%,#e9d5b3 100%);
+  border-radius:0 0 12px 12px; overflow:hidden; isolation:isolate;
+}
+.shap-ceiling {position:relative;aspect-ratio:2172/246;
+  background:var(--cabin-ceiling-navy) center / 100% auto no-repeat;
+  display:flex;align-items:center;justify-content:center;pointer-events:none;}
+/* Navy plaque center is source (1086,338), or y=119 in the 246px crop. */
+.shap-brand {position:absolute;left:50%;top:48.374%;transform:translate(-50%,-50%);
+  color:#fce5a0;font-weight:400;font-size:clamp(18px,1.7vw,27px);letter-spacing:.16em;
+  text-align:center;white-space:nowrap;text-shadow:0 1px 3px #0009;}
+.shap-brand span {font-size:.77em;letter-spacing:.02em;color:#f0f5ff;}
+.st-key-shap-main > [data-testid="stLayoutWrapper"] > [data-testid="stHorizontalBlock"] {
+  display:grid;grid-template-columns:var(--rail) minmax(0,1fr);gap:0;align-items:stretch;
+}
+.st-key-shap-main > [data-testid="stLayoutWrapper"] > [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] {
+  width:100%;min-width:0;flex:none;
+}
+.st-key-shap-main [data-testid="stColumn"]:first-child > [data-testid="stVerticalBlock"],
+.st-key-shap-main [data-testid="stColumn"]:first-child > [data-testid="stVerticalBlock"] > [data-testid="stLayoutWrapper"] {height:100%;}
+/* A short page still meets the seat at the rail's natural bottom. Long pages
+   grow with their content; this applies only to the outer monitor column. */
+.st-key-shap-main > [data-testid="stLayoutWrapper"] > [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]:last-child > [data-testid="stVerticalBlock"],
+.st-key-shap-main > [data-testid="stLayoutWrapper"] > [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]:last-child > [data-testid="stVerticalBlock"] > [data-testid="stLayoutWrapper"] {height:100%;}
+.st-key-shap-rail {height:100%;gap:0;padding:0;
+  background:linear-gradient(90deg,#d2b898,#f4e5ce 75%,#ac865c);}
+.st-key-shap-rail > [data-testid="stElementContainer"]:has(.cabin-window-panel),
+.st-key-shap-rail > [data-testid="stLayoutWrapper"]:has(> .st-key-shap-nav) {padding:0 8px;}
+.cabin-window-panel {width:100%;aspect-ratio:1047/1332;
+  background:var(--cabin-window-panel) center bottom / contain no-repeat;pointer-events:none;}
+.st-key-shap-rail > [data-testid="stLayoutWrapper"]:has(> .st-key-shap-nav) {flex:none;}
+.st-key-shap-nav {display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:repeat(6,60px);gap:10px;padding:6px 4px;align-items:stretch;justify-content:stretch;}
+.st-key-shap-nav > [data-testid="stLayoutWrapper"] {width:100%;height:100%;}
+.st-key-shap-nav :is([data-testid="stVerticalBlock"],[data-testid="stElementContainer"],[data-testid="stPageLink"],[data-testid="stPageLink"] > div) {height:100%;}
+.st-key-shap-nav :is([data-testid="stPageLink"],[data-testid="stPageLink"] > div) {width:100%;}
+.st-key-shap-nav [data-testid="stElementContainer"] {width:100%;}
+.st-key-shap-nav [data-testid="stPageLink"] a {
+  height:100%;width:100%;min-height:51px;gap:8px;padding:8px 10px;color:#edf4ff;border:1px solid #c29c5e;border-radius:7px;
+  background:linear-gradient(170deg,#213448,#061526 55%,#020b16);
+  box-shadow:0 0 0 2px #52442f,0 0 0 4px #e1c596,inset 0 1px #87a1b55c,0 3px 6px #3a2f2366;
+}
+.st-key-shap-nav [data-testid="stPageLink"] a p {font-size:14px;white-space:normal;word-break:keep-all;}
+.st-key-shap-nav [data-testid="stIconMaterial"] {font-size:24px;color:#d9e6f7;flex-shrink:0;}
+.st-key-shap-nav .st-key-nav-__CURRENT_PAGE__ [data-testid="stPageLink"] a {
+  color:#fff0b5;border-color:#f4c47d;background:linear-gradient(135deg,#4d4937,#091a28 65%);
+  box-shadow:0 0 0 2px #b88d47,0 0 0 4px #fbe5b8,inset 3px 0 #ffdf99,0 0 13px #e6b76888;
+}
+.st-key-shap-nav [data-testid="stPageLink"] a:hover {background:#243c50;}
+.st-key-shap-cabin :is(a,button):focus-visible {outline:3px solid #79d2ff;outline-offset:3px;}
+.st-key-shap-monitor {position:relative;height:100%;padding:var(--frame);background:#071525;isolation:isolate;}
+.monitor-frame {position:absolute;inset:0;pointer-events:none;z-index:2;}
+/* st.html's wrapper must not become a zero-height containing block. */
+.st-key-shap-monitor div:has(.monitor-frame) {position:static;}
+.frame-top,.frame-bottom {position:absolute;left:0;right:0;height:var(--frame);
+  display:grid;grid-template-columns:var(--frame) minmax(0,1fr) var(--frame);}
+.frame-top {top:0;}
+.frame-bottom {bottom:0;}
+.frame-top i,.frame-bottom i {background-size:100% 100%;background-repeat:no-repeat;}
+.frame-top i:first-child {background-image:var(--monitor-frame-top-start);}
+.frame-top i:nth-child(2) {background-image:var(--monitor-frame-top-middle);}
+.frame-top i:last-child {background-image:var(--monitor-frame-top-end);}
+.frame-bottom i:first-child {background-image:var(--monitor-frame-bottom-start);}
+.frame-bottom i:nth-child(2) {background-image:var(--monitor-frame-bottom-middle);}
+.frame-bottom i:last-child {background-image:var(--monitor-frame-bottom-end);}
+.frame-left,.frame-right {position:absolute;top:var(--frame);bottom:var(--frame);width:var(--frame);background-size:100% 100%;}
+.frame-left {left:0;background-image:var(--monitor-frame-left-middle);}
+.frame-right {right:0;background-image:var(--monitor-frame-right-middle);}
+.st-key-shap-screen {padding:18px;gap:12px;background:radial-gradient(ellipse at 90% 0,#11456b66,transparent 50%),#041426;}
+.st-key-shap-screen .st-key-page-heading {gap:14px;}
+.st-key-shap-screen h1 {font-size:34px;padding:0;}
+.st-key-shap-screen h3 {font-size:21px;padding:0;line-height:1.4;}
+.st-key-shap-screen [data-testid="stCaptionContainer"] p {color:#b8cadc;font-size:12px;line-height:1.6;}
+.st-key-shap-screen :is(.st-key-summary,.st-key-contributions,.st-key-force,[class*="st-key-analysis-panel-"]) {
+  padding:16px;border:1px solid #688098;border-radius:12px;gap:12px;
+  background:linear-gradient(140deg,#0d3454aa,#041629);box-shadow:inset 0 1px #cdd5d526;
+}
+.st-key-shap-plots > [data-testid="stLayoutWrapper"] > [data-testid="stHorizontalBlock"] {gap:12px;}
+.st-key-shap-screen .st-key-force {margin:0;}
+/* One reserved wine area fills the unused rail, then continues by exactly the
+   height of the shared lower row. Only its plain cabinet slice stretches. */
+.st-key-shap-rail > [data-testid="stLayoutWrapper"]:has(> .st-key-shap-wine) {flex:1;}
+.st-key-shap-wine {position:relative;height:100%;min-height:calc(var(--rail) * 1203 / 793);}
+.st-key-shap-wine div:has(.cabin-wine-panel) {position:static;}
+.cabin-wine-panel {position:absolute;inset:0 0 calc(-1 * var(--seat-height));
+  display:flex;flex-direction:column;pointer-events:none;z-index:1;}
+.wine-top {width:100%;aspect-ratio:793/960;flex:none;
+  background:var(--cabin-wine-panel-top) center / 100% auto no-repeat;}
+.wine-body {flex:1;min-height:0;background:var(--cabin-wine-panel-body) center / 100% 100% no-repeat;}
+.wine-base {width:100%;aspect-ratio:793/243;flex:none;
+  background:var(--cabin-wine-panel-base) center / 100% auto no-repeat;}
+.cabin-lower {display:grid;grid-template-columns:var(--rail) minmax(0,1fr);align-items:end;
+  height:var(--seat-height);background:#d1b695;pointer-events:none;}
+.cabin-seat-armrests {width:100%;height:100%;background:var(--cabin-seat-armrests) center bottom / 100% auto no-repeat;
+  box-shadow:inset 0 2px 3px #5c3a2638;}
+@media(max-width:1200px) {
+  .st-key-shap-cabin {--rail:190px;--frame:20px;}
+  .st-key-shap-screen {padding:14px;}
+  .st-key-shap-plots > [data-testid="stLayoutWrapper"] > [data-testid="stHorizontalBlock"] {flex-direction:column;}
+  .st-key-shap-plots [data-testid="stColumn"] {width:100%;flex:1 1 auto;}
+  .st-key-shap-nav {grid-template-rows:repeat(6,60px);height:auto;}
+}
+@media(max-width:900px) {
+  .stApp:has(.st-key-shap-cabin) .stMainBlockContainer {padding:0 12px 24px;}
+  .st-key-shap-main > [data-testid="stLayoutWrapper"] > [data-testid="stHorizontalBlock"] {grid-template-columns:minmax(0,1fr);}
+  .st-key-shap-cabin {--frame:16px;--rail:25%;}
+  .st-key-shap-rail {height:auto;padding:0;}
+  .st-key-shap-rail > [data-testid="stElementContainer"]:has(.cabin-window-panel),
+  .st-key-shap-rail > [data-testid="stLayoutWrapper"]:has(> .st-key-shap-nav) {padding:0 12px;}
+  .cabin-window-panel {height:140px;aspect-ratio:auto;background-position:left bottom;}
+  /* Once rail and monitor stack, the wine ends before the analysis screen. */
+  .st-key-shap-wine {height:auto;min-height:0;}
+  .cabin-wine-panel {position:relative;inset:auto;}
+  /* Crop only the 150px empty wall above the glass. A stacked rail needs no
+     cabinet extension; hiding it avoids squeezing its texture into a strip. */
+  .wine-top {aspect-ratio:793/810;background-position:center bottom;}
+  .wine-body,.wine-base {display:none;}
+  .st-key-shap-nav {grid-template-columns:repeat(3,minmax(0,1fr));grid-template-rows:repeat(2,56px);gap:12px;}
+  .shap-ceiling {width:100%;min-width:0;height:90px;aspect-ratio:auto;background-size:auto 100%;}
+  .shap-brand {font-size:20px;letter-spacing:.06em;}
+  .cabin-lower {grid-template-columns:minmax(0,1fr);}
+  .wine-footprint {display:none;}
+}
+@media(max-width:600px) {
+  .st-key-shap-cabin {--frame:12px;}
+  .st-key-shap-nav {grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:repeat(3,56px);}
+  .st-key-shap-nav [data-testid="stPageLink"] a {padding:8px;gap:7px;}
+  .st-key-shap-nav [data-testid="stPageLink"] a p {font-size:12px;}
+  .st-key-shap-nav [data-testid="stIconMaterial"] {font-size:21px;}
+  .st-key-shap-screen {padding:12px 8px;}
+  .st-key-shap-screen h1 {font-size:28px;}
+  .st-key-shap-screen h3 {font-size:18px;}
+  .st-key-shap-screen :is(.st-key-summary,.st-key-contributions,.st-key-force) {padding:12px 8px;}
+  .st-key-shap-screen [data-testid="stHorizontalBlock"] {flex-wrap:wrap;}
+  .st-key-shap-screen [data-testid="stColumn"] {min-width:100%;}
+  .shap-brand {font-size:16px;}
+}

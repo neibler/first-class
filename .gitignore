@@ -219,6 +219,7 @@ __marimo__/
 
 # Local project context and environment
 /docs/reference/
+/docs/ui-reference/
 /docs/progress.md
 /AGENTS.md
 .env

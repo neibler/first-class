@@ -19,7 +19,8 @@ FROM base AS dashboard
 ENV STREAMLIT_BROWSER_GATHER_USAGE_STATS=false
 COPY frontend/requirements.txt /app/requirements.txt
 RUN python -m pip install -r requirements.txt
-COPY frontend/app.py frontend/api_client.py /app/frontend/
+COPY frontend/ /app/frontend/
+COPY .streamlit/config.toml /app/.streamlit/config.toml
 USER appuser
 EXPOSE 8501
 CMD ["python", "-m", "streamlit", "run", "frontend/app.py", "--server.address=0.0.0.0", "--server.port=8501", "--server.headless=true"]

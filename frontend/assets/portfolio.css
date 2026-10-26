@@ -1,0 +1,258 @@
+/* Portfolio only. All scenery is non-interactive.
+   Native Streamlit containers form the layout; financial screens stay rectangular. */
+.stApp:has(.st-key-flight-window) {
+  --pearl:#e6ded0; --gold:#c6a56c; --ink:#031326; --cyan:#72deff;
+  background:#091526; color:#eff6ff;
+}
+.stMain:has(.st-key-flight-window) {
+  background:radial-gradient(ellipse at 50% 0,#33414d,transparent 65%),#091526;
+}
+.stMain:has(.st-key-flight-window) .stMainBlockContainer {
+  max-width:1600px; padding:0 24px 28px;
+}
+.stApp:has(.st-key-flight-window) [data-testid="stHeader"] {
+  background:transparent; pointer-events:none;
+}
+.stApp:has(.st-key-flight-window) [data-testid="stHeader"] button {pointer-events:auto;}
+.stMain:has(.st-key-flight-window) [data-testid="stCaptionContainer"] p {color:#bdd0e1;}
+.stMain:has(.st-key-flight-window) [data-testid="stCaptionContainer"] {opacity:1;}
+.stMain:has(.st-key-flight-window) :is(a,button):focus-visible {
+  outline:3px solid #8ae4ff !important; outline-offset:3px;
+}
+/* Cropped RGBA scenery. Never change opacity on a content ancestor. */
+.stApp:has(.st-key-flight-window) {
+  --cockpit-gutter:24px; --pillar-space:clamp(210px,15vw,230px);
+}
+.cockpit-ceiling {
+  position:relative; isolation:isolate; z-index:4; display:flex; align-items:center;
+  justify-content:center; height:clamp(112px,12vw,185px);
+  margin:0 calc(-1 * var(--cockpit-gutter)) -30px;
+}
+.cockpit-ceiling::before {
+  content:""; position:absolute; inset:0; pointer-events:none; z-index:-1;
+  background:var(--cockpit-ceiling) center bottom / 100% auto no-repeat;
+}
+.cockpit-brand {
+  text-align:center; padding:0 0 12px; color:#fce5a0;
+  font-size:clamp(18px,1.7vw,27px); letter-spacing:.16em;
+}
+.cockpit-brand span {font-size:.77em; letter-spacing:.02em; color:#f0f5ff;}
+.cockpit-brand small {display:block; margin-top:4px; color:#d2dce5; font-size:9px; letter-spacing:.16em;}
+/* One sky from heading to readout; navy overlays attenuate only the image.
+   The opaque base is below it, all real controls and chart marks above it. */
+.st-key-cockpit-shell {
+  position:relative; isolation:isolate; container-type:inline-size;
+  width:calc(100% + 2 * var(--cockpit-gutter)); max-width:none;
+  margin-inline:calc(-1 * var(--cockpit-gutter)); gap:0;
+  /* Cropped top-bar is 2065 x 258. All three deck regions share this width. */
+  --housing-cap:12.494cqw;
+  --instrument-height:360px;
+  --right-width:calc(var(--instrument-height) * 691 / 1801);
+  --frame-rail:clamp(7px,1.2cqw,18px);
+}
+.st-key-flight-window {
+  position:relative; padding:22px calc(var(--pillar-space) + 40px) 20px; gap:14px;
+}
+.window-scene {
+  position:absolute; inset:-22px 0 calc(-1 * var(--housing-cap));
+  container-type:size; pointer-events:none;
+}
+.window-sky {
+  position:absolute; inset:0;
+  z-index:-1; pointer-events:none;
+  /* Midpoints of the opaque rails, expressed in the same height units as
+     their aspect-preserving images. Sky cannot leak outside the window. */
+  clip-path:polygon(25.648cqh 0,23.889cqh 10%,20.741cqh 20%,18.981cqh 30%,
+    16.806cqh 40%,14.537cqh 50%,12.222cqh 60%,9.907cqh 70%,7.454cqh 80%,
+    4.769cqh 90%,3.472cqh 100%,calc(100% - 4.449cqh) 100%,
+    calc(100% - 5.042cqh) 90%,calc(100% - 6.441cqh) 80%,
+    calc(100% - 7.966cqh) 70%,calc(100% - 9.407cqh) 60%,
+    calc(100% - 10.89cqh) 50%,calc(100% - 12.415cqh) 40%,
+    calc(100% - 13.856cqh) 30%,calc(100% - 15.254cqh) 20%,
+    calc(100% - 17.288cqh) 10%,calc(100% - 20cqh) 0);
+  background:linear-gradient(180deg,rgba(3,16,34,.80),rgba(3,16,34,.61) 65%,rgba(3,16,34,.72)),
+    var(--cockpit-windshield-sky) center center / cover no-repeat,#031022;
+}
+.st-key-flight-window > [data-testid="stElementContainer"]:has(.window-scene) {
+  position:absolute; inset:0; z-index:-1; pointer-events:none;
+}
+.window-pillars {position:absolute; inset:0; pointer-events:none;}
+.window-pillars::before,.window-pillars::after {
+  content:""; position:absolute; top:0; bottom:0;
+  z-index:2; pointer-events:none;
+  background-repeat:no-repeat; background-size:auto 100%;
+}
+.window-pillars::before {
+  left:0; width:30.093cqh;
+  background-image:var(--cockpit-pillar-left); background-position:left;
+}
+.window-pillars::after {
+  right:0; width:23.729cqh;
+  background-image:var(--cockpit-pillar-right); background-position:right;
+}
+.st-key-page-heading {gap:17px;}
+.st-key-page-heading h1 {font-size:29px; line-height:1.25; padding:0;}
+.st-key-page-heading [data-testid="stCaptionContainer"] p {font-size:13px; margin-bottom:0;}
+.st-key-flight-window [data-testid="stBadge"] {font-size:12px;}
+.st-key-windshield {
+  gap:12px; padding-top:13px; border-top:1px solid #84c4e38c;
+  box-shadow:0 -2px 7px -5px #c7eaff;
+}
+.st-key-windshield h3 {font-size:24px; padding:3px 0 0;}
+.st-key-windshield [data-baseweb="select"] > div {
+  background:#052039; border-color:#7295ae; border-radius:5px;
+}
+.st-key-windshield [data-testid="stWidgetLabel"] p {font-size:13px;}
+/* The curved housing itself is the sill. Its transparent shoulders reveal sky. */
+.st-key-instrument-deck {
+  position:relative; z-index:3; gap:0;
+}
+.instrument-top-bar {
+  width:100%; aspect-ratio:2065/258; pointer-events:none;
+  background:var(--cockpit-instrument-top-bar) center / 100% 100% no-repeat;
+}
+.st-key-instruments {
+  position:relative; isolation:isolate;
+  padding:12px calc(var(--frame-rail) + 12px) 14px;
+  background:var(--ink);
+  border-bottom:5px solid #c6a56c;
+  box-shadow:inset 0 1px #f5e6c6,inset 0 -2px #665135;
+}
+/* Straight metal rails belong to the content-sized body, not a stretched PNG. */
+.st-key-instruments::before,.st-key-instruments::after {
+  content:""; position:absolute; top:0; bottom:0; width:var(--frame-rail);
+  pointer-events:none;
+  background:linear-gradient(90deg,#70512f,#f5e8cb 20%,#d9c6a6 55%,#a68145 80%,#f9df9b 92%,#59472f);
+}
+.st-key-instruments::before {left:0;}
+.st-key-instruments::after {right:0; transform:scaleX(-1);}
+.st-key-instruments > [data-testid="stLayoutWrapper"] > [data-testid="stHorizontalBlock"] {
+  display:grid; grid-template-columns:174px minmax(0,1.6fr) minmax(270px,1fr) var(--right-width);
+  gap:10px; align-items:stretch;
+}
+.st-key-instruments > [data-testid="stLayoutWrapper"] > [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] {
+  width:auto; min-width:0; height:100%;
+}
+.st-key-instruments [data-testid="stColumn"]:has(.aviation-side) :is([data-testid="stVerticalBlock"],[data-testid="stElementContainer"],[data-testid="stHtml"]) {
+  height:100%;
+}
+/* Native keyed containers have a layout wrapper; stretch it with the grid row
+   when the allocation table wraps and makes the analysis display taller. */
+.st-key-instruments [data-testid="stColumn"] > [data-testid="stVerticalBlock"] > div:has(> :is(.st-key-doors,.st-key-allocation,.st-key-gauges)) {
+  height:100%;
+}
+.aviation-side {
+  width:100%; height:var(--instrument-height); aspect-ratio:691/1801;
+  background:var(--cockpit-instrument-right) center / contain no-repeat;
+  pointer-events:none;
+}
+/* The common housing replaces individual decorative bezels. */
+.st-key-allocation,.st-key-gauges {
+  position:relative; min-height:var(--instrument-height); height:100%; padding:14px;
+  background:#031326; border:1px solid #31485d; border-radius:5px;
+  box-shadow:inset 0 2px 8px #0005;
+}
+.st-key-allocation {gap:10px; container-type:inline-size;}
+.st-key-allocation [data-testid="stHorizontalBlock"] {
+  display:grid; grid-template-columns:minmax(215px,1fr) minmax(145px,1fr); gap:12px;
+}
+.st-key-allocation [data-testid="stColumn"] {width:auto; min-width:0;}
+@container(max-width:395px) {
+  .st-key-allocation [data-testid="stHorizontalBlock"] {grid-template-columns:minmax(0,1fr);}
+  .st-key-allocation [data-testid="stColumn"] {min-width:100%;}
+}
+.st-key-allocation h3 {font-size:23px; padding:0;}
+.st-key-allocation [data-testid="stCaptionContainer"] p {font-size:12px;}
+.st-key-allocation [data-testid="stVegaLiteChart"] {
+  border-radius:50%; background:radial-gradient(circle at center,transparent 98px,#8197a344 99px,#020b16 101px,#4e6073 103px,transparent 105px);
+}
+.st-key-allocation [data-testid="stDataFrame"] {border-radius:5px;}
+.st-key-gauges {gap:6px;}
+.st-key-gauges [data-testid="stMetric"] {
+  position:relative; padding:0 0 9px; border-bottom:1px solid #395167;
+}
+.st-key-gauges [data-testid="stMetricLabel"] {color:#d9e6f3;}
+.st-key-gauges [data-testid="stMetricLabel"] p {font-size:13px;}
+.st-key-gauges [data-testid="stMetricValue"] {
+  color:#64e3f5; font-size:41px; line-height:1.15; font-weight:600;
+  letter-spacing:-.02em; font-variant-numeric:tabular-nums;
+}
+.st-key-gauges [data-testid="stMetricChart"] {
+  position:absolute; width:43%; height:43px; right:0; bottom:10px;
+}
+.st-key-gauges [data-testid="stMetricChart"] svg {width:100%; height:100%; background:transparent !important;}
+.st-key-gauges [data-testid="stMetricChart"] .mark-line path {stroke:#54d8fa;}
+.st-key-mdd-gauge [data-testid="stMetricChart"] .mark-area path {fill:#eb5579;}
+.st-key-mdd-gauge [data-testid="stMetricValue"] {color:#ff7892;}
+.st-key-gauges [data-testid="stCaptionContainer"] p {font-size:12px; line-height:1.5;}
+.st-key-doors {height:100%; display:grid; grid-template-rows:repeat(6,1fr); gap:10px; padding:0;}
+.st-key-doors :is([data-testid="stVerticalBlock"],[data-testid="stElementContainer"],[data-testid="stPageLink"], [data-testid="stPageLink"] > div) {height:100%;}
+.st-key-doors [data-testid="stPageLink"] a {
+  height:100%; min-height:51px; gap:8px; padding:8px 10px; color:#edf4ff;
+  border:1px solid #c29c5e; border-radius:7px;
+  background:linear-gradient(170deg,#213448,#061526 55%,#020b16);
+  box-shadow:0 0 0 2px #52442f,0 0 0 4px #e1c596,inset 0 1px #87a1b55c,0 3px 6px #3a2f2366;
+  transition:background .15s,box-shadow .15s;
+}
+.st-key-doors [data-testid="stPageLink"] a p {font-size:14px; white-space:normal; word-break:keep-all;}
+.st-key-doors [data-testid="stIconMaterial"] {font-size:24px; color:#d9e6f7; flex-shrink:0;}
+.st-key-doors .st-key-nav-portfolio [data-testid="stPageLink"] a {
+  color:#fff0b5; border-color:#ffdda0; background:linear-gradient(135deg,#4d4937,#091a28 65%);
+  box-shadow:0 0 0 2px #b88d47,0 0 0 4px #fbe5b8,inset 3px 0 #ffdf99,0 0 13px #e6b76888;
+}
+.st-key-doors .st-key-nav-portfolio [data-testid="stIconMaterial"] {color:#ffe4a0;}
+.st-key-doors [data-testid="stPageLink"] a:hover {background:#243c50; box-shadow:0 0 0 2px #dfba78,0 0 0 4px #fff0ca;}
+/* Opaque rear seam is at the crop's top. The complete console stays below data. */
+.lower-console {
+  width:100%; aspect-ratio:2091/403;
+  pointer-events:none; position:relative; z-index:3;
+  background:var(--cockpit-control-console) center / 100% auto no-repeat;
+}
+@media(max-width:1150px) {
+  .stApp:has(.st-key-flight-window) {--cockpit-gutter:18px; --pillar-space:130px;}
+  .stMain:has(.st-key-flight-window) .stMainBlockContainer {padding:0 18px 24px;}
+  .st-key-flight-window {padding-inline:40px;}
+  .window-sky {clip-path:inset(0 10px);}
+  /* Straight rails keep the narrow window closed without clipping the
+     diagonal PNG into disconnected pieces or compressing its texture. */
+  .window-pillars::before,.window-pillars::after {
+    width:20px;
+    background:linear-gradient(90deg,#725433,#f4e5c9 25%,#cfb58b 65%,#a88348 85%,#ffe2a0);
+    box-shadow:inset 0 0 0 1px #4a3928;
+  }
+  .st-key-instruments > [data-testid="stLayoutWrapper"] > [data-testid="stHorizontalBlock"] {grid-template-columns:minmax(0,1.4fr) minmax(0,1fr); gap:18px;}
+  .st-key-instruments > [data-testid="stLayoutWrapper"] > [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]:first-child {grid-column:1/-1;}
+  .st-key-instruments > [data-testid="stLayoutWrapper"] > [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]:last-child {display:none;}
+  .st-key-doors {grid-template-columns:repeat(3,minmax(0,1fr)); grid-template-rows:repeat(2,1fr); gap:12px;}
+}
+@media(max-width:1000px) {
+  .st-key-instruments > [data-testid="stLayoutWrapper"] > [data-testid="stHorizontalBlock"] {grid-template-columns:minmax(0,1fr);}
+}
+@media(max-width:760px) {
+  .stApp:has(.st-key-flight-window) {--cockpit-gutter:12px; --pillar-space:16px;}
+  .stMain:has(.st-key-flight-window) .stMainBlockContainer {padding:0 12px 22px;}
+  .cockpit-ceiling {height:112px; margin-bottom:-12px;}
+  .cockpit-ceiling::before {background-size:auto 145px;}
+  .cockpit-brand {font-size:17px; letter-spacing:.06em; padding-bottom:0;}
+  .cockpit-brand span {font-size:12px;}.cockpit-brand small {font-size:8px;}
+  .st-key-flight-window {padding:18px 24px 20px;}
+  .window-sky {clip-path:inset(0 9px);}
+  .window-pillars::before,.window-pillars::after {
+    width:15px; background-position:center;
+  }
+  .st-key-page-heading h1 {font-size:25px;}.st-key-page-heading [data-testid="stCaptionContainer"] p {font-size:12px;}
+  .st-key-windshield [data-testid="stHorizontalBlock"] {flex-wrap:wrap;}
+  .st-key-windshield [data-testid="stColumn"] {min-width:100%;}
+  .st-key-instruments > [data-testid="stLayoutWrapper"] > [data-testid="stHorizontalBlock"] {grid-template-columns:minmax(0,1fr);}
+  .st-key-doors {grid-template-columns:repeat(2,minmax(0,1fr)); grid-template-rows:repeat(3,1fr); gap:12px;}
+  .st-key-doors [data-testid="stPageLink"] a {padding:8px; gap:7px; min-height:56px;}
+  .st-key-doors [data-testid="stPageLink"] a p {font-size:12px;}
+  .st-key-doors [data-testid="stIconMaterial"] {font-size:21px;}
+  .st-key-allocation,.st-key-gauges {min-height:0; padding:18px 14px;}
+  .st-key-allocation [data-testid="stHorizontalBlock"] {grid-template-columns:minmax(0,1fr);}
+  .st-key-allocation [data-testid="stColumn"] {flex:1 1 100%; width:100%;}
+  .st-key-gauges [data-testid="stMetricChart"] {width:37%;}
+}
+@media(prefers-reduced-motion:reduce) {
+  .st-key-doors [data-testid="stPageLink"] a {transition:none;}
+}
