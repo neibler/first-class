@@ -1,0 +1,22 @@
+# =============================================================
+# 뉴스 출처 화이트리스트 (초안 v0.1)
+# 담당: 뉴스 AI / 기준일: 2026-10-06
+# -------------------------------------------------------------
+#   weight       : risk_score 계산 시 출처 신뢰도 가중치 (Tier 1 = 1.0, Tier 2 = 0.8)
+#   gdelt_domain : GDELT domain: 연산자 값. 하위 도메인까지 매칭된다 (in.reuters.com 등)
+#
+# 제외한 출처와 이유
+#   - PR Newswire, Business Wire, GlobeNewswire: 기업 보도자료 (위험 신호가 아님)
+#   - Motley Fool, Zacks, InvestorPlace, Seeking Alpha: 종목 추천·의견성 글 (노이즈)
+# =============================================================
+
+sources:
+  reuters:     {name: Reuters, tier: 1, weight: 1.0, gdelt_domain: reuters.com}
+  bloomberg:   {name: Bloomberg, tier: 1, weight: 1.0, gdelt_domain: bloomberg.com}
+  wsj:         {name: Wall Street Journal, tier: 1, weight: 1.0, gdelt_domain: wsj.com}
+  apnews:      {name: AP News, tier: 1, weight: 1.0, gdelt_domain: apnews.com}
+  nytimes:     {name: New York Times, tier: 1, weight: 1.0, gdelt_domain: nytimes.com}
+  cnbc:        {name: CNBC, tier: 2, weight: 0.8, gdelt_domain: cnbc.com}
+  marketwatch: {name: MarketWatch, tier: 2, weight: 0.8, gdelt_domain: marketwatch.com}
+  barrons:     {name: "Barron's", tier: 2, weight: 0.8, gdelt_domain: barrons.com}
+  yahoo:       {name: Yahoo Finance, tier: 2, weight: 0.8, gdelt_domain: finance.yahoo.com}
