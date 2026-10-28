@@ -1,6 +1,6 @@
 # 뉴스 데이터 연결 및 학습 시작
 
-학습은 아직 실행하지 않았습니다. 기본 설정은 **실제 시장 데이터 + 실제 뉴스**입니다.
+공유 데모에는 학습된 v3 모델이 포함되어 있습니다. 기본 설정은 **실제 시장 데이터 + 실제 뉴스**입니다.
 feature/11의 종가·로그수익률·RSI·MACD를 연결했습니다. 매크로는 미제공으로 0개입니다.
 기간: 2023-01-03~2025-12-31, 752거래일, 15 ETF, 11,280행. 뉴스 키가 완전히 일치합니다.
 종가 수익률은 배당을 추가 반영하지 않았습니다.
@@ -18,7 +18,11 @@ feature/11의 종가·로그수익률·RSI·MACD를 연결했습니다. 매크�
 관측 지연은 0이며 주문만 다음 거래일 종가에 체결합니다. 별도 config/hybrid_news.json에서만 더미 시장 + 실제 뉴스를 사용할 수 있습니다.
 
 ## 바로 실행 (VS Code, 프로젝트 루트 터미널)
+새 checkout에는 `runtime/`이 없습니다(Git 제외). 먼저 아래 명령으로 공유 데모의
+시장 parquet, 뉴스 CSV, 학습 모델을 설치하거나, 설정의 `data_path`와 `news_path`에
+해당 입력 파일을 직접 준비하세요. 기존 데이터와 충돌하면 덮어쓰지 않고 중단합니다.
 ```powershell
+python scripts/install_demo.py
 powershell -ExecutionPolicy Bypass -File .\run.ps1 preflight
 powershell -ExecutionPolicy Bypass -File .\run.ps1 train
 ```
@@ -26,8 +30,10 @@ powershell -ExecutionPolicy Bypass -File .\run.ps1 train
 모델당 5,000 step이며 총 20회/100,000 step입니다. 결과는 runtime/runs에 저장됩니다.
 
 ## 실제 시장 데이터 학습
-`runtime/data/market.parquet`에 변환된 실제 전처리 파일이 준비되어 있습니다.
-원본은 data/processed/etf_features.csv이며 data/raw/etf_prices.csv 및 팀 전처리 코드도 보관했습니다.
+공유 데모 설치 후에는 `runtime/data/market.parquet`을 바로 사용할 수 있어 재변환이 필요 없습니다.
+재변환하려면 전처리 담당자가 제공하는 `etf_features.csv`를 받아
+`data/processed/etf_features.csv`에 놓으세요(프로젝트 루트 기준).
+이 원본 CSV는 공유 데모 ZIP에 포함되지 않으므로 새 checkout에서 별도로 준비해야 합니다.
 재변환: `powershell -ExecutionPolicy Bypass -File .\run.ps1 prepare_market`
 현재 macro_columns=[]로 종가가 매크로로 오인되지 않도록 했습니다.
 향후 매크로를 추가하면 해당 열 이름을 macro_columns에 지정하세요.
@@ -53,9 +59,11 @@ powershell -ExecutionPolicy Bypass -File .\run.ps1 news_search market --as-of 20
 이 기능은 의미 기반 벡터 검색이나 LLM 답변 생성이 아닙니다.
 
 DB 컬렉션: financial_news, 임베딩: all-MiniLM-L6-v2, 차원: 384.
-제공된 설명서의 완전한 리서치 에이전트는 PR #10 코드와 chromadb 1.5.9,
-ANTHROPIC_API_KEY를 요구합니다. 현재 로컬 복사본에는 그 에이전트가 없으므로
-자동 답변/API/UI까지 연결되었다고 볼 수 없습니다. PPO 학습에는 필요 없습니다.
+리서치 에이전트와 `GET /research/status`, `POST /research`, 질문·답변 UI는 연결되어 있습니다.
+실행에는 뉴스 의존성, ChromaDB와 `ANTHROPIC_API_KEY`가 필요합니다.
+DB는 공유 학습 데모에 포함되지 않으므로 별도로 준비하세요.
+설정과 로컬·Docker 실행 방법은 [RESEARCH_INTEGRATION.md](RESEARCH_INTEGRATION.md)를 따릅니다.
+리서치용 DB·API 키는 PPO 학습에는 필요 없습니다.
 원본 ZIP의 pickle 파일은 실행하거나 역직렬화하지 않았습니다.
 
 

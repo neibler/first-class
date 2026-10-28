@@ -153,3 +153,55 @@ def test_irrelevant_news_and_days_before_any_news_score_zero():
     first = _rows([noise])[("2022-06-16", "TLT")]
     assert first["risk_score"] == 0.0 and first["has_news"] == 0
     assert first["days_since_news"] == rs.MAX_STALE_DAYS
+
+
+@pytest.mark.parametrize(
+    "ttl,expected,url", [(1, 0.09, "new"), (2, 0.8, "old"), (None, 0.8, "old")]
+)
+def test_secondary_news_cannot_revive_expired_risk(ttl, expected, url):
+    old = _tag(
+        "old", "2022-06-16T13:00:00+00:00", ["interest_rate"], level=0.8, confidence=1.0
+    )
+    # TLT has no earnings exposure: only the secondary rate risk affects it.
+    new = _tag(
+        "new", "2022-06-21T13:00:00+00:00", ["earnings", "interest_rate"], level=0.2
+    )
+    row = _rows([old, new], params=rs.ScoringParams(type_ttl=ttl))[
+        ("2022-06-21", "TLT")
+    ]
+    assert row["risk_score"] == pytest.approx(expected)
+    assert row["evidence_url"] == url
+    assert (row["has_news"], row["days_since_news"]) == (1, 0)
+
+
+def test_default_ttl_expires_and_secondary_news_starts_a_new_score():
+    from datetime import timedelta
+
+    days = [DAYS[0] + timedelta(days=i) for i in range(50)]
+    days = [
+        day for day in days if day.weekday() < 5
+    ]  # Explicit synthetic trading calendar.
+    old = _tag(
+        "old", f"{days[0]}T13:00:00+00:00", ["interest_rate"], level=0.8, confidence=1.0
+    )
+    new = _tag(
+        "new", f"{days[30]}T13:00:00+00:00", ["earnings", "interest_rate"], level=0.2
+    )
+    rows = [
+        r for r in rs.score_days([old, new], NEWS_MAP, days) if r["ticker"] == "TLT"
+    ]
+    assert rows[20]["risk_score"] == 0.8
+    assert rows[21]["risk_score"] == rows[29]["risk_score"] == 0.0
+    assert rows[30]["risk_score"] == rows[31]["risk_score"] == 0.09
+    assert rows[30]["evidence_url"] == "new"
+
+
+def test_future_and_after_close_articles_do_not_change_earlier_scores():
+    morning = _tag("morning", "2022-06-16T13:00:00+00:00", ["interest_rate"], level=0.2)
+    close = _tag("close", "2022-06-16T20:00:00+00:00", ["interest_rate"], level=1)
+    future = _tag("future", "2022-06-22T13:00:00+00:00", ["interest_rate"], level=1)
+    baseline = _rows([morning])
+    assert _rows([morning, future]) == baseline
+    changed = _rows([morning, close])
+    assert changed[("2022-06-16", "TLT")] == baseline[("2022-06-16", "TLT")]
+    assert changed[("2022-06-17", "TLT")]["risk_score"] == 0.9

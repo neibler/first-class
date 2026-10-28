@@ -35,7 +35,8 @@ python -m backend.news_research.sec_filings --start 2019-01-01 --end 2025-12-31
 ```bash
 # ① 모델 입력 만들기 (URL·날짜는 모델에 넣지 않음)
 python -m backend.news_research.risk_tagger prepare --articles "data/raw/news/nyt/articles/*.jsonl" \
-    --since 2021-01-01 --until 2025-12-31 --prompt config/prompts/risk_tagging_v4.md --out RUN_DIR
+    --since 2021-01-01 --until 2025-12-31 --prompt config/prompts/risk_tagging_v4.md \
+    --labels data/processed/news/labels/labels_v4_sonnet.jsonl --out RUN_DIR
 # ② Claude Batch API로 태깅 (ANTHROPIC_API_KEY, 중단 후 이어서 실행 가능)
 python -m backend.news_research.claude_runner --run RUN_DIR --model claude-sonnet-5-5 --tag sonnet
 # ③ 결과 검사·병합
@@ -124,7 +125,7 @@ Planner(하위 검색 ≤3) → Researcher(ChromaDB, 기준일 이전 뉴스만)
 ```
 
 - `risk_score` = 위험 수준 × 확신도. `log`는 대시보드에 보여 줄 에이전트 실행 로그다.
-- 실행하는 서버에 ChromaDB 폴더와 `ANTHROPIC_API_KEY`가 있어야 한다. `/research` 엔드포인트와 Docker 연결은 별도 작업.
+- 실행하는 서버에 ChromaDB 폴더와 `ANTHROPIC_API_KEY`가 있어야 한다. `GET /research/status`, `POST /research`와 화면 연결이 구현되어 있다. `NEWS_CHROMA_PATH`로 DB 위치를 지정하며, 로컬·Docker 실행은 [리서치 연결 안내](../../RESEARCH_INTEGRATION.md)를 따른다.
 
 ## 명세서 대비 달라진 점
 

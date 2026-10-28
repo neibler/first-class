@@ -196,7 +196,7 @@ def run_experiment(config, run_id=None):
     save_prediction(prediction, run)
     summary = {
         "run_id": run_id,
-        "synthetic": config["data_path"] is None,
+        "synthetic": not config["data_path"],
         "dates": len(data.dates),
         "assets": len(data.assets),
         "macros": data.macros,

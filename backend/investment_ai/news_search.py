@@ -16,7 +16,7 @@ DEFAULT_DB = (
 
 
 def search_news(query, as_of, ticker, limit=5, db_path=DEFAULT_DB):
-    date.fromisoformat(as_of)
+    as_of = date.fromisoformat(as_of).isoformat()
     if not 1 <= limit <= 50 or not query.strip():
         raise ValueError("Provide a query and limit between 1 and 50")
     from .settings import read_config
