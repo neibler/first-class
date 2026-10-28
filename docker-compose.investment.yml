@@ -5,12 +5,12 @@ services:
       target: api
     environment:
       INVESTMENT_AI_HOME: /runtime
-      INVESTMENT_AI_RUN: /runtime/runs/${INVESTMENT_AI_RUN_ID:-research_v2_verified}
+      INVESTMENT_AI_RUN: /runtime/runs/${INVESTMENT_AI_RUN_ID:-20261028_005508}
     volumes:
       - type: bind
         source: ${INVESTMENT_AI_RUNTIME:?Set INVESTMENT_AI_RUNTIME to the investment_ai project directory}
         target: /runtime
-        read_only: true
+        read_only: false
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/ready', timeout=3)"]
       interval: 5s

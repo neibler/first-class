@@ -1,3 +1,7 @@
+## 학습된 모델로 바로 실행
+
+팀 공유 모델과 입력 데이터가 포함되어 있습니다. 재학습 없이 실행하려면 [shared/README.md](shared/README.md)를 따라 주세요.
+
 # First Class 로보어드바이저
 
 현재 구현은 FastAPI 상태 확인과 Streamlit UI 미리보기입니다.
