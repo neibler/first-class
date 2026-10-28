@@ -1,35 +1,34 @@
 import pytest
 from fastapi.testclient import TestClient
-
-from backend.main import app
-
-
-def test_health_reports_live_server_without_model():
-    with TestClient(app) as client:
-        response = client.get("/health")
-    assert response.status_code == 200
-    assert response.json() == {"status": "ok", "model_loaded": False}
+from backend.investment_ai.api import create_app
 
 
-def test_openapi_describes_health_and_swagger_is_available():
-    with TestClient(app) as client:
-        schema = client.get("/openapi.json").json()
-        assert client.get("/docs").status_code == 200
-    assert set(schema["paths"]) == {"/health"}
-    model = schema["components"]["schemas"]["HealthResponse"]
-    assert set(model["required"]) == {"status", "model_loaded"}
-    assert model["properties"]["model_loaded"]["type"] == "boolean"
+@pytest.fixture
+def client(monkeypatch):
+    def missing(*args, **kwargs):
+        raise FileNotFoundError("No test model configured")
+
+    monkeypatch.setattr("backend.investment_ai.api.InvestmentService", missing)
+    with TestClient(create_app()) as value:
+        yield value
 
 
-@pytest.mark.parametrize(
-    "method,path",
-    [
-        ("POST", "/optimize"),
-        ("POST", "/explain"),
-        ("POST", "/research"),
-        ("GET", "/backtest"),
-    ],
-)
-def test_unimplemented_endpoints_do_not_return_fabricated_results(method, path):
-    with TestClient(app) as client:
-        assert client.request(method, path).status_code == 404
+def test_health_distinguishes_liveness_and_readiness(client):
+    data = client.get("/health").json()
+    assert data["status"] == "ok"
+    assert data["model_loaded"] is False
+    assert client.get("/ready").status_code == 503
+
+
+def test_openapi_documents_investment_contract(client):
+    schema = client.get("/openapi.json").json()
+    assert {"/health", "/ready", "/optimize", "/backtest"} <= set(schema["paths"])
+    assert client.get("/docs").status_code == 200
+
+
+def test_inference_without_model_is_unavailable(client):
+    assert client.post("/optimize", json={}).status_code == 503
+    assert client.get("/backtest").status_code == 503
+    assert client.post("/research").status_code == 422
+    assert client.get("/research/status").status_code == 200
+    assert client.post("/explain").status_code == 404

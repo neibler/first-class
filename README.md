@@ -1,3 +1,7 @@
+## 학습된 모델로 바로 실행
+
+팀 공유 모델과 입력 데이터가 포함되어 있습니다. 재학습 없이 실행하려면 [shared/README.md](shared/README.md)를 따라 주세요.
+
 # First Class 로보어드바이저
 
 현재 구현은 FastAPI 상태 확인과 Streamlit UI 미리보기입니다.
@@ -113,3 +117,10 @@ docker compose down
 
 본 시스템은 교육 목적으로 개발되며 실제 투자 조언에 사용할 수 없습니다.
 백테스팅 성과는 미래 수익을 보장하지 않습니다.
+
+
+## 뉴스 리서치
+
+질문·기준일·ETF로 뉴스 근거를 검색하고 답변과 출처를 표시합니다.
+[RESEARCH_INTEGRATION.md](RESEARCH_INTEGRATION.md)에서 DB·API 키 설정을 확인하세요.
+기존 투자 모델 재학습은 필요하지 않습니다.

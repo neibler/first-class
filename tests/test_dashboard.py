@@ -33,7 +33,7 @@ def test_refresh_recovers_from_api_failure(monkeypatch):
         "get_health",
         lambda: api_client.HealthStatus(status="ok", model_loaded=False),
     )
-    page.button[0].click().run()
+    page.button(key="refresh_health").click().run()
     assert not page.exception
     assert not page.error
     assert page.success[0].value == "API 연결 정상"

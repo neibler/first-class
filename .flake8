@@ -2,3 +2,7 @@
 max-line-length = 88
 extend-ignore = E203
 exclude = .git,.venv,__pycache__,.pytest_cache
+
+# HTML/SVG templates contain intentionally long literal lines.
+per-file-ignores =
+    backend/investment_ai/report.py:E501

@@ -3,13 +3,11 @@
 import streamlit as st
 
 from frontend.charts import allocation
-from frontend.sample_data import load_portfolio, performance
+from frontend.investment_client import InvestmentAPIError, load_portfolio, optimize
 from frontend.ui import (
     ASSETS,
-    load_sample,
     page_heading,
     portfolio_navigation,
-    sample_badge,
 )
 
 # Register in the page's runtime, not a cached imported module. AppTest creates
@@ -33,21 +31,31 @@ with st.container(key="cockpit-shell", gap=None):
             "FLIGHT DECK / 01",
             "포트폴리오의 구성과 수익률 경로를 한눈에 확인하세요.",
         )
-        sample_badge()
-        data = load_sample(load_portfolio, "portfolio")
+        period = st.selectbox(
+            "분석 기간", ["전체 기간", "최근 63개 관측일"], key="period"
+        )
+        try:
+            data = load_portfolio(None if period == "전체 기간" else 63)
+        except InvestmentAPIError as exc:
+            st.error(str(exc))
+            data = None
+            if st.button("다시 시도"):
+                st.rerun()
+        if data:
+            st.caption(
+                "합성 데이터로 학습·검증한 결과"
+                if data["data_source"] == "synthetic"
+                else "저장된 과거 데이터 검증 결과"
+            )
+            if data["stopped"]:
+                st.warning(
+                    "손실 제한 규칙이 발동하여 현금으로 유지 중인 백테스트 결과입니다."
+                )
         if data:
             with st.container(key="windshield"):
-                title, controls = st.columns([3, 1])
-                with controls:
-                    period = st.selectbox(
-                        "분석 기간", ["전체 기간", "최근 63개 관측일"], key="period"
-                    )
-                rows = (
-                    data["returns"] if period == "전체 기간" else data["returns"][-64:]
-                )
-                result = performance(
-                    rows, data["periods_per_year"], data["annual_risk_free_rate"]
-                )
+                title = st.container()
+                rows = data["returns"]
+                result = data["display_metrics"]
                 with title:
                     st.subheader("누적 수익률")
                     st.caption(
@@ -75,7 +83,7 @@ with st.container(key="cockpit-shell", gap=None):
                     )
                 with weights:
                     with st.container(key="allocation"):
-                        st.subheader("현재 자산 비중")
+                        st.subheader("백테스트 종료 시점 보유 비중")
                         st.caption(f"{data['as_of']} 기준 · 합계 100%")
                         donut, table = st.columns([1, 1], vertical_alignment="center")
                         with donut:
@@ -103,7 +111,7 @@ with st.container(key="cockpit-shell", gap=None):
                             delta_color="blue",
                         )
                         st.metric(
-                            "Sharpe Ratio · 로그 수익률 / 연율화",
+                            "Sharpe Ratio · 단순 수익률 / 연율화",
                             (
                                 f"{result['sharpe']:.2f}"
                                 if result["sharpe"] is not None
@@ -126,23 +134,18 @@ with st.container(key="cockpit-shell", gap=None):
         st.html('<div class="lower-console" aria-hidden="true"></div>')
 
 if data:
-    with st.expander("샘플 구성과 계산 가정"):
+    with st.expander("계산 가정"):
         st.write(
-            f"포트폴리오와 {data['benchmark']} 모두 고정된 합성 시계열입니다. "
-            "실제 PPO 학습·시장 데이터·백테스트 결과가 아닙니다. 자산 목록은 UI 예시입니다."
+            "서버에 저장된 모델 평가 결과입니다. 합성 데이터 결과는 실제 투자 성능을 뜻하지 않습니다."
         )
         st.write(
-            f"누적 수익률 = exp(일간 로그 수익률 합) − 1. "
-            f"연 {data['periods_per_year']} 관측일, 연 무위험 수익률 "
-            f"{data['annual_risk_free_rate']:.1%}를 가정합니다. "
-            "Sharpe = 일간 초과 로그 수익률 평균 / 표본 표준편차(ddof=1) × √252. "
-            "무위험 일간 로그 수익률은 ln(1 + 연 무위험 수익률) / 252입니다. "
-            "기준일은 수익률 표본에서 제외하며, 기간 변경 시 모든 성과를 함께 재계산합니다."
+            f"연 {data['periods_per_year']} 거래일, "
+            f"연 무위험 수익률 {data['annual_risk_free_rate']:.1%}. "
+            "Sharpe는 비용 차감 후 단순수익률 기준이며 서버 계산값을 표시합니다."
         )
         st.write(
-            "낙폭 = 누적 자산가치 / 해당 시점까지의 최고 자산가치 − 1. "
-            "MDD는 선택 기간의 낙폭 최솟값입니다. 자산 비중은 마지막 기준일의 스냅샷입니다. "
-            "샘플 날짜는 평일 간격이며 실제 거래소 휴장일·거래비용·환율을 반영하지 않습니다."
+            "낙폭 그래프는 음수, 서버의 최대 낙폭 값은 양수입니다. "
+            "모든 기준 전략에도 같은 손실 제한 규칙을 적용합니다. 보유 비중에는 현금이 포함됩니다."
         )
         st.dataframe(
             result["path"],
@@ -158,3 +161,26 @@ if data:
                 "drawdown": st.column_config.NumberColumn("낙폭", format="percent"),
             },
         )
+
+    with st.expander("새 포트폴리오 목표 비중 제안"):
+        st.caption(
+            "현금 100%로 새로 시작하는 경우의 제안입니다. 위 백테스트 종료 상태를 재투자하는 주문이 아닙니다."
+        )
+        if st.button("목표 비중 계산"):
+            try:
+                proposal = optimize()
+                st.caption(
+                    f"{proposal['as_of']} 피처 기준 · "
+                    f"{proposal['execution_delay_trading_bars']} 거래일 지연 · 주문 전송 없음"
+                )
+                st.dataframe(
+                    [
+                        {"자산": ticker, "목표 비중": weight}
+                        for ticker, weight in proposal["target_weights"].items()
+                    ],
+                    hide_index=True,
+                )
+                if proposal["cash_weight"]:
+                    st.write(f"현금 비중: {proposal['cash_weight']:.1%}")
+            except InvestmentAPIError as exc:
+                st.error(str(exc))

@@ -1,6 +1,8 @@
-"""Run inside the dashboard container against the real Compose API."""
+"""Check the model-free Compose deployment over real HTTP, without fake results."""
 
 import os
+import json
+from urllib.error import HTTPError
 from urllib.request import urlopen
 
 from streamlit.testing.v1 import AppTest
@@ -15,15 +17,38 @@ assert health.model_loaded is False
 with urlopen("http://127.0.0.1:8501/_stcore/health", timeout=3) as response:
     assert response.status == 200
 
-# A server health check alone does not execute the Streamlit page.
-# AppTest runs the actual page and its HTTP client without mocked responses.
+# CI does not ship private datasets or trained models. Liveness remains healthy,
+# while readiness and portfolio data must explicitly report unavailable.
+for endpoint in ("/ready", "/backtest"):
+    try:
+        with urlopen(f"http://api:8000{endpoint}", timeout=3) as response:
+            raise AssertionError(f"{endpoint}: expected 503, got {response.status}")
+    except HTTPError as exc:
+        assert exc.code == 503, f"{endpoint}: unexpected HTTP {exc.code}"
+
+
+def assert_model_unavailable_page(page):
+    assert not page.exception, page.exception
+    assert [item.value for item in page.error] == [
+        "투자 분석 결과를 불러오지 못했습니다. 서버와 모델 준비 상태를 확인해 주세요."
+    ]
+    assert [item.value for item in page.success] == ["API 연결 정상"]
+    assert [item.value for item in page.warning] == ["모델이 로드되지 않았습니다."]
+    assert not page.metric, "Do not display fabricated portfolio metrics"
+
+
+# Execute the page and its HTTP client, not just the Streamlit health endpoint.
 page = AppTest.from_file("frontend/app.py", default_timeout=15).run()
+assert_model_unavailable_page(page)
+page.button(key="refresh_health").click().run()
+assert_model_unavailable_page(page)
+print("PASS: real HTTP health, expected 503, unavailable UI, and health refresh")
+
+with urlopen("http://api:8000/research/status", timeout=3) as response:
+    research_status = json.load(response)
+assert research_status["configured"] is False
+page.switch_page("app_pages/research.py").run()
 assert not page.exception, page.exception
-assert not page.error, page.error
-assert page.success[0].value == "API 연결 정상"
-assert page.warning[0].value == "모델이 로드되지 않았습니다."
-page.button[0].click().run()
-assert not page.exception
-assert not page.error
-assert page.success[0].value == "API 연결 정상"
-print("PASS: dashboard -> http://api:8000/health; model_loaded=false; page refresh")
+assert page.text_area
+assert next(b for b in page.button if b.label == "리서치 시작").disabled
+print("PASS: research route and missing-configuration UI")

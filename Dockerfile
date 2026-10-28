@@ -8,9 +8,13 @@ WORKDIR /app
 RUN useradd --create-home --uid 10001 appuser
 
 FROM base AS api
-COPY backend/requirements.txt /app/requirements.txt
-RUN python -m pip install -r requirements.txt
+COPY backend/investment_ai/requirements.txt /app/requirements.txt
+COPY backend/news_research/requirements.txt /app/news-requirements.txt
+RUN python -m pip install -r requirements.txt -r news-requirements.txt
 COPY backend/main.py /app/backend/main.py
+COPY backend/investment_ai/ /app/backend/investment_ai/
+COPY backend/news_research/ /app/backend/news_research/
+COPY config/agent.yaml config/etf_news_map.yaml /app/config/
 USER appuser
 EXPOSE 8000
 CMD ["python", "-m", "uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]
