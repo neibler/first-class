@@ -1,6 +1,7 @@
 """Check the model-free Compose deployment over real HTTP, without fake results."""
 
 import os
+import json
 from urllib.error import HTTPError
 from urllib.request import urlopen
 
@@ -42,3 +43,12 @@ assert_model_unavailable_page(page)
 page.button(key="refresh_health").click().run()
 assert_model_unavailable_page(page)
 print("PASS: real HTTP health, expected 503, unavailable UI, and health refresh")
+
+with urlopen("http://api:8000/research/status", timeout=3) as response:
+    research_status = json.load(response)
+assert research_status["configured"] is False
+page.switch_page("app_pages/research.py").run()
+assert not page.exception, page.exception
+assert page.text_area
+assert next(b for b in page.button if b.label == "리서치 시작").disabled
+print("PASS: research route and missing-configuration UI")

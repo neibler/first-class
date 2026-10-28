@@ -13,6 +13,14 @@ def investment_ui_fixture(request, monkeypatch):
     }:
         return
 
+    from frontend import research_client
+
+    monkeypatch.setattr(
+        research_client,
+        "status",
+        lambda: {"configured": False, "messages": ["리서치 설정 필요"]},
+    )
+
     def payload(observations=None):
         data = load_portfolio()
         if observations is not None:

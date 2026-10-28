@@ -172,6 +172,9 @@ def create_app(run_dir=None):
         except ValueError as exc:
             raise HTTPException(422, str(exc)) from exc
 
+    from backend.news_research.api import router as research_router
+
+    app.include_router(research_router)
     return app
 
 

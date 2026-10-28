@@ -29,5 +29,6 @@ def test_openapi_documents_investment_contract(client):
 def test_inference_without_model_is_unavailable(client):
     assert client.post("/optimize", json={}).status_code == 503
     assert client.get("/backtest").status_code == 503
-    assert client.post("/research").status_code == 404
+    assert client.post("/research").status_code == 422
+    assert client.get("/research/status").status_code == 200
     assert client.post("/explain").status_code == 404

@@ -1,0 +1,10 @@
+# Optional overlay: add after docker-compose.investment.yml for full local demo.
+services:
+  api:
+    environment:
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      NEWS_CHROMA_PATH: /news/chroma
+    volumes:
+      - type: bind
+        source: ${NEWS_CHROMA_HOST_PATH:?Set NEWS_CHROMA_HOST_PATH to the extracted chroma directory}
+        target: /news/chroma
