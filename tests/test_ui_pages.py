@@ -1,4 +1,3 @@
-import json
 
 import pytest
 from streamlit.testing.v1 import AppTest
@@ -53,46 +52,7 @@ def test_period_and_shap_filters_change_results(page):
     assert str(page.dataframe[0].value) != before
 
 
-@pytest.mark.parametrize("count", [0, 1, 2])
-@pytest.mark.parametrize("period", ["전체 기간", "최근 63개 관측일"])
-def test_short_portfolio_sample_shows_safe_error(
-    page, monkeypatch, tmp_path, count, period
-):
-    from frontend import sample_data
-
-    page.selectbox(key="period").set_value(period).run()
-    data = sample_data.load_portfolio()
-    data["returns"] = data["returns"][:count]
-    (tmp_path / "portfolio.json").write_text(json.dumps(data), encoding="utf-8")
-    monkeypatch.setattr(sample_data, "FIXTURES", tmp_path)
-
-    page.run()
-    assert not page.exception
-    assert "샘플 데이터 오류" in page.error[0].value
-    assert "다시 시도" in page.error[0].value
-    assert "기준일과 수익률 관측치" not in page.error[0].value
-    assert not page.metric
-    assert len(page.get("page_link")) == 6
-    assert page.button(key="retry_portfolio")
-
-
-def test_minimum_portfolio_sample_renders_both_periods(page, monkeypatch, tmp_path):
-    from frontend import sample_data
-
-    data = sample_data.load_portfolio()
-    data["returns"] = data["returns"][:3]
-    (tmp_path / "portfolio.json").write_text(json.dumps(data), encoding="utf-8")
-    monkeypatch.setattr(sample_data, "FIXTURES", tmp_path)
-
-    for period in ["전체 기간", "최근 63개 관측일"]:
-        page.selectbox(key="period").set_value(period).run()
-        assert not page.exception
-        assert not page.error
-        assert len(page.metric) == 3
-        assert any("2개 일간 수익률" in item.value for item in page.caption)
-
-
-@pytest.mark.parametrize("slug", ["portfolio", "shap"])
+@pytest.mark.parametrize("slug", ["shap"])
 @pytest.mark.parametrize("state", ["empty", "error", "loading"])
 def test_sample_states_and_retry_keep_navigation(page, monkeypatch, slug, state):
     monkeypatch.setenv("FIRST_CLASS_UI_DEV", "1")
@@ -121,7 +81,7 @@ def test_state_query_is_ignored_without_dev_flag(page, monkeypatch):
     assert page.metric
 
 
-@pytest.mark.parametrize("slug", ["portfolio", "shap"])
+@pytest.mark.parametrize("slug", ["shap"])
 @pytest.mark.parametrize("error_type", [OSError, ValueError, KeyError])
 def test_sample_errors_do_not_expose_exception_text(
     page, monkeypatch, caplog, slug, error_type
@@ -143,3 +103,19 @@ def test_sample_errors_do_not_expose_exception_text(
     assert private_detail not in caplog.text
     assert len(page.get("page_link")) == 6
     assert page.button(key=f"retry_{slug}")
+
+
+def test_portfolio_api_failure_is_visible(page, monkeypatch):
+    from frontend import investment_client
+
+    def unavailable(*args, **kwargs):
+        raise investment_client.InvestmentAPIError(
+            "투자 분석 결과를 불러오지 못했습니다."
+        )
+
+    monkeypatch.setattr(investment_client, "load_portfolio", unavailable)
+    page.switch_page("app_pages/portfolio.py").run()
+    assert not page.exception
+    assert page.error
+    assert not page.metric
+    assert len(page.get("page_link")) == 6

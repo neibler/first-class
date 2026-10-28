@@ -58,3 +58,8 @@ frontend/fixtures/**
 !.streamlit/
 .streamlit/**
 !.streamlit/config.toml
+
+!Dockerfile.investment
+!backend/investment_ai/
+!backend/investment_ai/**
+!frontend/investment_client.py
