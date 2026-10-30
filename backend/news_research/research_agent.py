@@ -591,9 +591,16 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--json", action="store_true", help="결과를 JSON으로 출력")
     args = parser.parse_args(argv)
 
+    from backend.news_research.vector_store import StoreUnavailable
+
     sys.stdout.reconfigure(encoding="utf-8")
     try:
         result = research(args.question, args.as_of, search=default_search(args.db))
+    except StoreUnavailable:
+        print(
+            "오류: 뉴스 DB를 사용할 수 없습니다. DB 경로와 데이터 준비 상태를 확인하세요."
+        )
+        return 2
     except AgentError as exc:
         print(f"오류: {exc}")
         return 2

@@ -70,7 +70,17 @@ def run(base, dev, output):
         ]:
             page.get_by_role("link", name=title, exact=False).click()
             expect(page.get_by_role("heading", name=title, exact=True)).to_be_visible()
-            expect(page.get_by_text("화면 준비 중", exact=True)).to_be_visible()
+            if title == "에이전트 리서치":
+                # Inspect the form only; never trigger a potentially paid analysis.
+                expect(
+                    page.get_by_role("textbox", name="질문", exact=True)
+                ).to_be_visible()
+                expect(page.locator('[data-testid="stDateInput"]')).to_be_visible()
+                expect(
+                    page.get_by_role("button", name="분석 실행", exact=True)
+                ).to_be_visible()
+            else:
+                expect(page.get_by_text("화면 준비 중", exact=True)).to_be_visible()
         page.get_by_role("link", name="포트폴리오 현황").click()
         expect(
             page.get_by_role("heading", name="포트폴리오 현황", exact=True)
