@@ -138,6 +138,25 @@ def test_optional_ttl_expires_stale_risk_types():
     assert rs.ScoringParams().type_ttl == 20  # default agreed for the PPO feed
 
 
+def test_weak_mentions_neither_revive_nor_extend_an_old_risk():
+    cpi = _tag("cpi", "2022-06-16T13:00:00+00:00", ["inflation"], level=0.7)
+    old = 0.7 * 0.9 * 0.9  # TLT inflation set on Thursday
+    params = rs.ScoringParams(type_ttl=1)
+
+    # Tuesday's half-weight inflation mention arrives after Thursday's value
+    # expired: it sets a new, smaller value instead of reviving the old one
+    late = _tag("earn", "2022-06-21T13:00:00+00:00", ["earnings", "inflation"])
+    tuesday = _rows([cpi, late], params=params)[("2022-06-21", "TLT")]
+    assert tuesday["risk_score"] == pytest.approx(0.675 * 0.9 * 0.5, abs=1e-4)
+
+    # Friday's weak mention keeps Thursday's larger value but not its clock:
+    # by Tuesday (two trading days after Thursday) the value has expired
+    early = _tag("earn", "2022-06-17T13:00:00+00:00", ["earnings", "inflation"])
+    rows = _rows([cpi, early], params=params)
+    assert rows[("2022-06-17", "TLT")]["risk_score"] == pytest.approx(old, abs=1e-4)
+    assert rows[("2022-06-21", "TLT")]["risk_score"] == 0.0
+
+
 def test_many_similar_articles_do_not_inflate_the_score():
     one = [_tag("a0", "2022-06-16T13:00:00+00:00", ["earnings"], terms=["Exxon"])]
     many = [

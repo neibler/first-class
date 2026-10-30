@@ -152,9 +152,11 @@ def score_days(
         for (ticker, risk_type), (value, primary) in values.items():
             found[(day, ticker, risk_type)].append((value, primary, article, label))
 
-    # (ETF, type) -> (value, article, label, trading-day index of last update)
+    # (ETF, type) -> (value, article, label, trading-day index of the news
+    # behind the value); expiry counts from that index
     state: dict[tuple[str, str], tuple[float, dict, dict, int]] = {}
     last_news: dict[str, int] = {}
+    ttl = params.type_ttl
     rows = []
     for day_index, day in enumerate(trading_days):
         for ticker in news_map["etfs"]:
@@ -163,8 +165,10 @@ def score_days(
                 hits = found.get((day, ticker, risk_type))
                 if not hits:
                     continue  # no news of this type today: keep yesterday's value
-                new = _update(hits, state.get((ticker, risk_type)), params)
-                state[(ticker, risk_type)] = (*new, day_index)
+                carried = state.get((ticker, risk_type))
+                if carried and ttl is not None and day_index - carried[3] > ttl:
+                    carried = None  # an expired risk is not revived by new mentions
+                state[(ticker, risk_type)] = _update(hits, carried, day_index, params)
                 updated = True
             if updated:
                 last_news[ticker] = day_index
@@ -174,22 +178,26 @@ def score_days(
     return rows
 
 
-def _update(hits: list, carried: tuple | None, params: ScoringParams) -> tuple:
-    """New (value, article, label) for one ETF and risk type on a news day.
+def _update(
+    hits: list, carried: tuple | None, day_index: int, params: ScoringParams
+) -> tuple:
+    """New (value, article, label, set_on) for one ETF and risk type on a news day.
 
     risk_level describes an article's first (primary) risk type, so only
     primary mentions may set the value - up or down. A secondary mention is a
-    half-weight proxy: it can raise the value but never lower it.
+    half-weight proxy: it can raise the value but never lower it. set_on is the
+    day of the news behind the value: keeping a larger older value does not
+    restart its expiry clock. carried is None when there is none or it expired.
     """
     primary = sorted((h for h in hits if h[1]), key=lambda h: h[0], reverse=True)
     secondary = max((h for h in hits if not h[1]), key=lambda h: h[0], default=None)
     if primary:
         top = primary[: params.top_k]
-        best = (sum(h[0] for h in top) / len(top), top[0][2], top[0][3])
+        best = (sum(h[0] for h in top) / len(top), top[0][2], top[0][3], day_index)
     else:
-        best = carried[:3] if carried else (0.0, None, None)
+        best = carried or (0.0, None, None, day_index)
     if secondary and secondary[0] > best[0]:
-        best = (secondary[0], secondary[2], secondary[3])
+        best = (secondary[0], secondary[2], secondary[3], day_index)
     return best
 
 
