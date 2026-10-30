@@ -30,7 +30,7 @@ def test_navigation_all_six_pages_and_placeholder_scope(page):
         assert not page.exception
         assert page.title[0].value == title
         assert len(page.get("page_link")) == 6
-        if slug != "shap":
+        if slug not in {"shap", "research"}:
             assert page.info[0].value == "화면 준비 중"
             assert not page.selectbox
             captions = " ".join(item.value for item in page.caption)

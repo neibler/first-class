@@ -11,6 +11,8 @@ FROM base AS api
 COPY backend/requirements.txt /app/requirements.txt
 RUN python -m pip install -r requirements.txt
 COPY backend/main.py /app/backend/main.py
+COPY backend/research_api.py backend/research_schemas.py backend/research_service.py /app/backend/
+COPY backend/news_research/settings.py /app/backend/news_research/settings.py
 USER appuser
 EXPOSE 8000
 CMD ["python", "-m", "uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]

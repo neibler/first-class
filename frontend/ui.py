@@ -132,7 +132,7 @@ def load_sample(loader, key):
 
 
 @st.fragment
-def health_panel(sample=True):
+def health_panel(sample=True, research=False):
     with st.expander("실제 API 연결 상태 · 샘플 분석과 별도"):
         st.button("연결 상태 새로고침", key="refresh_health")
         try:
@@ -145,7 +145,12 @@ def health_panel(sample=True):
                 st.info("모델 로드됨")
             else:
                 st.warning("모델이 로드되지 않았습니다.")
-        if sample:
+        if research:
+            st.caption(
+                "/health는 서버 연결 상태입니다. 리서치에 필요한 키·뉴스 DB·임베딩 모델의 "
+                "준비 여부는 분석 요청에서 확인하며, model_loaded는 리서치 준비 상태가 아닙니다."
+            )
+        elif sample:
             st.caption(
                 "/health 실시간 조회 · 위 분석은 UI 개발용 샘플이며 실제 모델 결과가 아닙니다."
             )

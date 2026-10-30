@@ -1,0 +1,38 @@
+# =============================================================
+# 리서치 에이전트 설정 (뉴스 AI, LangGraph)
+# 담당: 뉴스 AI / 2026-10-21
+# -------------------------------------------------------------
+# 흐름: Planner → Researcher(ChromaDB) → Verifier(관련성 평가)
+#       → 낮으면 검색어 수정 후 재검색(Self-Correction) → Analyst(근거·Risk Tag)
+# LLM은 역할별로 바꿀 수 있다. 속도·비용이 문제면 claude-sonnet-5-5 또는
+# claude-haiku-5-5로 낮춘다 (Haiku는 서버 측 fallback 미지원 - 코드가 알아서 뺌)
+# =============================================================
+
+provider: claude
+
+# 2026-10-21 Opus 5.5 → Sonnet 5.5 (질문당 비용 약 절반, 응답도 빠름)
+models:
+  planner: claude-sonnet-5-5
+  grader: claude-sonnet-5-5
+  rewriter: claude-sonnet-5-5
+  analyst: claude-sonnet-5-5
+
+# 생각 깊이 (low / medium / high). 검색 계획·관련성 판정은 짧은 판단이라 low
+effort:
+  planner: low
+  grader: low
+  rewriter: low
+  analyst: medium
+
+retrieval:
+  k: 8                      # 검색 한 번에 가져올 조각 수
+  lookback_days: 180        # 기본 검색 기간 (기준일 이전)
+  min_hit_relevance: 0.6    # 이 점수 이상인 결과만 근거로 채택
+  min_search_relevance: 0.7 # 상위 3건 평균이 이보다 낮으면 검색어 수정
+  max_rewrites: 2           # 하위 질문 하나당 검색어 수정 최대 횟수
+  max_subqueries: 3         # Planner가 만드는 검색 계획 최대 개수
+  max_evidence: 12          # Analyst에게 넘기는 근거 최대 개수
+
+disclaimer: >-
+  본 분석은 교육 목적으로 생성된 자료이며 투자 조언이 아닙니다.
+  과거 뉴스와 백테스트 결과가 미래 수익을 보장하지 않습니다.

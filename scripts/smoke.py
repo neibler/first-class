@@ -27,3 +27,11 @@ assert not page.exception
 assert not page.error
 assert page.success[0].value == "API 연결 정상"
 print("PASS: dashboard -> http://api:8000/health; model_loaded=false; page refresh")
+
+# Opening the research form must not start a paid analysis.
+page.switch_page("app_pages/research.py").run()
+assert not page.exception, page.exception
+assert page.text_area(key="research_question").value == ""
+assert str(page.date_input(key="research_date").value) == "2025-04-10"
+assert len(page.get("page_link")) == 6
+print("PASS: research form, demo date, six navigation links; no research submitted")

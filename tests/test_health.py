@@ -15,7 +15,7 @@ def test_openapi_describes_health_and_swagger_is_available():
     with TestClient(app) as client:
         schema = client.get("/openapi.json").json()
         assert client.get("/docs").status_code == 200
-    assert set(schema["paths"]) == {"/health"}
+    assert set(schema["paths"]) == {"/health", "/research"}
     model = schema["components"]["schemas"]["HealthResponse"]
     assert set(model["required"]) == {"status", "model_loaded"}
     assert model["properties"]["model_loaded"]["type"] == "boolean"
@@ -26,7 +26,6 @@ def test_openapi_describes_health_and_swagger_is_available():
     [
         ("POST", "/optimize"),
         ("POST", "/explain"),
-        ("POST", "/research"),
         ("GET", "/backtest"),
     ],
 )

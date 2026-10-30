@@ -4,6 +4,12 @@
 !backend/
 backend/**
 !backend/main.py
+!backend/research_api.py
+!backend/research_schemas.py
+!backend/research_service.py
+!backend/news_research/
+backend/news_research/**
+!backend/news_research/settings.py
 !backend/requirements.txt
 !frontend/
 frontend/**
