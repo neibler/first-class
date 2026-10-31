@@ -1,0 +1,250 @@
+{
+  "window": "final_2026",
+  "periods": {
+    "fit": {
+      "requested_start": "2022-01-01",
+      "requested_end": "2024-12-31",
+      "start": "2022-01-03",
+      "end": "2024-12-31",
+      "trading_days": 753,
+      "rows": 11295
+    },
+    "validation": {
+      "requested_start": "2025-01-01",
+      "requested_end": "2025-12-31",
+      "start": "2025-01-02",
+      "end": "2025-12-31",
+      "trading_days": 250,
+      "rows": 3750
+    },
+    "train": {
+      "requested_start": "2022-01-01",
+      "requested_end": "2025-12-31",
+      "start": "2022-01-03",
+      "end": "2025-12-31",
+      "trading_days": 1003,
+      "rows": 15045
+    },
+    "test": {
+      "requested_start": "2026-01-01",
+      "requested_end": "2026-09-30",
+      "start": "2026-01-02",
+      "end": "2026-09-30",
+      "trading_days": 187,
+      "rows": 2805
+    }
+  },
+  "ticker_order": [
+    "SPY",
+    "QQQ",
+    "SMH",
+    "SCHD",
+    "XLE",
+    "EFA",
+    "SHY",
+    "IEF",
+    "TLT",
+    "TIP",
+    "LQD",
+    "GLD",
+    "DBB",
+    "DBA",
+    "VNQ"
+  ],
+  "feature_order": [
+    "adj_close_z",
+    "log_return_z",
+    "rsi_14_z",
+    "macd_z",
+    "macd_signal_z",
+    "macd_hist_z",
+    "core_pce_yoy_z",
+    "real_pce_mom_z",
+    "unemp_z",
+    "ism_pmi_z",
+    "effr_z",
+    "ust_2y_z",
+    "ust_10y_z",
+    "ust_30y_z",
+    "tips_10y_z",
+    "vix_z",
+    "usd_ret_20d_z",
+    "wti_z",
+    "yield_spread_z"
+  ],
+  "raw_columns": [
+    "date",
+    "ticker",
+    "adj_close",
+    "log_return",
+    "rsi_14",
+    "macd",
+    "macd_signal",
+    "macd_hist",
+    "core_pce_yoy",
+    "real_pce_mom",
+    "unemp",
+    "ism_pmi",
+    "effr",
+    "ust_2y",
+    "ust_10y",
+    "ust_30y",
+    "tips_10y",
+    "vix",
+    "usd_ret_20d",
+    "wti",
+    "yield_spread"
+  ],
+  "layout": "date 오름차순·ticker_order 순서, 한 행=date×ticker. PPO 입력은 feature_order의 19개 컬럼만 선택.",
+  "files": {
+    "tuning": "features_tuning.parquet",
+    "refit": "features_refit.parquet",
+    "scalers": "scalers.json",
+    "returns": "../../processed/returns_wide.parquet",
+    "benchmark": "../../processed/benchmark_returns.parquet",
+    "history_source": "../../processed/features_unscaled.parquet"
+  },
+  "path_base": "이 manifest.json이 있는 폴더 기준 상대 경로.",
+  "split_labels": {
+    "tuning": [
+      "fit",
+      "validation"
+    ],
+    "refit": [
+      "train",
+      "test"
+    ]
+  },
+  "scaler_fit": {
+    "tuning": "내부 fit만 사용",
+    "refit": "전체 train만 사용"
+  },
+  "normalization": {
+    "per_ticker": [
+      "adj_close",
+      "log_return",
+      "macd",
+      "macd_signal",
+      "macd_hist"
+    ],
+    "shared_across_tickers": [
+      "rsi_14"
+    ],
+    "macro_one_row_per_date": [
+      "core_pce_yoy",
+      "real_pce_mom",
+      "unemp",
+      "ism_pmi",
+      "effr",
+      "ust_2y",
+      "ust_10y",
+      "ust_30y",
+      "tips_10y",
+      "vix",
+      "usd_ret_20d",
+      "wti",
+      "yield_spread"
+    ],
+    "ddof": 0,
+    "raw_log_return": "log_return은 원본 유지. PPO 입력에는 log_return_z 사용."
+  },
+  "observation_history": {
+    "lookback_sessions": null,
+    "windows_created": false,
+    "rows_removed": 0,
+    "first_complete_feature_date": "2019-02-05",
+    "before_period_start": {
+      "fit": {
+        "strictly_before": "2022-01-03",
+        "complete_feature_days": 734,
+        "consecutive_complete_feature_days": 734,
+        "valid_return_days": 1007,
+        "mvo_252_available": true,
+        "mvo_252_start": "2021-01-04",
+        "mvo_252_end": "2021-12-31"
+      },
+      "validation": {
+        "strictly_before": "2025-01-02",
+        "complete_feature_days": 1487,
+        "consecutive_complete_feature_days": 1487,
+        "valid_return_days": 1760,
+        "mvo_252_available": true,
+        "mvo_252_start": "2024-01-02",
+        "mvo_252_end": "2024-12-31"
+      },
+      "train": {
+        "strictly_before": "2022-01-03",
+        "complete_feature_days": 734,
+        "consecutive_complete_feature_days": 734,
+        "valid_return_days": 1007,
+        "mvo_252_available": true,
+        "mvo_252_start": "2021-01-04",
+        "mvo_252_end": "2021-12-31"
+      },
+      "test": {
+        "strictly_before": "2026-01-02",
+        "complete_feature_days": 1737,
+        "consecutive_complete_feature_days": 1737,
+        "valid_return_days": 2010,
+        "mvo_252_available": true,
+        "mvo_252_start": "2024-12-30",
+        "mvo_252_end": "2025-12-31"
+      }
+    },
+    "usage": "의사결정일 t에는 t 이전 행 참고. Validation/Test는 같은 파일의 이전 기간을 참고할 수 있음. 이력을 참고해도 학습·평가 대상 기간은 확장하지 않음.",
+    "outside_window": "Window 시작 전 자료는 history_source에서 읽고, 같은 Window·stage의 저장된 Scaler로 transform_features 적용. 다른 Window의 정규화 값 재사용 및 과거 참고 행으로 Scaler 재학습 금지.",
+    "window_1_limitation": "2019-02-05 이전 usd_ret_20d는 결측. Window 1 시작 시 완전한 20~60거래일 이력 없음. 날짜 변경·행 삭제·미래 값 채우기 없이 PPO 담당자가 준비 구간 결정."
+  },
+  "returns_layout": {
+    "index": "date",
+    "columns": [
+      "SPY",
+      "QQQ",
+      "SMH",
+      "SCHD",
+      "XLE",
+      "EFA",
+      "SHY",
+      "IEF",
+      "TLT",
+      "TIP",
+      "LQD",
+      "GLD",
+      "DBB",
+      "DBA",
+      "VNQ"
+    ],
+    "values": "unscaled original log_return"
+  },
+  "benchmark": {
+    "ticker": "^SP500TR",
+    "level_source": "raw/benchmark.parquet:close",
+    "log_return": "ln(index_level_t / index_level_previous_session)",
+    "simple_return": "index_level_t / index_level_previous_session - 1",
+    "normalization": "none",
+    "first_return": "2018-01-02는 이전 가격이 없어 NaN 유지."
+  },
+  "information_semantics": {
+    "information_cutoff": "16:00 America/New_York; DST-aware; ETF features not shifted",
+    "market_proxy_exceptions": {
+      "vix": "User-approved same-day proxy: Cboe daily final index may include information through 16:15 ET, beyond ETF 16:00 cutoff; NOT strict intraday Point-in-Time.",
+      "wti": "User-approved observation-day proxy: EIA retrospectively reported spot price, NOT a contemporaneously archived 16:00 market quote or strict Point-in-Time."
+    },
+    "timing_limitations": "Native ALFRED dates do not contain intraday timestamps. H.15/H.10 clocks use official schedules and federal holiday calendar, not a fully verified intraday archive; H.15 revisions use a conservative assumed clock."
+  },
+  "input_sha256": {
+    "processed/features_unscaled.parquet": "af8ea56adda1c83964d4c951355a4c2f607e816845ef2748d5844088414f3b27",
+    "processed/log_returns.parquet": "1a89723c71e1546c490e2769c50af71d2127c57265e57df1b3f632b41adf2f61",
+    "raw/benchmark.parquet": "834557ac685290bd31d2eb8bf0e05ba88721accd2bc951b711b4db9c82e830aa"
+  },
+  "validation": {
+    "feature_missing": 0,
+    "feature_infinite": 0,
+    "duplicate_keys": 0,
+    "zero_std_columns": {
+      "tuning": [],
+      "refit": []
+    }
+  },
+  "training": "PPO/MVO 학습·관측 윈도우 생성·전략 평가 미진행. 각 Window의 모델은 독립적으로 새로 학습. 평가 중 Scaler 통계 갱신 금지."
+}
