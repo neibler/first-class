@@ -67,6 +67,13 @@ frontend/fixtures/**
 !backend/news_research/
 !backend/news_research/*.py
 !backend/news_research/requirements.txt
+
+# 성능 분석: API 컨테이너는 결과 JSON 만 읽으므로 파이썬 파일만 넣는다
+# (scipy/shap/matplotlib 는 분석 실행 시에만 필요하며 이미지에 설치하지 않는다).
+!backend/performance/
+backend/performance/**
+!backend/performance/*.py
+!backend/performance/requirements.txt
 !frontend/research_client.py
 !config/
 !config/agent.yaml

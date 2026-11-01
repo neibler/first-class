@@ -175,7 +175,38 @@ def create_app(run_dir=None):
     from backend.news_research.api import router as research_router
 
     app.include_router(research_router)
+
+    # 성능 분석 결과 API. 배포 이미지에 모듈을 넣지 않아도 서버는 떠야 하므로
+    # 선택적으로 등록한다.
+    performance_router = optional_performance_router()
+    if performance_router is not None:
+        app.include_router(performance_router)
     return app
+
+
+def optional_performance_router():
+    """성능 분석 라우터. 패키지가 없으면 None.
+
+    ImportError 를 통째로 삼키면 모듈 안의 진짜 버그까지 조용히 숨는다. 그래서
+    **패키지 자체가 없을 때만** 건너뛰고, 모듈이 있는데 안에서 실패하면 그대로
+    예외를 올린다. 하위 모듈을 바로 find_spec 하면 부모 패키지가 없을 때
+    ModuleNotFoundError 가 나므로(= 건너뛰어야 할 바로 그 상황) 부모부터 확인한다.
+    """
+    import importlib.util
+
+    try:
+        found = importlib.util.find_spec("backend.performance") is not None
+    except ModuleNotFoundError:
+        found = False
+    if not found:
+        logging.getLogger(__name__).warning(
+            "Performance analysis module is not installed; /performance endpoints "
+            "will not be served"
+        )
+        return None
+    from backend.performance.api import router
+
+    return router
 
 
 app = create_app()

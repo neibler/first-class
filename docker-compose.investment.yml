@@ -6,6 +6,9 @@ services:
     environment:
       INVESTMENT_AI_HOME: /runtime
       INVESTMENT_AI_RUN: /runtime/runs/${INVESTMENT_AI_RUN_ID:-20261028_005508}
+      # 이미 바인드된 /runtime 아래를 쓰므로 추가 마운트가 필요 없다.
+      # 분석 실행 시 --output <호스트runtime>/results 로 저장하면 그대로 보인다.
+      RESULTS_DIR: /runtime/results
     volumes:
       - type: bind
         source: ${INVESTMENT_AI_RUNTIME:?Set INVESTMENT_AI_RUNTIME to the investment_ai project directory}

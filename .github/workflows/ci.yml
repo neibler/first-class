@@ -55,6 +55,9 @@ jobs:
         run: |
           curl --fail --silent --show-error http://127.0.0.1:8000/health
           curl --fail --silent --show-error http://127.0.0.1:8501/_stcore/health
+          # 성능 분석 라우터가 이미지에 실제로 들어갔는지 확인한다.
+          # (결과 파일이 없어도 200 + ready:false 를 돌려줘야 한다)
+          curl --fail --silent --show-error http://127.0.0.1:8000/performance/health
       - name: Check dashboard rendering over real API HTTP
         run: docker compose exec -T dashboard python - < scripts/smoke.py
       - name: Show service logs on failure
