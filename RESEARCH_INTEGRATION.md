@@ -61,13 +61,16 @@ docker compose ps
 
 ```powershell
 $env:INVESTMENT_AI_RUNTIME=(Resolve-Path runtime).Path
+$env:INVESTMENT_AI_RUN_ID=(Get-Content "$env:INVESTMENT_AI_RUNTIME/runs/latest.json" -Raw | ConvertFrom-Json).run_id
+$env:INVESTMENT_AI_STATE_GID='10001'
 $env:NEWS_CHROMA_HOST_PATH=(Resolve-Path data/processed/news/chroma).Path
 docker compose -f docker-compose.yml -f docker-compose.investment.yml -f docker-compose.research.yml up --build
 ```
 
 투자 overlay는 API 시작 전에 `investment-state-init`으로 기존 호스트 `service_state`만
-UID/GID 10001에 맞게 준비한다. 기존 Safe-Guard 상태는 지우지 않으며 모델·뉴스 DB 권한은
-변경하지 않는다. 자세한 권한 동작은 [투자 실행 문서](docs/investment.md#docker)를 따른다.
+소유자 UID를 유지한 채 공통 그룹의 쓰기 권한에 맞게 준비한다. Linux에서는 위 GID를
+로컬 사용자의 `id -g` 값으로 설정한다. 기존 Safe-Guard 상태는 지우지 않으며 모델·뉴스 DB
+권한은 변경하지 않는다. 모델 선택과 권한 동작은 [투자 실행 문서](docs/investment.md#docker)를 따른다.
 
 리서치 overlay는 서버에 키와 `/news/chroma` DB 경로를 전달한다. **임베딩 캐시는 별도로
 API 사용자(appuser)의 캐시 경로에 미리 연결해야 한다.** 모델 다운로드를 요청 처리에 맡기지 않는다.

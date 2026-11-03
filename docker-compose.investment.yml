@@ -7,9 +7,16 @@ services:
     depends_on:
       investment-state-init:
         condition: service_completed_successfully
+    # Keep appuser; share state writes with the host user's primary group.
+    group_add:
+      - ${INVESTMENT_AI_STATE_GID:?Set INVESTMENT_AI_STATE_GID to the host user's numeric group ID}
+    command:
+      - /bin/sh
+      - -c
+      - umask 0002 && exec python -m uvicorn backend.main:app --host 0.0.0.0 --port 8000
     environment:
       INVESTMENT_AI_HOME: /runtime
-      INVESTMENT_AI_RUN: /runtime/runs/${INVESTMENT_AI_RUN_ID:-20261028_005508}
+      INVESTMENT_AI_RUN: /runtime/runs/${INVESTMENT_AI_RUN_ID:?Set INVESTMENT_AI_RUN_ID to the existing run directory name}
       # 이미 바인드된 /runtime 아래를 쓰므로 추가 마운트가 필요 없다.
       # 분석 실행 시 --output <호스트runtime>/results 로 저장하면 그대로 보인다.
       RESULTS_DIR: /runtime/results
@@ -25,14 +32,19 @@ services:
       retries: 24
       start_period: 30s
 
-  # Preserve host latch files; grant access only to the state directory.
+  # Preserve host owners; share state writes via a setgid directory and umask.
   # Model/data files under /runtime do not need an ownership change.
   investment-state-init:
     build: *investment-build
     user: "0:0"
+    environment:
+      STATE_GID: ${INVESTMENT_AI_STATE_GID:?Set INVESTMENT_AI_STATE_GID to the host user's numeric group ID}
     entrypoint: ["/bin/sh", "-c"]
     command:
-      - chown -R 10001:10001 /runtime/service_state && chmod -R u+rwX /runtime/service_state
+      - >-
+        chgrp -R -- "$$STATE_GID" /runtime/service_state &&
+        chmod -R ug+rwX /runtime/service_state &&
+        find /runtime/service_state -type d -exec chmod g+s {} +
     volumes:
       - type: bind
         source: ${INVESTMENT_AI_RUNTIME:?Set INVESTMENT_AI_RUNTIME to the investment_ai project directory}/service_state
