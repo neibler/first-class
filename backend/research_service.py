@@ -50,7 +50,7 @@ class _BoundedLLM:
 def _run(request: ResearchRequest) -> ResearchResponse:
     # Kept inside the request so the base API image works without RAG packages.
     try:
-        from backend.news_research.settings import env_value
+        from backend.news_research.settings import env_value, news_db_path
     except ImportError:
         raise ResearchFailure(
             503, "research_unavailable", "리서치 실행 환경이 준비되지 않았습니다."
@@ -60,10 +60,7 @@ def _run(request: ResearchRequest) -> ResearchResponse:
         raise ResearchFailure(
             503, "research_key_missing", "리서치 API 키가 설정되지 않았습니다."
         )
-    configured_path = env_value("RESEARCH_DB_PATH", ROOT / ".env")
-    db_path = Path(configured_path or "data/processed/news/chroma")
-    if not db_path.is_absolute():
-        db_path = ROOT / db_path
+    db_path = news_db_path()
     if not (db_path / "chroma.sqlite3").is_file():
         raise ResearchFailure(
             503, "research_db_missing", "리서치 DB가 준비되지 않았습니다."

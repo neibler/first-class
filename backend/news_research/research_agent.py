@@ -37,8 +37,9 @@ from langgraph.graph import END, START, StateGraph
 
 from backend.news_research.risk_tagger import DIRECTIONS, RISK_TYPES
 
-AGENT_CONFIG = Path("config/agent.yaml")
-NEWS_MAP = Path("config/etf_news_map.yaml")
+PROJECT = Path(__file__).resolve().parents[2]
+AGENT_CONFIG = PROJECT / "config/agent.yaml"
+NEWS_MAP = PROJECT / "config/etf_news_map.yaml"
 # Models that take the server-side refusal fallback ("default" form)
 FALLBACK_MODELS = frozenset(
     {"claude-opus-5-5", "claude-sonnet-5-5", "claude-fable-5-1"}
@@ -509,7 +510,7 @@ def default_llm(settings: dict) -> ClaudeLLM:
 
     from backend.news_research.settings import env_value
 
-    api_key = env_value("ANTHROPIC_API_KEY")
+    api_key = env_value("ANTHROPIC_API_KEY", PROJECT / ".env")
     if not api_key:
         raise AgentError("ANTHROPIC_API_KEY가 없습니다. .env에 추가하세요.")
     return ClaudeLLM(
@@ -520,17 +521,18 @@ def default_llm(settings: dict) -> ClaudeLLM:
 
 
 def default_search(
-    db_path: Path | None = None, *, local_embeddings_only: bool = False
+    db_path: Path | None = None, *, local_embeddings_only: bool = True
 ) -> Search:
     from backend.news_research import vector_store
 
     embedding = None
     if local_embeddings_only:
         embedding = vector_store.LocalEmbedding()
-        embedding._download_model_if_not_exists()
     collection = vector_store.open_collection(
-        db_path or vector_store.DB_PATH, embedding_function=embedding, create=False
+        db_path, embedding_function=embedding, create=False
     )
+    if local_embeddings_only:
+        embedding._download_model_if_not_exists()
 
     def search(query: str, k: int, **filters) -> list[dict]:
         return vector_store.search(collection, query, k, **filters)
@@ -591,7 +593,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--json", action="store_true", help="결과를 JSON으로 출력")
     args = parser.parse_args(argv)
 
-    from backend.news_research.vector_store import StoreUnavailable
+    from backend.news_research.vector_store import (
+        StoreUnavailable,
+        EmbeddingUnavailable,
+    )
 
     sys.stdout.reconfigure(encoding="utf-8")
     try:
@@ -600,6 +605,9 @@ def main(argv: list[str] | None = None) -> int:
         print(
             "오류: 뉴스 DB를 사용할 수 없습니다. DB 경로와 데이터 준비 상태를 확인하세요."
         )
+        return 2
+    except EmbeddingUnavailable:
+        print("오류: 로컬 임베딩 모델이 준비되지 않았습니다.")
         return 2
     except AgentError as exc:
         print(f"오류: {exc}")

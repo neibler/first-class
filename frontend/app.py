@@ -36,5 +36,7 @@ st.caption(
     "백테스팅 성과는 미래 수익을 보장하지 않습니다."
 )
 health_panel(
-    sample=cockpit or page.url_path == "shap", research=page.url_path == "research"
+    sample=page.url_path == "shap",
+    investment=cockpit,
+    research=page.url_path == "research",
 )

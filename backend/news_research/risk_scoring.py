@@ -163,7 +163,15 @@ def score_days(
                 hits = found.get((day, ticker, risk_type))
                 if not hits:
                     continue  # no news of this type today: keep yesterday's value
-                new = _update(hits, state.get((ticker, risk_type)), params)
+                carried = state.get((ticker, risk_type))
+                if (
+                    carried is not None
+                    and params.type_ttl is not None
+                    and day_index - carried[3] > params.type_ttl
+                ):
+                    # A secondary mention must not revive an expired score.
+                    carried = None
+                new = _update(hits, carried, params)
                 state[(ticker, risk_type)] = (*new, day_index)
                 updated = True
             if updated:

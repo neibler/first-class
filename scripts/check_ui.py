@@ -113,7 +113,8 @@ def run(base, dev, output):
                 page.wait_for_timeout(300)
                 page.screenshot(path=str(output / f"{name}-{label}-lower.png"))
         if dev:
-            for route in ["", "/shap"]:
+            # Portfolio now uses the investment API, not sample-state controls.
+            for route in ["/shap"]:
                 for state in ["loading", "empty", "error"]:
                     context = browser.new_context()
                     test = context.new_page()

@@ -176,3 +176,43 @@ def test_prepare_then_merge_appends_new_labels_once(tmp_path):
     )
     manifest = json.loads((tmp_path / "run2" / "manifest.json").read_text())
     assert manifest["articles"] == 2
+
+
+def test_v4_prepare_includes_v2_articles_and_resumes_only_v4(tmp_path, monkeypatch):
+    from pathlib import Path
+
+    prompt = Path("config/prompts/risk_tagging_v4.md").resolve()
+    monkeypatch.chdir(tmp_path)
+    articles = [_article(1), _article(2)]
+    rt.write_jsonl(tmp_path / "articles.jsonl", articles)
+    v2 = tmp_path / "data/processed/news/labels/labels_v2.jsonl"
+    v2.parent.mkdir(parents=True)
+    rt.write_jsonl(v2, [{"url": a["url"]} for a in articles])
+    v4 = v2.with_name("labels_v4_sonnet.jsonl")
+    for index, expected in enumerate([2, 1]):
+        run = tmp_path / f"run{index}"
+        assert (
+            rt.main(
+                [
+                    "prepare",
+                    "--articles",
+                    "articles.jsonl",
+                    "--since",
+                    "2021-01-01",
+                    "--until",
+                    "2025-12-31",
+                    "--prompt",
+                    str(prompt),
+                    "--labels",
+                    str(v4),
+                    "--out",
+                    str(run),
+                ]
+            )
+            == 0
+        )
+        keys = rt.load_jsonl([str(run / "keys.jsonl")])
+        urls = [url for key in keys for url in key["urls"].values()]
+        assert len(urls) == expected
+        assert articles[1]["url"] in urls
+        rt.write_jsonl(v4, [{"url": articles[0]["url"]}])

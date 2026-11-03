@@ -35,7 +35,8 @@ python -m backend.news_research.sec_filings --start 2019-01-01 --end 2025-12-31
 ```bash
 # ① 모델 입력 만들기 (URL·날짜는 모델에 넣지 않음)
 python -m backend.news_research.risk_tagger prepare --articles "data/raw/news/nyt/articles/*.jsonl" \
-    --since 2021-01-01 --until 2025-12-31 --prompt config/prompts/risk_tagging_v4.md --out RUN_DIR
+    --since 2021-01-01 --until 2025-12-31 --prompt config/prompts/risk_tagging_v4.md \
+    --labels data/processed/news/labels/labels_v4_sonnet.jsonl --out RUN_DIR
 # ② Claude Batch API로 태깅 (ANTHROPIC_API_KEY, 중단 후 이어서 실행 가능)
 python -m backend.news_research.claude_runner --run RUN_DIR --model claude-sonnet-5-5 --tag sonnet
 # ③ 결과 검사·병합
@@ -129,7 +130,9 @@ Planner(하위 검색 ≤3) → Researcher(ChromaDB, 기준일 이전 뉴스만)
 - `POST /research`는 구현됐다. 서버에 기존 ChromaDB·`ANTHROPIC_API_KEY`·로컬 ONNX 캐시가 필요하다.
   리서치 검색은 기존 DB/컬렉션만 열며 API 요청 중 임베딩을 다운로드하지 않는다.
   실행·오류·시간 제한 계약은 [개발 문서](../../docs/development.md#리서치-api-이슈-12)를 참고한다.
-  실제 Claude·DB 전체 실행과 5초 성능은 미검증이며 Docker 리서치 환경은 후속 작업이다.
+  DB 기본 경로는 `NEWS_CHROMA_PATH`이며 상대 경로는 저장소 루트 기준이다.
+  API와 조회 CLI는 로컬 임베딩 캐시를 사용한다. build는 명시적 데이터 생성 명령이다.
+  실제 Claude·DB 전체 실행과 5초 성능은 미검증이며 [실행 안내](../../RESEARCH_INTEGRATION.md)를 따른다.
 
 ## 명세서 대비 달라진 점
 

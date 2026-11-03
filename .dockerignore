@@ -64,3 +64,15 @@ frontend/fixtures/**
 !.streamlit/
 .streamlit/**
 !.streamlit/config.toml
+
+!Dockerfile.investment
+!backend/investment_ai/
+!backend/investment_ai/**
+!frontend/investment_client.py
+
+!backend/news_research/
+!backend/news_research/*.py
+!backend/news_research/requirements.txt
+!config/
+!config/agent.yaml
+!config/etf_news_map.yaml

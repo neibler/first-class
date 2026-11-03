@@ -308,7 +308,7 @@ def test_default_llm_has_explicit_timeout_and_no_retries(monkeypatch, settings):
     import anthropic
     from backend.news_research import settings as secrets
 
-    monkeypatch.setattr(secrets, "env_value", lambda name: "test-only")
+    monkeypatch.setattr(secrets, "env_value", lambda name, *args: "test-only")
     factory = Mock()
     monkeypatch.setattr(anthropic, "Anthropic", factory)
     ra.default_llm(settings)

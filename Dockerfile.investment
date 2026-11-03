@@ -1,0 +1,16 @@
+FROM python:3.12-slim-bookworm AS api
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1 PYTHONPATH=/app INVESTMENT_AI_HOME=/runtime
+WORKDIR /app
+RUN useradd --create-home --uid 10001 appuser
+COPY backend/investment_ai/requirements.txt /app/requirements.txt
+COPY backend/news_research/requirements.txt /app/news-requirements.txt
+# Investment inference explicitly loads on CPU; avoid unused CUDA packages.
+RUN python -m pip install 'torch>=2.3,<3' --index-url https://download.pytorch.org/whl/cpu \
+    && python -m pip install -r /app/requirements.txt -r /app/news-requirements.txt
+COPY backend/investment_ai/ /app/backend/investment_ai/
+COPY backend/news_research/ /app/backend/news_research/
+COPY config/agent.yaml config/etf_news_map.yaml /app/config/
+COPY backend/main.py backend/research_api.py backend/research_schemas.py backend/research_service.py /app/backend/
+USER appuser
+EXPOSE 8000
+CMD ["python", "-m", "uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]

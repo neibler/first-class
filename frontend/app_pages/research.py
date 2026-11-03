@@ -27,7 +27,7 @@ if saved is not None and saved["api_base_url"] != api_base_url:
 page_heading(
     "에이전트 리서치",
     "AGENT RESEARCH / 04",
-    "투자 질문의 조사 결과와 원문 근거를 확인하는 공간입니다.",
+    "투자 질문을 조사하고 뉴스 근거와 출처를 확인하세요.",
 )
 with st.container(key="analysis-availability"):
     st.caption(

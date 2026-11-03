@@ -176,3 +176,28 @@ def test_local_embedding_is_compatible_with_persisted_default_configuration():
         client=client, embedding_function=vs.LocalEmbedding(), create=False
     )
     assert reopened.count() == 1
+
+
+@pytest.mark.parametrize("mismatch", ["model", "embedding", "distance"])
+def test_local_embedding_rejects_incompatible_store_before_query(mismatch):
+    collection = Mock()
+    collection.count.return_value = 1
+    collection.metadata = {"embedding_model": vs.EMBEDDING_MODEL}
+    collection.configuration_json = {
+        "embedding_function": {"name": "default", "config": {}},
+        "hnsw": {"space": "cosine"},
+    }
+    if mismatch == "model":
+        collection.metadata["embedding_model"] = "different-model"
+    elif mismatch == "embedding":
+        collection.configuration_json["embedding_function"]["name"] = "other"
+    else:
+        collection.configuration_json["hnsw"]["space"] = "l2"
+    client = Mock()
+    client.get_collection.return_value = collection
+    with pytest.raises(vs.StoreUnavailable):
+        vs.open_collection(
+            client=client, embedding_function=vs.LocalEmbedding(), create=False
+        )
+    collection.query.assert_not_called()
+    client.get_or_create_collection.assert_not_called()

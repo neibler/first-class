@@ -132,8 +132,8 @@ def load_sample(loader, key):
 
 
 @st.fragment
-def health_panel(sample=True, research=False):
-    with st.expander("실제 API 연결 상태 · 샘플 분석과 별도"):
+def health_panel(sample=True, investment=False, research=False):
+    with st.expander("API 연결 및 모델 준비 상태"):
         st.button("연결 상태 새로고침", key="refresh_health")
         try:
             health = api_client.get_health()
@@ -145,7 +145,11 @@ def health_panel(sample=True, research=False):
                 st.info("모델 로드됨")
             else:
                 st.warning("모델이 로드되지 않았습니다.")
-        if research:
+        if investment:
+            st.caption(
+                "포트폴리오 화면은 저장 모델의 백테스트와 추론 API를 사용합니다."
+            )
+        elif research:
             st.caption(
                 "/health는 서버 연결 상태입니다. 리서치에 필요한 키·뉴스 DB·임베딩 모델의 "
                 "준비 여부는 분석 요청에서 확인하며, model_loaded는 리서치 준비 상태가 아닙니다."

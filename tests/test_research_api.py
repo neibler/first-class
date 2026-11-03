@@ -81,11 +81,14 @@ class ScriptedClient:
 
 @pytest.fixture
 def offline(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        "backend.investment_ai.api.InvestmentService", Mock(return_value=None)
+    )
     # Guard all tests, including validation failures, against real credentials/DB.
     db_path = tmp_path / "chroma"
     db_path.mkdir()
     (db_path / "chroma.sqlite3").touch()
-    env = {"ANTHROPIC_API_KEY": SECRET, "RESEARCH_DB_PATH": str(db_path)}
+    env = {"ANTHROPIC_API_KEY": SECRET, "NEWS_CHROMA_PATH": str(db_path)}
     monkeypatch.setattr(news_settings, "env_value", lambda key, *a: env.get(key, ""))
     client = ScriptedClient()
     factory = Mock(return_value=client)
@@ -220,13 +223,15 @@ def test_missing_setup_is_safe_and_health_unchanged(offline, missing, code):
     if missing == "key":
         offline.env["ANTHROPIC_API_KEY"] = ""
     else:
-        offline.env["RESEARCH_DB_PATH"] = str(offline.db_path / "absent")
+        offline.env["NEWS_CHROMA_PATH"] = str(offline.db_path / "absent")
     response = offline.http.post("/research", json=BODY)
     assert response.status_code == 503
     assert response.json()["detail"]["code"] == code
     assert str(offline.db_path) not in response.text and SECRET not in response.text
     offline.factory.assert_not_called()
-    assert offline.http.get("/health").json() == {"status": "ok", "model_loaded": False}
+    health = offline.http.get("/health").json()
+    assert health["status"] == "ok" and health["model_loaded"] is False
+    assert health["ready"] is False
 
 
 @pytest.mark.parametrize(
@@ -365,7 +370,7 @@ def test_app_import_never_imports_optional_runtime():
 import sys
 class Block:
     def find_spec(self, fullname, *args):
-        if fullname.split('.')[0] in {'anthropic', 'chromadb', 'langgraph', 'yaml'}:
+        if fullname.split('.')[0] in {'anthropic', 'chromadb', 'langgraph'}:
             raise AssertionError('Heavy startup import: ' + fullname)
 sys.meta_path.insert(0, Block())
 from backend.main import app

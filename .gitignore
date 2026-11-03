@@ -252,3 +252,9 @@ checkpoints/
 credentials*.json
 secrets*.json
 .aws/
+
+# Local datasets, saved models and run outputs
+/runtime/
+
+# Deliberate small, verified team inference bundle
+!/shared/investment_demo.zip

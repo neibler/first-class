@@ -1,0 +1,33 @@
+{
+  "run_id": "20261028_005508",
+  "files": {
+    "runs/latest.json": "4929bc5c1f854535a342d4c471dc55d6f4f969053c29e735ad5a879c3ab91a0a",
+    "data/market.parquet": "5e76e2252716f665ae454b3beb271ba65d2857b667e1f641b8b42c83f7de5ac0",
+    "data/news/raw/news_risk_nyt_2023_2025.csv": "7e85f2bbb2584c29ff48fa6377b38eeea01056b100133e95fa099af4699c3a0a",
+    "runs/20261028_005508/summary.json": "c20e1ca29f630ad9acac7266ab3ce32b1012504f016f869b3eb5f643a83f1a6d",
+    "runs/20261028_005508/selection.json": "2ec377a22a7bb5c3dfad903370b6aac32505c28182314496e4d8fc6da9ddfc5f",
+    "runs/20261028_005508/config.json": "3316ea7d587379402e33c162b02dda6ce7a13ca7f94315423198741307dbb45c",
+    "runs/20261028_005508/splits.json": "b7bdef42d42b39cf462bdd7de6c8170e662ef9c0f8a47a507b467b2f9ec1c7c3",
+    "runs/20261028_005508/report.html": "b21fbfb4ecb453341cd556596260f253b4ec76d60ed8c5bf8e6cd87bc2beabf2",
+    "runs/20261028_005508/comparison.csv": "dc64de46f1b648bb95ffb842ef1ad55e22c6315bf2fd6fed4955b9e57ce9666c",
+    "runs/20261028_005508/reward_ranking.csv": "127957b56f67a2d9b965f7439730f5691bdbe1f7bdff9a33cf6e41efeeb1b5fd",
+    "runs/20261028_005508/validation.csv": "63147aa50ac53be378698e2e3da66792047f2dfec04f1c6246f7147443ee7f15",
+    "runs/20261028_005508/test_seed_comparison.csv": "c5fe21d886638260996249e0d1b718a640eff44ff1308f8d82e786ed0fa18396",
+    "runs/20261028_005508/news_metadata.parquet": "0e849c2f9107914c2ada35b87dddcae57241f8db1dbe4cd77941e5de6476eb34",
+    "runs/20261028_005508/ppo_history.csv": "698d8442f5a1b3faf7a1d96b6fd12de232f933bb6db926f5186deaf065188e0f",
+    "runs/20261028_005508/equal_rebalanced_history.csv": "19b9a76ea07d8f449c7dc6d2f20d128621b7f0a03f14d6de3a55776b9fb968c3",
+    "runs/20261028_005508/equal_buy_hold_history.csv": "4a519746ec21fa3919c8491f680a11ff545d1c08008da7f6d962079d15892d2f",
+    "runs/20261028_005508/spy_buy_hold_history.csv": "5c3dd48ecefd7690ee5df8690364dbf668bf9ae61fafca75db924460ef686a4a",
+    "runs/20261028_005508/final/seed_42/model.zip": "9cd5911b013ef2626b2e06f8f2779f3410349ac298375d5eedf44e7aa36ff244",
+    "runs/20261028_005508/final/seed_42/config.json": "cf845e7c239b37764c378b473d51a8601da7afbbdc4afaf861b8024ffe499512",
+    "runs/20261028_005508/final/seed_42/schema.json": "4029dc5e673c18bd5d971519db440f5a1daadd63b22e20c2eb7d2411900ee0b9",
+    "runs/20261028_005508/final/seed_42/scaler.json": "c36446b1fd2201b202ee9af5ccd854cf1ec911eab4cd6c13d8820586c50d39d5",
+    "runs/20261028_005508/final/seed_42/manifest.json": "bace76cd5a177d7b180b35533a28ef8664d8591d02753f713ea70e6c56b8809e",
+    "runs/20261028_005508/final/seed_73/model.zip": "17abba58cef57dfe7114c5cf0f840effca619f6168b6e4489960f2c58f6b1ffd",
+    "runs/20261028_005508/final/seed_73/config.json": "cf845e7c239b37764c378b473d51a8601da7afbbdc4afaf861b8024ffe499512",
+    "runs/20261028_005508/final/seed_73/schema.json": "4029dc5e673c18bd5d971519db440f5a1daadd63b22e20c2eb7d2411900ee0b9",
+    "runs/20261028_005508/final/seed_73/scaler.json": "c36446b1fd2201b202ee9af5ccd854cf1ec911eab4cd6c13d8820586c50d39d5",
+    "runs/20261028_005508/final/seed_73/manifest.json": "a6b76010f008efa4bb49dc529428ab5c8ecfb25d33c5c367b1be6095265aac48"
+  },
+  "archive_sha256": "88e5670ed46010c2ec55e990dfa4515d9858ee8a38da668695c5ed51c354e7fc"
+}

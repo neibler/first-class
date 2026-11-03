@@ -1,13 +1,17 @@
+## 학습된 모델로 바로 실행
+
+팀 공유 모델과 입력 데이터가 포함되어 있습니다. 재학습 없이 실행하려면 [shared/README.md](shared/README.md)를 따라 주세요.
+
 # First Class 로보어드바이저
 
-현재 구현은 FastAPI 상태 확인·뉴스 리서치 API와 Streamlit UI 미리보기입니다.
-포트폴리오 현황·SHAP 해석은 **고정된 샘플 데이터**로 동작하며,
-리서치 화면은 HTTP API에 연결되어 있으며, 성과·ANOVA·리스크 화면은 준비 화면입니다.
-모델 로딩은 아직 구현되지 않았으며 `/health`는
-`{"status":"ok","model_loaded":false}`를 반환합니다.
+FastAPI 앱 생성 함수에서 투자 모델 생명주기를 관리하고 투자·리서치 API를 제공합니다.
+포트폴리오는 투자 HTTP API를 사용하며, SHAP은 **고정된 샘플 데이터**입니다.
+리서치 화면은 HTTP API에 연결되어 있고 성과·ANOVA·리스크 화면은 준비 화면입니다.
+`/health`는 서버 연결 및 투자 모델 로드 상태를, `/ready`는 투자 모델 준비 상태를 반환합니다.
+모델이 없으면 포트폴리오는 준비 부족을 안내하며 샘플 성공으로 대체하지 않습니다.
 `POST /research`는 기존 뉴스 에이전트와 연결되며 서버의 Claude 키, 기존 DB,
 로컬 임베딩 모델이 필요합니다. 실제 Claude·DB 전체 실행과 5초 성능은 미검증입니다.
-투자·SHAP 분석 API는 아직 없습니다.
+투자는 `/optimize`·`/backtest`를 사용하며 SHAP 분석 API는 아직 없습니다.
 
 ## Docker 실행
 
@@ -66,7 +70,7 @@ python -m streamlit run frontend/app.py --server.port 8501
 
 ```powershell
 # 선택: 기본 DB 경로. 프로젝트 루트를 기준으로 해석합니다.
-$env:RESEARCH_DB_PATH = "data/processed/news/chroma"
+$env:NEWS_CHROMA_PATH = "data/processed/news/chroma"
 .venv/Scripts/python.exe -m uvicorn backend.main:app --host 127.0.0.1 --port 8000
 ```
 
@@ -86,8 +90,9 @@ Swagger: http://127.0.0.1:8000/docs → `POST /research` → Try it out.
   요청 중 자동 모델 다운로드는 하지 않습니다. DB·모델 파일은 재생성하지 않습니다.
 - 응답은 `status`, `answer`, `sources`, `risk_tags`, `plan`, `log`,
   `question`, `as_of`, `disclaimer`를 포함합니다. `log`는 완료 후 실행 요약입니다.
-- 기본 Docker 이미지는 health·Swagger·오류 응답까지 지원합니다.
-  실제 리서치 의존성·DB·모델·키 연결은 후속 작업입니다.
+- Docker 이미지는 투자·뉴스 의존성과 API 모듈을 포함합니다. 투자 추론은 CPU를 사용합니다.
+  기본 Compose에는 사용자 모델·뉴스 DB·임베딩 캐시·키를 연결하지 않습니다.
+  실제 실행용 데이터와 캐시 연결은 [리서치 실행 안내](RESEARCH_INTEGRATION.md)를 참고합니다.
 
 Streamlit은 기존 `API_BASE_URL`로만 요청하며 모델이나 API 키를 다루지 않습니다.
 폼 제출 시 마지막 성공 결과와 질문·기준일이 같으면 HTTP 호출 없이 재사용하고, 다르면 POST를 한 번 보냅니다.
@@ -169,3 +174,10 @@ docker compose down
 
 본 시스템은 교육 목적으로 개발되며 실제 투자 조언에 사용할 수 없습니다.
 백테스팅 성과는 미래 수익을 보장하지 않습니다.
+
+
+## 뉴스 리서치
+
+질문·기준일·ETF로 뉴스 근거를 검색하고 답변과 출처를 표시합니다.
+[RESEARCH_INTEGRATION.md](RESEARCH_INTEGRATION.md)에서 DB·API 키 설정을 확인하세요.
+기존 투자 모델 재학습은 필요하지 않습니다.

@@ -5,42 +5,116 @@
 ```mermaid
 flowchart LR
     Browser[브라우저 :8501] --> Dashboard[Streamlit dashboard]
-    Dashboard -->|HTTP GET /health, POST /research| API[FastAPI api]
+    Dashboard -->|HTTP health, investment, research| API[FastAPI api]
 ```
 
 - Python 3.12를 사용한다. 학교의 필수 기준은 Python 3.10 이상이며,
   권장 구현 순서에 등장하는 3.10은 고정 버전 요구가 아니다.
-- `/health`와 `POST /research`를 구현했다. Pydantic 스키마와 Swagger UI를 제공한다.
+- `/health`, `/ready`, `/optimize`, `/backtest`, `POST /research`를 제공한다.
+  투자 앱 생성 함수에 리서치 라우터를 한 번 등록하며 Pydantic 스키마와 Swagger UI를 제공한다.
   `status: ok`는 HTTP 서버 동작을 뜻하고 투자 추론 준비 상태를 의미하지 않는다.
-  모델 로더가 없으므로 `model_loaded`는 항상 `false`다.
+  `model_loaded`는 투자 모델 생명주기에 따라 달라지며 리서치 준비 상태와 별개다.
 - Streamlit은 HTTP 응답만 표시한다. backend 코드나 모델 파일을 읽지 않는다.
 - Dockerfile의 `api`, `dashboard` 빌드 대상을 분리하고 각 서비스의 의존성만 설치한다.
-  직접 사용하는 의존성 버전은 각 `requirements.txt`에 고정했다.
+  투자 의존성 일부는 main의 버전 범위를 유지하고 나머지는 각 `requirements.txt`에 고정했다.
   전이 의존성 전체를 잠그는 lock 파일은 아직 없다.
-- 기본 Compose 서비스는 두 개뿐이다. 수집·학습·전체 백테스트 실행 코드는 없으며,
-  서버 시작·API 요청 시 자동 실행되지 않는다. 향후 별도 명령/작업으로 구현한다.
+- 기본 Compose 서비스는 두 개뿐이다. 수집·학습·실험용 CLI와 투자 서비스가 포함되어 있다.
+  서버 시작 시 기존 투자 모델을 로드하며 새 학습·뉴스 수집을 자동 실행하지 않는다.
 - `.dockerignore`는 현재 실행에 필요한 파일만 허용한다. 새 런타임 모듈을 추가할 때
   Dockerfile의 `COPY`와 `.dockerignore`를 함께 갱신해야 한다.
   기본 health·Swagger에는 데이터·모델·키가 필요 없다. 실제 리서치에는 별도 준비가 필요하다.
 
-## 학교 요구사항 중 미구현
+## 학교 요구사항 중 남은 검증과 미구현
 
-- API: `POST /optimize`, `POST /explain`, `GET /backtest`.
-  등록하지 않았으므로 404를 반환한다.
-- 대시보드 6개 페이지: 포트폴리오 현황, 강화학습 성과, SHAP 해석,
-  에이전트 리서치, ANOVA 결과, 리스크 모니터링.
-- 10개 이상 자산의 5년 이상 데이터 수집, 전처리, 기술적 지표.
-- Gymnasium 환경, 거래비용, 보상 함수 3종, PPO 학습, Safe-Guard.
-- Walk-Forward 백테스트, 12개 성과 지표, MVO·벤치마크 비교.
+- `POST /explain`은 미구현이다. 투자 `/optimize`·`/backtest`는 main 구현을 유지한다.
+- 6개 페이지 내비게이션은 유지한다. 포트폴리오·리서치는 HTTP로 연결하고,
+  SHAP은 샘플이며 성과·ANOVA·리스크는 준비 화면이다.
+- main의 데이터 처리·Gymnasium·PPO·Safe-Guard·실험·백테스트 코드는 유지했다.
+  이번 충돌 통합에서는 실제 학습·사용자 모델/데이터의 학교 성능 요건을 다시 검증하지 않는다.
 - SHAP, ANOVA·사후 검정, 리서치 결과의 투자 모델·리스크 모니터링 연동.
 - 모델 로딩과 추론 시간·투자 성과 기준 검증.
 - 보상 함수 설계 근거, 성능·ANOVA 요약, 에러 분석 및 20페이지 이상 실험 리포트.
 
-현재 테스트는 실행 기반을 검증한다. 금융·모델 기능의 테스트는 해당 구현 이후에
-추가해야 한다. 학교 최종 제출물 전체가 완성된 상태가 아니다.
-권장 다음 순서는 데이터 수집·전처리 → 거래 환경·학습 → 백테스트·해석·리서치
-→ API·대시보드 통합이다. MLflow, 주기적 수집·재학습, 이상거래 탐지,
+투자 계약·회계·입력·HTTP 및 뉴스/화면 테스트를 실행하되 실제 외부 분석 성능과 구분한다.
+학교 최종 제출물 전체가 완성된 상태가 아니다. 스펙의 구현 순서는 권장사항이며,
+MLflow, 주기적 수집·재학습, 이상거래 탐지,
 멀티모달, 공정성 분석은 학교의 선택 과제다.
+
+## 2026-11-03 PR #15 통합 검증
+
+기준은 `feature/12=6f5bad1`, `main=19a5c7c`다. 취소한 병합을 복원하지 않고 새로 병합했다.
+아래는 이번 코드에서 직접 실행한 로컬 검사이며, 뒤의 과거 작업 기록이나 GitHub CI 결과와 구분한다.
+
+- Black check(87개 파일), flake8, 로컬·두 Docker 컨테이너의 pip check 통과.
+- 전체 pytest: **284 passed, 1 skipped**(184.73초). skip은 미배포 공유 데이터가 필요한
+  `test_real_news_is_preserved_in_hybrid_input`이다. 투자 계약, 단일 리서치 라우트,
+  입력/상태/오류, DB·임베딩, timeout·busy, 세션 재사용 및 페이지 회귀를 포함한다.
+- `scripts/check_ui.py`는 별도 mock 투자 HTTP 서버와 실제 Edge에서 기본·`--dev` 경로를 통과했다.
+  6개 메뉴, 필터, 애니메이션, 반응형 배치, SHAP 개발 상태를 확인했다.
+- 별도 mock 리서치 API와 실제 Edge에서 진행 중 버튼이 활성화됨을 확인했다.
+  B 재클릭은 A 시작 약 1.16초 뒤 전달되어 busy를 받았고 A는 약 8초 뒤 완료했다.
+  성공 재사용·페이지 이동에서 추가 POST 없음, 1440/390px 배치도 확인했다.
+  이는 해당 환경의 관찰이며 즉시 전달·서버 취소를 보장하는 계약이 아니다.
+- 기본 Compose build/up/wait, 두 서비스 healthy, `scripts/smoke.py`, 실제 HTTP와 브라우저에서
+  빈 질문 422 및 정상 질문 503 `research_key_missing` 안내 통과. 컨테이너 키 부재를 먼저 확인했다.
+- 사용자 DB는 SQLite `mode=ro&immutable=1`로 설정 메타데이터만 확인했다:
+  `financial_news`, 384차원, all-MiniLM-L6-v2/default, schema의 cosine.
+  Chroma로 사용자 DB를 열거나 검색·변경하지 않았다. 실제 Claude·임베딩 실행과 5초 성능은 미검증이다.
+- 선택 investment/research overlay는 `config --quiet`만 확인했다. 별도 `Dockerfile.investment`
+  빌드 및 실제 모델·DB·캐시를 마운트한 전체 운영 검증은 미실행이다.
+
+```powershell
+.venv/Scripts/python.exe -m black --check --workers 1 backend frontend tests scripts
+.venv/Scripts/python.exe -m flake8 backend frontend tests scripts
+.venv/Scripts/python.exe -m pytest -q -rs --basetemp=artifacts/pytest-pr15-final -o cache_dir=artifacts/pytest-cache-pr15-final --junitxml=artifacts/pytest-pr15-final.xml
+.venv/Scripts/python.exe -X utf8 artifacts/check_pr15_ui.py
+.venv/Scripts/python.exe -X utf8 artifacts/check-research-reuse-browser.py
+docker compose up --build -d --wait --wait-timeout 120
+.venv/Scripts/python.exe -X utf8 artifacts/check_pr15_compose.py
+```
+
+`artifacts/`의 mock 서버·스크린샷·JUnit 보고서는 검증 전용 로컬 자료이며 앱의 성공 대체 경로가 아니다.
+학교 스펙 §9~12의 Self-Correction·출처·API 계약·HTTP 화면·Docker·테스트와 관련된 통합이다.
+완료 후 실행 요약을 유지하며 스펙의 로그 항목을 실시간 스트리밍 구현으로 주장하지 않는다.
+요청당 5초는 필수 성능 기준이지만 이번 mock/오류 검사를 달성 근거로 사용하지 않는다.
+
+## 2026-11-03 PR #15 통합 검증
+
+기준은 `feature/12=6f5bad1`, `main=19a5c7c`다. 취소한 병합을 복원하지 않고 새로 병합했다.
+아래는 이번 코드에서 직접 실행한 로컬 검사이며, 뒤의 과거 작업 기록이나 GitHub CI 결과와 구분한다.
+
+- Black check(87개 파일), flake8, 로컬·두 Docker 컨테이너의 pip check 통과.
+- 전체 pytest: **284 passed, 1 skipped**(184.73초). skip은 미배포 공유 데이터가 필요한
+  `test_real_news_is_preserved_in_hybrid_input`이다. 투자 계약, 단일 리서치 라우트,
+  입력/상태/오류, DB·임베딩, timeout·busy, 세션 재사용 및 페이지 회귀를 포함한다.
+- `scripts/check_ui.py`는 별도 mock 투자 HTTP 서버와 실제 Edge에서 기본·`--dev` 경로를 통과했다.
+  6개 메뉴, 필터, 애니메이션, 반응형 배치, SHAP 개발 상태를 확인했다.
+- 별도 mock 리서치 API와 실제 Edge에서 진행 중 버튼이 활성화됨을 확인했다.
+  B 재클릭은 A 시작 약 1.16초 뒤 전달되어 busy를 받았고 A는 약 8초 뒤 완료했다.
+  성공 재사용·페이지 이동에서 추가 POST 없음, 1440/390px 배치도 확인했다.
+  이는 해당 환경의 관찰이며 즉시 전달·서버 취소를 보장하는 계약이 아니다.
+- 기본 Compose build/up/wait, 두 서비스 healthy, `scripts/smoke.py`, 실제 HTTP와 브라우저에서
+  빈 질문 422 및 정상 질문 503 `research_key_missing` 안내 통과. 컨테이너 키 부재를 먼저 확인했다.
+- 사용자 DB는 SQLite `mode=ro&immutable=1`로 설정 메타데이터만 확인했다:
+  `financial_news`, 384차원, all-MiniLM-L6-v2/default, schema의 cosine.
+  Chroma로 사용자 DB를 열거나 검색·변경하지 않았다. 실제 Claude·임베딩 실행과 5초 성능은 미검증이다.
+- 선택 investment/research overlay는 `config --quiet`만 확인했다. 별도 `Dockerfile.investment`
+  빌드 및 실제 모델·DB·캐시를 마운트한 전체 운영 검증은 미실행이다.
+
+```powershell
+.venv/Scripts/python.exe -m black --check --workers 1 backend frontend tests scripts
+.venv/Scripts/python.exe -m flake8 backend frontend tests scripts
+.venv/Scripts/python.exe -m pytest -q -rs --basetemp=artifacts/pytest-pr15-final -o cache_dir=artifacts/pytest-cache-pr15-final --junitxml=artifacts/pytest-pr15-final.xml
+.venv/Scripts/python.exe -X utf8 artifacts/check_pr15_ui.py
+.venv/Scripts/python.exe -X utf8 artifacts/check-research-reuse-browser.py
+docker compose up --build -d --wait --wait-timeout 120
+.venv/Scripts/python.exe -X utf8 artifacts/check_pr15_compose.py
+```
+
+`artifacts/`의 mock 서버·스크린샷·JUnit 보고서는 검증 전용 로컬 자료이며 앱의 성공 대체 경로가 아니다.
+학교 스펙 §9~12의 Self-Correction·출처·API 계약·HTTP 화면·Docker·테스트와 관련된 통합이다.
+완료 후 실행 요약을 유지하며 스펙의 로그 항목을 실시간 스트리밍 구현으로 주장하지 않는다.
+요청당 5초는 필수 성능 기준이지만 이번 mock/오류 검사를 달성 근거로 사용하지 않는다.
 
 ## PR CI
 
@@ -137,14 +211,16 @@ GitHub에서 첫 PR의 CI 실행 후 기본 브랜치의 Settings → Rules → 
 `research_service.py`가 필요한 시점에만 뉴스 모듈을 import하고
 팀원의 `research(question, as_of, *, llm, search, settings, news_map)`를 호출한다.
 앱 import와 health/docs에는 Chroma·LangGraph·Claude 초기화가 없다.
-별도 위험 점수 CSV를 읽지 않는다. 기존 `/health` 계약은
-`{"status":"ok","model_loaded":false}`이며 RAG 준비 여부를 의미하지 않는다.
+리서치는 별도 위험 점수 CSV를 읽지 않는다. `/health`는 투자 앱의
+`status`, `model_loaded`, `ready`, `model_version`을 반환하며 RAG 준비 여부를 의미하지 않는다.
+`create_app()`의 투자 모델 생명주기와 `/ready`, `/optimize`, `/backtest`는 유지한다.
+리서치 입력 오류 처리만 별도로 등록하며 다른 라우트의 검증 응답은 유지한다.
 
 요청은 `question`과 `as_of`만 허용한다. 공백 정리 후 질문 길이는 1~2,000자,
 기준일은 실제로 존재하는 `YYYY-MM-DD` 문자열이다. 숫자 타임스탬프와 날짜시간은 거부한다.
 키·DB 경로 등 추가 필드는 422이고, 입력 오류 본문에는 원래 입력값을 되돌려주지 않는다.
 서버는 프로젝트 루트 `.env`보다 프로세스 환경 변수를 우선한다.
-`RESEARCH_DB_PATH` 기본값은 프로젝트 루트 기준 `data/processed/news/chroma`이다.
+`NEWS_CHROMA_PATH` 기본값은 프로젝트 루트 기준 `data/processed/news/chroma`이다.
 설정·뉴스 ETF 맵도 프로젝트 루트 기준으로 읽으므로 실행 위치와 무관하다.
 
 응답 필드:
@@ -185,6 +261,8 @@ SDK thinking 블록과 모델이 만든 목표·검증 코멘트·수정 이유�
 | 500 | `research_failed` | 그 밖의 내부 처리 오류 |
 
 DB를 열기 전에 SQLite를 읽기 전용으로 확인하고, 기존 컬렉션만 `get_collection`으로 연다.
+로컬 임베딩 사용 시 저장된 모델 이름·컬렉션 메타데이터·cosine 설정을 확인한다.
+다른 모델 또는 거리 설정은 `research_db_unavailable`로 거절하며 자동 변환하지 않는다.
 배치 `vector_store build`의 생성 기능은 그대로 둔다. API는 ONNX 캐시 6개 파일이
 없으면 다운로드를 시도하지 않는다. 캐시 존재만으로 준비 완료를 주장하지 않으며,
 실제 모델 로딩·검색 실패도 오류로 반환한다.
@@ -238,9 +316,13 @@ SDK·검색을 테스트 내부에서 대체한다. 벡터 저장소 검사는 �
 .venv/Scripts/python.exe -m pytest -q tests/test_research_api.py tests/test_health.py tests/test_research_agent.py tests/test_vector_store.py
 ```
 
-Docker는 이번 모듈 분리 때문에 import가 깨지지 않도록 API 모듈 3개와 가벼운 settings만 추가했다.
-기본 이미지에는 RAG 의존성·DB·임베딩·키가 없으며 실제 리서치 실행 환경 확장은 후속 작업이다.
-다른 분석 API, 실제 성능 최적화도 후속 범위다.
+두 Dockerfile 모두 투자·뉴스 의존성 및 리서치 API 모듈 3개를 복사한다.
+투자 추론의 `device="cpu"`에 맞춰 CPU PyTorch를 설치한다.
+기본 Compose에는 사용자 DB·임베딩 캐시·키가 없으며 실제 리서치 실행 환경 검증은 후속 작업이다.
+DB 경로는 API·벡터 저장소 build/search CLI·투자 키워드 조회 모두 `NEWS_CHROMA_PATH`로 해석한다.
+상대 환경변수 경로는 저장소 루트, 명시적인 CLI `--db` 상대 경로는 실행 디렉터리 기준이다.
+기본 경로는 변경하지 않으며 조회는 DB/컬렉션을 생성하지 않는다.
+일반 Chroma 클라이언트를 여는 과정 자체가 읽기 전용이라는 보장은 없으므로 사용자 DB로 검증하지 않았다.
 
 ## Streamlit 리서치 HTTP 연결
 
