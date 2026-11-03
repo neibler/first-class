@@ -1,1 +1,2 @@
 -r investment_ai/requirements.txt
+-r performance/requirements.txt

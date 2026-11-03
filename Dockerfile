@@ -17,7 +17,12 @@ COPY backend/main.py /app/backend/main.py
 COPY backend/research_api.py backend/research_schemas.py backend/research_service.py /app/backend/
 COPY backend/investment_ai/ /app/backend/investment_ai/
 COPY backend/news_research/ /app/backend/news_research/
+# 결과 JSON 을 읽어 내보내는 /performance 라우터. 분석 실행용 무거운 의존성
+# (scipy/statsmodels/shap/matplotlib)은 설치하지 않는다 — 분석은 컨테이너 밖에서
+# 돌리고 results/ 를 RESULTS_DIR 로 마운트한다.
+COPY backend/performance/ /app/backend/performance/
 COPY config/agent.yaml config/etf_news_map.yaml /app/config/
+ENV RESULTS_DIR=/results
 USER appuser
 EXPOSE 8000
 CMD ["python", "-m", "uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]

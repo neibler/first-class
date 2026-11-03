@@ -1,0 +1,9 @@
+# 성능 분석 실행용 추가 의존성.
+# investment_ai 의존성(gymnasium/torch/stable-baselines3 등)은
+# backend/requirements.txt 가 함께 설치한다.
+# API 컨테이너는 결과 JSON 만 읽으므로 이 목록이 필요 없다.
+scipy>=1.11,<2
+statsmodels>=0.14,<1
+shap>=0.44,<1
+matplotlib>=3.8,<4
+scikit-learn>=1.3,<2
