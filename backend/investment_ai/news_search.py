@@ -10,12 +10,11 @@ import json
 from pathlib import Path
 import sqlite3
 
-DEFAULT_DB = (
-    Path(__file__).resolve().parents[2] / "data/processed/news/chroma/chroma.sqlite3"
-)
+from backend.news_research.settings import news_db_path
 
 
-def search_news(query, as_of, ticker, limit=5, db_path=DEFAULT_DB):
+def search_news(query, as_of, ticker, limit=5, db_path=None):
+    db_path = db_path if db_path is not None else news_db_path() / "chroma.sqlite3"
     as_of = date.fromisoformat(as_of).isoformat()
     if not 1 <= limit <= 50 or not query.strip():
         raise ValueError("Provide a query and limit between 1 and 50")

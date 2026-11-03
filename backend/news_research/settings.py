@@ -25,3 +25,13 @@ def iter_months(start: str, end: str) -> Iterator[tuple[int, int]]:
     while (year, month) <= (end_year, end_month):
         yield year, month
         year, month = (year + 1, 1) if month == 12 else (year, month + 1)
+
+
+PROJECT = Path(__file__).resolve().parents[2]
+
+
+def news_db_path() -> Path:
+    """NEWS_CHROMA_PATH is relative to the repository, independent of cwd."""
+    configured = env_value("NEWS_CHROMA_PATH", PROJECT / ".env")
+    path = Path(configured or "data/processed/news/chroma")
+    return path if path.is_absolute() else PROJECT / path

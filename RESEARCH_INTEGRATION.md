@@ -1,44 +1,62 @@
 # 뉴스 리서치 통합 실행
 
-feature/7의 뉴스 위험 태깅·점수 생성·RAG 에이전트를 투자 통합 브랜치에 병합했습니다.
-기존 PPO와 CSV는 그대로 사용합니다. 이번 변경으로 PPO 재학습은 필요하지 않습니다.
+투자 앱의 `create_app()`·모델 생명주기·`/ready`·투자 API를 유지하고,
+`backend/research_api.py`의 `POST /research` 하나를 등록한다.
+Streamlit은 `frontend/api_client.py`로 HTTP만 호출한다. 별도 준비 조회 API는 사용하지 않는다.
 
-## 로컬 실행
+## 로컬 실행과 계약
 
-1. `.venv`를 사용한다면 해당 Python으로 `pip install -r requirements-dev.txt`를 실행합니다.
-2. 팀에서 받은 `chroma_financial_news.zip`을 `data/processed/news/`에 풀어
-   `data/processed/news/chroma/chroma.sqlite3`가 있도록 합니다.
-   이 PC에는 이미 DB가 있습니다. DB 801MB 원본 ZIP은 저장소에 업로드하지 않습니다.
-3. 프로젝트 루트 `.env`에 `ANTHROPIC_API_KEY=...`를 설정합니다.
-   키는 Git에 올리지 마세요. 다른 DB 경로는 `NEWS_CHROMA_PATH=...`로 설정할 수 있습니다.
-4. 기존 API를 종료하고 재시작합니다. UI도 새로고침합니다.
+1. 프로젝트 가상환경에 `requirements-dev.txt`의 의존성을 준비한다.
+2. 기존 `financial_news` DB와 all-MiniLM-L6-v2(384차원, cosine) ONNX 캐시를 서버에 준비한다.
+   조회 시 임베딩 다운로드와 DB/컬렉션 생성은 하지 않는다. 사용자 DB를 재생성하지 않는다.
+3. 서버의 프로세스 환경 또는 프로젝트 루트 `.env`에 `ANTHROPIC_API_KEY`를 설정한다.
+   DB 설정은 `NEWS_CHROMA_PATH` 하나이며 미설정 시 `data/processed/news/chroma`이다.
+   상대 경로는 저장소 루트 기준이다. API·build/search CLI·투자 키워드 검색에 동일하게 적용한다.
+4. 사용 중인 서버·포트를 먼저 확인하고 API와 UI를 실행한다.
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\run.ps1 api
+python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000
 # 별도 터미널
-powershell -ExecutionPolicy Bypass -File .\run.ps1 ui
+python -m streamlit run frontend/app.py --server.port 8501
 ```
 
-대시보드의 에이전트 리서치에서 질문·ETF·기준일을 입력하고 리서치 시작을 누릅니다.
-공유 DB는 과거 데이터이므로 데모 기준일은 2023~2025년을 사용하세요.
-답변, 원문 링크, 위험 태그, 완료 후 검색/검증 활동 기록을 표시합니다.
-리서치 결과가 학습용 CSV나 PPO 모델을 변경하지 않습니다.
-질문과 검색된 근거는 Claude로 전송되며 사용자의 API 계정에 요금이 발생할 수 있습니다.
+화면에서 질문·기준일(기본 2025-04-10)을 입력하고 **분석 실행**을 누른다.
+공유 DB의 2023~2025년 범위를 안내하지만 API 입력 범위로 제한하지 않는다.
+요청은 `{"question":"최근 QQQ 위험?","as_of":"2025-04-10"}`이며 ETF 선택 필드는 없다.
+질문은 공백 정리 후 1~2,000자, 기준일은 필수 날짜 문자열이며 추가 필드는 금지한다.
+뉴스 내부 ETF 검색·위험 태그와 별도 투자 키워드 검색의 ticker는 유지한다.
 
-`GET /research/status`: 패키지·DB 파일·키 설정 여부 확인. 유효한 키인지 실제 요청으로 검사하지 않습니다.
-`POST /research`: `{ "question": "최근 QQQ 위험 뉴스?", "as_of": "2025-04-10", "ticker": "QQQ" }`
-날짜 필수, ticker 생략 가능. 잘못된 입력 422, 미설정 503, 처리 중 409, 실행 실패 502.
-설정이 없어도 투자 API/대시보드는 실행됩니다. 실패 시 가짜 리포트를 대신 표시하지 않습니다.
+응답은 `status: complete / insufficient_evidence`, 답변·출처·위험 태그·계획·완료 로그·면책을 포함한다.
+근거 부족은 위험 없음이나 0점으로 바꾸지 않는다. 오류는 `detail.code`, `detail.message` 형식이다.
+입력 오류 422, 준비 부족·처리 중(`research_busy`) 503, 외부/결과 오류 502,
+시간 초과 504, 기타 내부 오류 500이다. 상세 코드는 [개발 문서](docs/development.md#리서치-api-이슈-12)를 따른다.
 
-임베딩 모델 all-MiniLM-L6-v2는 첫 의미 검색 시 Chroma가 내려받을 수 있어 첫 실행이 느릴 수 있습니다.
-Claude 모델 ID는 팀의 config/agent.yaml을 유지했습니다. 계정에서 지원하는 ID인지 확인하세요.
-실제 유료 LLM 요청은 자동 검증에서 실행하지 않습니다.
+개인용 화면이므로 영구 이력 대신 **세션별 마지막 유효한 성공 한 개**만 임시 보관한다.
+명시적 재제출 때 앞뒤 공백을 정리한 질문과 기준일이 같으면 재사용해 시간·비용 낭비를 줄인다.
+다른 성공은 교체하고 오류·근거 부족은 성공 보관값을 덮어쓰지 않는다.
+현재 요청 표시와 보관값은 분리하므로 B 실패에 A의 답변을 표시하지 않는다.
+API 주소가 달라지면 보관값을 무효화한다. 서버 데이터·모델 버전 계약은 없으므로 실행 환경 고정을
+전제하며 변경 시 세션을 초기화한다. 새로고침·연결 종료 뒤 영구 보존은 보장하지 않는다.
+
+진행 중 버튼 강제 비활성화·프런트 잠금·POST 자동 재시도는 추가하지 않았다.
+동기 요청 중 재클릭은 즉시 전달되지 않을 수 있다. 서버 프로세스 내 동시 요청은 503으로 거절한다.
+LLM 호출 timeout 20초·SDK 재시도 0회, 단계 전후 예산 90초, HTTP 읽기 timeout 120초를 유지한다.
+Self-Correction은 근거를 개선하는 에이전트 단계이며 통신 자동 재시도와 다르다.
+90초 예산·클라이언트 timeout·페이지 이동·재클릭은 진행 중 서버 작업의 강제 취소를 보장하지 않는다.
+실제 단계·퍼센트를 가장하지 않으며 로그는 완료 후 반환되는 기록이다.
 
 ## Docker
 
-모델 공유 파일을 먼저 `python scripts/install_demo.py`로 설치하고 .env에 키를 설정하세요.
-Linux bind mount에서는 API 사용자(uid 10001)가 runtime/service_state 및 Chroma 디렉터리에
-쓸 수 있도록 권한이 있어야 합니다. Chroma는 DB를 여는 과정에서도 쓰기가 필요합니다.
+```powershell
+docker compose up --build -d --wait --wait-timeout 120
+docker compose ps
+```
+
+기본 Compose의 dashboard는 `http://api:8000`에 연결한다. 키·DB·캐시는 연결되지 않아
+유효한 질문 제출 시 키 미설정 안내가 예상된다. 투자 모델도 없으면 준비 부족을 안내한다.
+두 API Dockerfile에 투자·뉴스 모듈과 의존성이 포함되며 CPU 추론용 PyTorch를 사용한다.
+
+전체 실행용 선택 구성은 다음과 같다. 이 구성의 실제 분석은 별도 검증 대상이다.
 
 ```powershell
 $env:INVESTMENT_AI_RUNTIME=(Resolve-Path runtime).Path
@@ -46,14 +64,8 @@ $env:NEWS_CHROMA_HOST_PATH=(Resolve-Path data/processed/news/chroma).Path
 docker compose -f docker-compose.yml -f docker-compose.investment.yml -f docker-compose.research.yml up --build
 ```
 
-기본 Compose/CI는 모델·키·대용량 DB가 없는 상태도 정상적으로 안내하는지 검사합니다.
-리서치 API는 기본적으로 로컬 바인딩을 사용하며, 인터넷에 공개하려면 별도 인증/사용량 제한이 필요합니다.
-
-## 통합 검증 결과
-
-- 전체 테스트 163개 통과 (투자 AI·뉴스 AI·API·프론트 포함)
-- Black/flake8 및 pip check 통과
-- 공유 투자 모델 20261028_005508 로딩·추론·151일 백테스트 조회 유지 확인
-- 실제 Chroma financial_news 컬렉션 190,033개 확인
-- 유료 Claude 호출 미실행: 로컬 ANTHROPIC_API_KEY 미설정
-- Docker 실행 검증은 로컬 Docker 미설치로 미실행; GitHub CI에서 확인 필요
+리서치 overlay는 서버에 키와 `/news/chroma` DB 경로를 전달한다. **임베딩 캐시는 별도로
+API 사용자(appuser)의 캐시 경로에 미리 연결해야 한다.** 모델 다운로드를 요청 처리에 맡기지 않는다.
+Chroma는 기존 DB를 열 때도 내부 쓰기를 할 수 있어 권한·버전 호환성은 복사한 DB로 사전 확인한다.
+실제 유료 LLM·사용자 DB 전체 실행과 학교의 요청당 5초 성능은 아직 검증하지 않았다.
+이번 통합의 실제 검사 결과는 `docs/progress.md`의 최신 기록을 따른다. 과거 통과 수를 재사용하지 않는다.

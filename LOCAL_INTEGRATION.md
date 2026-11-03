@@ -78,7 +78,10 @@ $env:INVESTMENT_AI_RUNTIME = (Resolve-Path .\runtime).Path
 docker compose -f docker-compose.yml -f docker-compose.investment.yml up --build -d
 ```
 
-Docker 빌드·실행은 이번 환경에 Docker가 없어 검증하지 않았습니다. 현재 통합은 포트폴리오 API와 화면 연결이며 SHAP·리서치·ANOVA 등 다른 화면의 미구현 기능은 그대로 남아 있습니다.
+위 내용은 투자 통합 당시의 기록입니다. PR #15 통합에서는 리서치 API·화면도 연결합니다.
+SHAP은 샘플 화면이고 성과·ANOVA·리스크 화면은 준비 중입니다.
+현재 리서치 계약과 Docker 구성은 [RESEARCH_INTEGRATION.md](RESEARCH_INTEGRATION.md)를 따릅니다.
+최신 통합 검사 결과는 `docs/progress.md`에 별도로 기록합니다.
 ## 이번 통합 검증 결과
 
 - 저장소 테스트 81개 통과.

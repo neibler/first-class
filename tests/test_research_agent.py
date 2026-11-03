@@ -1,6 +1,9 @@
 import json
 import re
+import subprocess
+import sys
 from types import SimpleNamespace as NS
+from unittest.mock import Mock
 
 import pytest
 
@@ -280,3 +283,86 @@ def test_schemas_restrict_tickers_and_risk_types():
     assert tag["properties"]["ticker"]["enum"] == ["QQQ", "XLE"]
     assert "none" not in tag["properties"]["direction"]["enum"]
     assert json.dumps(shapes)  # serialisable for the API
+
+
+def test_default_search_opens_existing_collection_and_forwards_filters(
+    monkeypatch, tmp_path
+):
+    from backend.news_research import vector_store
+
+    embedding, collection = Mock(), Mock()
+    monkeypatch.setattr(vector_store, "LocalEmbedding", Mock(return_value=embedding))
+    opener = Mock(return_value=collection)
+    query = Mock(return_value=[_hit(1, "good")])
+    monkeypatch.setattr(vector_store, "open_collection", opener)
+    monkeypatch.setattr(vector_store, "search", query)
+    search = ra.default_search(tmp_path, local_embeddings_only=True)
+    opener.assert_called_once_with(tmp_path, embedding_function=embedding, create=False)
+    embedding._download_model_if_not_exists.assert_called_once_with()
+    result = search("chips", 8, until="2025-04-10", etf="QQQ")
+    query.assert_called_once_with(collection, "chips", 8, until="2025-04-10", etf="QQQ")
+    assert result == [_hit(1, "good")]
+
+
+def test_default_llm_has_explicit_timeout_and_no_retries(monkeypatch, settings):
+    import anthropic
+    from backend.news_research import settings as secrets
+
+    monkeypatch.setattr(secrets, "env_value", lambda name, *args: "test-only")
+    factory = Mock()
+    monkeypatch.setattr(anthropic, "Anthropic", factory)
+    ra.default_llm(settings)
+    factory.assert_called_once_with(api_key="test-only", timeout=20.0, max_retries=0)
+
+
+@pytest.mark.parametrize("detail", ["", "PRIVATE /internal/db/path"])
+def test_cli_store_error_has_safe_message_and_skips_research(
+    monkeypatch, capsys, detail
+):
+    from backend.news_research.vector_store import StoreUnavailable
+
+    monkeypatch.setattr(ra.sys.stdout, "reconfigure", Mock(), raising=False)
+    monkeypatch.setattr(
+        ra, "default_search", Mock(side_effect=StoreUnavailable(detail))
+    )
+    research = Mock()
+    monkeypatch.setattr(ra, "research", research)
+    assert ra.main(["최근 QQQ 위험?", "--as-of", "2025-04-10"]) == 2
+    output = capsys.readouterr()
+    assert output.out == (
+        "오류: 뉴스 DB를 사용할 수 없습니다. DB 경로와 데이터 준비 상태를 확인하세요.\n"
+    )
+    assert not output.err
+    research.assert_not_called()
+
+
+def test_cli_still_reports_agent_errors(monkeypatch, capsys):
+    monkeypatch.setattr(ra.sys.stdout, "reconfigure", Mock(), raising=False)
+    monkeypatch.setattr(ra, "default_search", Mock(return_value=Mock()))
+    monkeypatch.setattr(
+        ra, "research", Mock(side_effect=ra.AgentError("분석 실패 안내"))
+    )
+    assert ra.main(["최근 QQQ 위험?"]) == 2
+    assert capsys.readouterr().out == "오류: 분석 실패 안내\n"
+
+
+def test_cli_missing_db_exits_without_traceback_or_creating_database(tmp_path):
+    missing_db = tmp_path / "missing-db"
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "backend.news_research.research_agent",
+            "최근 QQQ 위험?",
+            "--db",
+            str(missing_db),
+        ],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        timeout=30,
+    )
+    assert result.returncode == 2
+    assert "DB 경로와 데이터 준비 상태를 확인하세요." in result.stdout
+    assert "Traceback" not in result.stderr
+    assert not missing_db.exists()

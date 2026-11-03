@@ -10,16 +10,9 @@ def investment_ui_fixture(request, monkeypatch):
     if request.node.module.__name__.split(".")[-1] not in {
         "test_dashboard",
         "test_ui_pages",
+        "test_research_frontend",
     }:
         return
-
-    from frontend import research_client
-
-    monkeypatch.setattr(
-        research_client,
-        "status",
-        lambda: {"configured": False, "messages": ["리서치 설정 필요"]},
-    )
 
     def payload(observations=None):
         data = load_portfolio()

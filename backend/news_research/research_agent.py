@@ -11,8 +11,9 @@ the accepted evidence only, citing it as [n], and turns the risk events it
 finds into risk tags (ticker, risk_type, risk_level x confidence = risk_score).
 
 Searches only see news dated on or before `as_of`, so the agent can be replayed
-at past dates without look-ahead. Every step appends one line to `log` - the
-agent's "current thought" shown on the dashboard. `research()` is the function
+at past dates without look-ahead. Steps append execution summaries to `log`,
+returned after completion (not private reasoning or live events). `research()`
+is the function
 the FastAPI POST /research endpoint calls. LLM calls go through the `LLM`
 protocol; ClaudeLLM uses the Anthropic SDK and another provider can be added
 behind the same two-argument interface.
@@ -97,6 +98,7 @@ class ClaudeLLM:
 
 
 class AgentState(TypedDict, total=False):
+    status: str
     question: str
     as_of: str
     goal: str
@@ -274,7 +276,7 @@ def build_graph(llm: LLM, search: Search, settings: dict, news_map: dict):
             "evidence": [],
             "log": log(
                 state,
-                f"[Planner] 목표: {result['goal']}",
+                f"[Planner] 하위 검색 {len(queries)}개 계획 완료",
                 f"[Planner] 검색 계획: {steps or '없음'}",
             ),
         }
@@ -357,8 +359,7 @@ def build_graph(llm: LLM, search: Search, settings: dict, news_map: dict):
             "evidence": list(evidence.values()),
             "log": log(
                 state,
-                f"[Verifier] 관련성 {score:.2f} (기준 {bar}) → {verdict}, 근거 {kept}건 채택"
-                + (f" - {result['comment']}" if result.get("comment") else ""),
+                f"[Verifier] 관련성 {score:.2f} (기준 {bar}) → {verdict}, 근거 {kept}건 채택",
             ),
         }
 
@@ -382,8 +383,7 @@ def build_graph(llm: LLM, search: Search, settings: dict, news_map: dict):
             "rewrites": state["rewrites"] + 1,
             "log": log(
                 state,
-                f"[Verifier] 검색어 수정: '{state['query']}' → '{result['query']}'"
-                f" ({result['reason']})",
+                f"[Verifier] 검색어 수정: '{state['query']}' → '{result['query']}'",
             ),
         }
 
@@ -406,6 +406,7 @@ def build_graph(llm: LLM, search: Search, settings: dict, news_map: dict):
         )[: retrieval["max_evidence"]]
         if not evidence:
             return {
+                "status": "insufficient_evidence",
                 "answer": "기준일까지의 뉴스에서 질문에 맞는 근거를 찾지 못했습니다.",
                 "risk_tags": [],
                 "sources": [],
@@ -465,7 +466,10 @@ def build_graph(llm: LLM, search: Search, settings: dict, news_map: dict):
             }
             for n in sorted(cited)
         ]
+        if not answer.strip() or not sources:
+            raise AgentError("분석 결과에 답변 또는 유효한 출처가 없습니다.")
         return {
+            "status": "complete",
             "answer": answer,
             "risk_tags": tags,
             "sources": sources,
@@ -510,21 +514,25 @@ def default_llm(settings: dict) -> ClaudeLLM:
     if not api_key:
         raise AgentError("ANTHROPIC_API_KEY가 없습니다. .env에 추가하세요.")
     return ClaudeLLM(
-        anthropic.Anthropic(api_key=api_key, timeout=60.0, max_retries=1),
+        anthropic.Anthropic(api_key=api_key, timeout=20.0, max_retries=0),
         settings["models"],
         settings["effort"],
     )
 
 
-def default_search(db_path: Path | None = None) -> Search:
+def default_search(
+    db_path: Path | None = None, *, local_embeddings_only: bool = True
+) -> Search:
     from backend.news_research import vector_store
 
-    path = db_path or vector_store.DB_PATH
-    if not (path / "chroma.sqlite3").is_file():
-        raise AgentError("뉴스 DB가 없습니다. 공유 DB 경로를 확인하세요.")
-    collection = vector_store.open_collection(path, create=False)
-    if not collection.count():
-        raise AgentError("뉴스 DB가 비어 있습니다.")
+    embedding = None
+    if local_embeddings_only:
+        embedding = vector_store.LocalEmbedding()
+    collection = vector_store.open_collection(
+        db_path, embedding_function=embedding, create=False
+    )
+    if local_embeddings_only:
+        embedding._download_model_if_not_exists()
 
     def search(query: str, k: int, **filters) -> list[dict]:
         return vector_store.search(collection, query, k, **filters)
@@ -565,9 +573,10 @@ def research(
         config={"recursion_limit": 80},
     )
     return {
+        "status": state["status"],
         "question": question,
         "as_of": as_of,
-        "answer": state.get("answer", ""),
+        "answer": state["answer"],
         "risk_tags": state.get("risk_tags", []),
         "sources": state.get("sources", []),
         "plan": state.get("plan", []),
@@ -584,9 +593,22 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--json", action="store_true", help="결과를 JSON으로 출력")
     args = parser.parse_args(argv)
 
+    from backend.news_research.vector_store import (
+        StoreUnavailable,
+        EmbeddingUnavailable,
+    )
+
     sys.stdout.reconfigure(encoding="utf-8")
     try:
         result = research(args.question, args.as_of, search=default_search(args.db))
+    except StoreUnavailable:
+        print(
+            "오류: 뉴스 DB를 사용할 수 없습니다. DB 경로와 데이터 준비 상태를 확인하세요."
+        )
+        return 2
+    except EmbeddingUnavailable:
+        print("오류: 로컬 임베딩 모델이 준비되지 않았습니다.")
+        return 2
     except AgentError as exc:
         print(f"오류: {exc}")
         return 2

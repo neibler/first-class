@@ -27,6 +27,7 @@ jobs:
           cache-dependency-path: |
             requirements*.txt
             backend/requirements.txt
+            backend/news_research/requirements.txt
             frontend/requirements.txt
       - name: Install test dependencies
         run: python -m pip install -r requirements-dev.txt
