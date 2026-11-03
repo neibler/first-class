@@ -29,8 +29,9 @@ def test_navigation_all_six_pages_and_placeholder_scope(page):
         assert page.title[0].value == title
         assert len(page.get("page_link")) == 6
         if slug == "research":
-            assert page.text_area
-            assert page.selectbox
+            assert page.text_area(key="research_question")
+            assert page.date_input(key="research_date")
+            assert not page.selectbox
         elif slug != "shap":
             assert page.info[0].value == "화면 준비 중"
             assert not page.selectbox

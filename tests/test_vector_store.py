@@ -2,8 +2,11 @@ import contextlib
 import hashlib
 import json
 import math
+import sqlite3
+from unittest.mock import Mock
 
 import chromadb
+import pytest
 from chromadb.api.types import EmbeddingFunction
 from chromadb.errors import NotFoundError
 
@@ -112,3 +115,89 @@ def test_where_filter_shapes():
             {"date_int": {"$lte": 20251231}},
         ]
     }
+
+
+@pytest.mark.parametrize("kind", ["absent", "no_collection", "corrupt"])
+def test_existing_store_validation_never_creates_a_database(
+    tmp_path, monkeypatch, kind
+):
+    db_path = tmp_path / "db"
+    if kind != "absent":
+        db_path.mkdir()
+        sqlite_path = db_path / "chroma.sqlite3"
+        if kind == "corrupt":
+            sqlite_path.write_text("broken", encoding="utf-8")
+        else:
+            with sqlite3.connect(sqlite_path) as connection:
+                connection.execute("CREATE TABLE collections (name TEXT)")
+    client_factory = Mock(side_effect=AssertionError("Must not open Chroma"))
+    monkeypatch.setattr(vs.chromadb, "PersistentClient", client_factory)
+    with pytest.raises(vs.StoreUnavailable):
+        vs.open_collection(db_path, create=False)
+    client_factory.assert_not_called()
+    if kind == "absent":
+        assert not db_path.exists()
+
+
+def test_existing_store_uses_get_only_and_rejects_empty_collection():
+    collection = Mock()
+    client = Mock()
+    client.get_collection.return_value = collection
+    embedding = WordHashEmbedding()
+    collection.count.return_value = 2
+    assert (
+        vs.open_collection(client=client, embedding_function=embedding, create=False)
+        is collection
+    )
+    client.get_collection.assert_called_once_with(
+        vs.COLLECTION, embedding_function=embedding
+    )
+    client.get_or_create_collection.assert_not_called()
+    collection.count.return_value = 0
+    with pytest.raises(vs.StoreUnavailable):
+        vs.open_collection(client=client, embedding_function=embedding, create=False)
+
+
+def test_local_embeddings_never_download(tmp_path, monkeypatch):
+    monkeypatch.setattr(vs.LocalEmbedding, "DOWNLOAD_PATH", tmp_path)
+    embedding = vs.LocalEmbedding()
+    with pytest.raises(vs.EmbeddingUnavailable):
+        embedding._download_model_if_not_exists()
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_local_embedding_is_compatible_with_persisted_default_configuration():
+    client = chromadb.EphemeralClient()
+    with contextlib.suppress(NotFoundError):
+        client.delete_collection(vs.COLLECTION)
+    collection = vs.open_collection(client=client)
+    collection.add(ids=["offline"], embeddings=[[0.1] * 384])
+    reopened = vs.open_collection(
+        client=client, embedding_function=vs.LocalEmbedding(), create=False
+    )
+    assert reopened.count() == 1
+
+
+@pytest.mark.parametrize("mismatch", ["model", "embedding", "distance"])
+def test_local_embedding_rejects_incompatible_store_before_query(mismatch):
+    collection = Mock()
+    collection.count.return_value = 1
+    collection.metadata = {"embedding_model": vs.EMBEDDING_MODEL}
+    collection.configuration_json = {
+        "embedding_function": {"name": "default", "config": {}},
+        "hnsw": {"space": "cosine"},
+    }
+    if mismatch == "model":
+        collection.metadata["embedding_model"] = "different-model"
+    elif mismatch == "embedding":
+        collection.configuration_json["embedding_function"]["name"] = "other"
+    else:
+        collection.configuration_json["hnsw"]["space"] = "l2"
+    client = Mock()
+    client.get_collection.return_value = collection
+    with pytest.raises(vs.StoreUnavailable):
+        vs.open_collection(
+            client=client, embedding_function=vs.LocalEmbedding(), create=False
+        )
+    collection.query.assert_not_called()
+    client.get_or_create_collection.assert_not_called()

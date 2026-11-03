@@ -16,14 +16,17 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import sqlite3
 import sys
 import time
 from pathlib import Path
 
 import chromadb
 from chromadb.utils.embedding_functions import DefaultEmbeddingFunction
+from chromadb.utils.embedding_functions.onnx_mini_lm_l6_v2 import ONNXMiniLM_L6_V2
 
-DB_PATH = Path(__file__).resolve().parents[2] / "data/processed/news/chroma"
+from backend.news_research.settings import news_db_path
+
 CHUNKS_PATH = Path("data/processed/news/rag/chunks.jsonl")
 COLLECTION = "financial_news"
 EMBEDDING_MODEL = "all-MiniLM-L6-v2"
@@ -31,15 +34,86 @@ EMBEDDING_MODEL = "all-MiniLM-L6-v2"
 logger = logging.getLogger(__name__)
 
 
-def open_collection(
-    db_path: Path = DB_PATH, embedding_function=None, client=None, create=True
-) -> chromadb.Collection:
-    client = client or chromadb.PersistentClient(path=str(db_path))
-    if not create:
-        return client.get_collection(
-            COLLECTION,
-            embedding_function=embedding_function or DefaultEmbeddingFunction(),
+class StoreUnavailable(Exception):
+    """The existing research store is missing, empty, or cannot be opened."""
+
+
+class EmbeddingUnavailable(Exception):
+    """Research must not download embeddings on demand."""
+
+
+class LocalEmbedding(ONNXMiniLM_L6_V2):
+    @staticmethod
+    def name():
+        # Same model/configuration as Chroma's default, with downloads disabled.
+        return "default"
+
+    def _download_model_if_not_exists(self):
+        folder = self.DOWNLOAD_PATH / self.EXTRACTED_FOLDER_NAME
+        required = (
+            "config.json",
+            "model.onnx",
+            "special_tokens_map.json",
+            "tokenizer_config.json",
+            "tokenizer.json",
+            "vocab.txt",
         )
+        if not all((folder / name).is_file() for name in required):
+            raise EmbeddingUnavailable()
+
+
+def _validate_local_embedding(collection):
+    """Chroma exempts a function named 'default' from its name conflict check."""
+    config = collection.configuration_json
+    metadata = collection.metadata or {}
+    persisted = config.get("embedding_function") or {}
+    name = persisted.get("name")
+    # Older stores may only declare the model in collection metadata.
+    if name not in {"default", "onnx_mini_lm_l6_v2"}:
+        if name is not None or metadata.get("embedding_model") != EMBEDDING_MODEL:
+            raise StoreUnavailable()
+    if metadata.get("embedding_model", EMBEDDING_MODEL) != EMBEDDING_MODEL:
+        raise StoreUnavailable()
+    space = (config.get("hnsw") or {}).get("space", metadata.get("hnsw:space"))
+    if space != "cosine":
+        raise StoreUnavailable()
+
+
+def open_collection(
+    db_path: Path | None = None, embedding_function=None, client=None, *, create=True
+) -> chromadb.Collection:
+    db_path = db_path if db_path is not None else news_db_path()
+    if not create:
+        # Validate before PersistentClient can create a DB or run migrations.
+        # No Chroma client is opened on nonexistent paths/collections.
+        if client is None:
+            try:
+                uri = (db_path / "chroma.sqlite3").resolve().as_uri() + "?mode=ro"
+                connection = sqlite3.connect(uri, uri=True)
+                try:
+                    found = connection.execute(
+                        "SELECT 1 FROM collections WHERE name = ?", (COLLECTION,)
+                    ).fetchone()
+                finally:
+                    connection.close()
+                if not found:
+                    raise StoreUnavailable()
+            except (OSError, sqlite3.Error):
+                raise StoreUnavailable() from None
+        try:
+            client = client or chromadb.PersistentClient(path=str(db_path))
+            collection = client.get_collection(
+                COLLECTION,
+                embedding_function=embedding_function or DefaultEmbeddingFunction(),
+            )
+            if isinstance(embedding_function, LocalEmbedding):
+                _validate_local_embedding(collection)
+            if collection.count() == 0:
+                raise StoreUnavailable()
+            return collection
+        except Exception:
+            raise StoreUnavailable() from None
+    client = client or chromadb.PersistentClient(path=str(db_path))
     return client.get_or_create_collection(
         COLLECTION,
         configuration={"hnsw": {"space": "cosine"}},
@@ -130,7 +204,7 @@ def search(
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="ChromaDB 뉴스 벡터 저장소")
-    parser.add_argument("--db", type=Path, default=DB_PATH)
+    parser.add_argument("--db", type=Path, default=None)
     sub = parser.add_subparsers(dest="command", required=True)
     b = sub.add_parser("build", help="조각을 임베딩해 저장 (이어서 가능)")
     b.add_argument("--chunks", type=Path, default=CHUNKS_PATH)
@@ -145,7 +219,11 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
-    collection = open_collection(args.db)
+    collection = open_collection(
+        args.db,
+        create=args.command == "build",
+        embedding_function=LocalEmbedding() if args.command == "search" else None,
+    )
     if args.command == "build":
         added, skipped = build(collection, args.chunks, args.batch_size)
         logger.info(

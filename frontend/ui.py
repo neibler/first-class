@@ -151,7 +151,8 @@ def health_panel(sample=True, investment=False, research=False):
             )
         elif research:
             st.caption(
-                "리서치 준비 상태는 화면 상단에서 확인하세요. 투자 모델의 로드 여부와 별개입니다."
+                "/health는 서버 연결 상태입니다. 리서치에 필요한 키·뉴스 DB·임베딩 모델의 "
+                "준비 여부는 분석 요청에서 확인하며, model_loaded는 리서치 준비 상태가 아닙니다."
             )
         elif sample:
             st.caption(

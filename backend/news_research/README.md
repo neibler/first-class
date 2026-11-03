@@ -124,8 +124,15 @@ Planner(하위 검색 ≤3) → Researcher(ChromaDB, 기준일 이전 뉴스만)
 }
 ```
 
-- `risk_score` = 위험 수준 × 확신도. `log`는 대시보드에 보여 줄 에이전트 실행 로그다.
-- 실행하는 서버에 ChromaDB 폴더와 `ANTHROPIC_API_KEY`가 있어야 한다. `GET /research/status`, `POST /research`와 화면 연결이 구현되어 있다. `NEWS_CHROMA_PATH`로 DB 위치를 지정하며, 로컬·Docker 실행은 [리서치 연결 안내](../../RESEARCH_INTEGRATION.md)를 따른다.
+- `risk_score` = 위험 수준 × 확신도. `log`는 완료 후 단계별 실행 요약이며 실시간 이벤트나 내부 사고과정이 아니다.
+- 반환값에 `status`가 추가됐다. `complete`는 출처가 있는 결과이고,
+  `insufficient_evidence`는 채택 근거가 없어 Analyst를 생략한 안내문과 빈 출처·태그다.
+- `POST /research`는 구현됐다. 서버에 기존 ChromaDB·`ANTHROPIC_API_KEY`·로컬 ONNX 캐시가 필요하다.
+  리서치 검색은 기존 DB/컬렉션만 열며 API 요청 중 임베딩을 다운로드하지 않는다.
+  실행·오류·시간 제한 계약은 [개발 문서](../../docs/development.md#리서치-api-이슈-12)를 참고한다.
+  DB 기본 경로는 `NEWS_CHROMA_PATH`이며 상대 경로는 저장소 루트 기준이다.
+  API와 조회 CLI는 로컬 임베딩 캐시를 사용한다. build는 명시적 데이터 생성 명령이다.
+  실제 Claude·DB 전체 실행과 5초 성능은 미검증이며 [실행 안내](../../RESEARCH_INTEGRATION.md)를 따른다.
 
 ## 명세서 대비 달라진 점
 

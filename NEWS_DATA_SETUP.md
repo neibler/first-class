@@ -59,7 +59,9 @@ powershell -ExecutionPolicy Bypass -File .\run.ps1 news_search market --as-of 20
 이 기능은 의미 기반 벡터 검색이나 LLM 답변 생성이 아닙니다.
 
 DB 컬렉션: financial_news, 임베딩: all-MiniLM-L6-v2, 차원: 384.
-리서치 에이전트와 `GET /research/status`, `POST /research`, 질문·답변 UI는 연결되어 있습니다.
+리서치 에이전트와 `POST /research`, 질문·답변 UI는 연결되어 있습니다.
+API·벡터 저장소 CLI·투자 키워드 조회의 DB 기본 경로는 `NEWS_CHROMA_PATH`로 통일합니다.
+상대 경로는 저장소 루트 기준이며, 미설정 시 `data/processed/news/chroma`를 사용합니다.
 실행에는 뉴스 의존성, ChromaDB와 `ANTHROPIC_API_KEY`가 필요합니다.
 DB는 공유 학습 데모에 포함되지 않으므로 별도로 준비하세요.
 설정과 로컬·Docker 실행 방법은 [RESEARCH_INTEGRATION.md](RESEARCH_INTEGRATION.md)를 따릅니다.
