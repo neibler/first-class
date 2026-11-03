@@ -1,8 +1,12 @@
 services:
   api:
-    build:
+    build: &investment-build
+      context: .
       dockerfile: Dockerfile.investment
       target: api
+    depends_on:
+      investment-state-init:
+        condition: service_completed_successfully
     environment:
       INVESTMENT_AI_HOME: /runtime
       INVESTMENT_AI_RUN: /runtime/runs/${INVESTMENT_AI_RUN_ID:-20261028_005508}
@@ -20,3 +24,19 @@ services:
       timeout: 5s
       retries: 24
       start_period: 30s
+
+  # Preserve host latch files; grant access only to the state directory.
+  # Model/data files under /runtime do not need an ownership change.
+  investment-state-init:
+    build: *investment-build
+    user: "0:0"
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - chown -R 10001:10001 /runtime/service_state && chmod -R u+rwX /runtime/service_state
+    volumes:
+      - type: bind
+        source: ${INVESTMENT_AI_RUNTIME:?Set INVESTMENT_AI_RUNTIME to the investment_ai project directory}/service_state
+        target: /runtime/service_state
+        bind:
+          create_host_path: true
+    restart: "no"

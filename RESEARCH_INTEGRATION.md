@@ -55,6 +55,7 @@ docker compose ps
 기본 Compose의 dashboard는 `http://api:8000`에 연결한다. 키·DB·캐시는 연결되지 않아
 유효한 질문 제출 시 키 미설정 안내가 예상된다. 투자 모델도 없으면 준비 부족을 안내한다.
 두 API Dockerfile에 투자·뉴스 모듈과 의존성이 포함되며 CPU 추론용 PyTorch를 사용한다.
+뉴스 키워드 조회 CLI에 필요한 `config/investment_ai.json`도 두 이미지에 포함한다.
 
 전체 실행용 선택 구성은 다음과 같다. 이 구성의 실제 분석은 별도 검증 대상이다.
 
@@ -64,8 +65,12 @@ $env:NEWS_CHROMA_HOST_PATH=(Resolve-Path data/processed/news/chroma).Path
 docker compose -f docker-compose.yml -f docker-compose.investment.yml -f docker-compose.research.yml up --build
 ```
 
+투자 overlay는 API 시작 전에 `investment-state-init`으로 기존 호스트 `service_state`만
+UID/GID 10001에 맞게 준비한다. 기존 Safe-Guard 상태는 지우지 않으며 모델·뉴스 DB 권한은
+변경하지 않는다. 자세한 권한 동작은 [투자 실행 문서](docs/investment.md#docker)를 따른다.
+
 리서치 overlay는 서버에 키와 `/news/chroma` DB 경로를 전달한다. **임베딩 캐시는 별도로
 API 사용자(appuser)의 캐시 경로에 미리 연결해야 한다.** 모델 다운로드를 요청 처리에 맡기지 않는다.
 Chroma는 기존 DB를 열 때도 내부 쓰기를 할 수 있어 권한·버전 호환성은 복사한 DB로 사전 확인한다.
 실제 유료 LLM·사용자 DB 전체 실행과 학교의 요청당 5초 성능은 아직 검증하지 않았다.
-이번 통합의 실제 검사 결과는 `docs/progress.md`의 최신 기록을 따른다. 과거 통과 수를 재사용하지 않는다.
+재현 가능한 검사 명령은 [개발 문서](docs/development.md#pr-ci)를 따른다.
