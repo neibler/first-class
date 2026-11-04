@@ -58,8 +58,20 @@ def expanding_windows(
 ) -> list[dict]:
     """학습/테스트 구간을 folds 개 만든다.
 
-    expanding=True 면 학습 시작을 고정해 학습 구간이 길어지고(과제 예시의
-    2019~2022 -> 2019~2023), False 면 길이를 유지한 채 밀어낸다(rolling).
+    expanding=True 면 학습 시작을 0 에 고정해 학습 구간이 계속 길어지고,
+    False 면 학습 길이를 유지한 채 시작점도 함께 밀어낸다(rolling).
+
+    **과제 명세는 rolling 이다.** 명세표와 데이터 담당의 분할
+    (`data_process/splits/`)은 아래와 같이 학습 시작이 매년 이동한다.
+
+        Window 1: 2019~2022 학습 -> 2023 테스트
+        Window 2: 2020~2023 학습 -> 2024 테스트   (2019~2023 이 아니다)
+        Window 3: 2021~2024 학습 -> 2025 테스트
+        Final   : 2022~2025 학습 -> 2026.01~09 테스트
+
+    이 함수의 기본값이 expanding=True 인 것은 과거 호출부와의 호환 때문이며,
+    분석 파이프라인(run_analysis.py)은 rolling 을 기본으로 쓴다. 직접 호출할
+    때는 expanding 을 반드시 명시하라.
 
     Returns:
         [{"window": 0, "train_start": i, "train_end": j,
@@ -195,6 +207,15 @@ def plan_windows(
         "available_years": round(n_dates / TRADING_DAYS_PER_YEAR, 2),
         "required_days": required_days(**used),
         "scheme": "expanding" if expanding else "rolling",
+        # 축소(warnings)와는 별개의 사안이라 따로 둔다. 명세는 rolling 이므로
+        # expanding 으로 돌린 결과를 보고서에 쓸 때는 반드시 밝혀야 한다.
+        "scheme_note": (
+            "학습 시작을 고정한 expanding 방식입니다. 과제 명세와 "
+            "data_process/splits/ 는 학습 시작이 매년 이동하는 rolling 방식이므로, "
+            "이 결과를 보고서에 쓰려면 방식이 다르다는 점을 반드시 적어야 합니다."
+            if expanding
+            else None
+        ),
         "adjusted": used != requested,
         "warnings": warnings,
     }
