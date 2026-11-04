@@ -181,3 +181,27 @@ docker compose down
 질문·기준일·ETF로 뉴스 근거를 검색하고 답변과 출처를 표시합니다.
 [RESEARCH_INTEGRATION.md](RESEARCH_INTEGRATION.md)에서 DB·API 키 설정을 확인하세요.
 기존 투자 모델 재학습은 필요하지 않습니다.
+
+
+## 투자 강화학습 모델 4종 (학습은 수동 실행)
+
+PPO / RecurrentPPO / SAC / TD3는 동일한 PortfolioEnv를 사용합니다.
+기존 PPO 데모는 유지하며 새 실험은 모델·seed별 개별 bundle로 저장합니다.
+설정은 `config/multi_model.json`, 서비스 선택은 `config/serving.json`입니다.
+
+먼저 학습 없이 계획을 확인하세요:
+
+```powershell
+.\.venv312\Scripts\python.exe local_run.py train --config config/multi_model.json --model ppo --reward return_mdd --timesteps 100000 --seed 42 --dry-run
+```
+
+나중에 직접 학습할 때는 위 명령에서 `--dry-run`을 제거합니다.
+`--model`을 `recurrent_ppo`, `sac`, `td3`로 바꾸면 같은 환경의 다른 모델을 학습합니다.
+seed 반복·4년/1년 Walk-Forward·평가·비교·서비스 변경의 정확한 명령은
+[MULTI_MODEL_TRAINING.md](MULTI_MODEL_TRAINING.md)를 참고하세요.
+현재 설정은 시장·뉴스 공통 기간 2021-01-04~2025-12-31 전체를 사용합니다. 기본 분할은 앞 80% 학습, 뒤 20% 평가입니다.
+
+## 최신 학습 완료 모델 공유
+
+4개 모델과 필수 데이터 설치·실행은 [공유 모델 안내](shared/TRAINED_MODELS.md)를 따릅니다.
+기존 install_demo.py는 과거 PPO 데모입니다. 새 공유본은 scripts/install_trained_models.py로 설치합니다.

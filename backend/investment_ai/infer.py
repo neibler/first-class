@@ -10,6 +10,7 @@ from .data_loader import load_data
 from .portfolio_env import PortfolioEnv
 from .training import load_bundle
 from .accounting import safeguard_breached
+from .prediction import PredictionSession
 
 
 def resolve_run(path=None):
@@ -19,7 +20,7 @@ def resolve_run(path=None):
     return ROOT / "runs" / pointer["run_id"]
 
 
-def predict_weights(data, config, models, scaler, state=None):
+def predict_weights(data, config, models, scaler, state=None, predictors=None):
     env = PortfolioEnv(data, config, scaler=scaler)
     date = str(data.dates[-1])[:10]
     if state is None:
@@ -67,6 +68,21 @@ def predict_weights(data, config, models, scaler, state=None):
         raise ValueError("days_since_rebalance must be a nonnegative integer")
     phase = elapsed % config["rebalance_days"] / config["rebalance_days"]
     obs = env.observation_at(len(data.dates) - 1, held, dd, mdd, phase)
+    recurrent = config.get("model_type", "ppo") == "recurrent_ppo"
+    if recurrent and predictors is None:
+        raise ValueError(
+            "Recurrent inference requires explicit PredictionSession state"
+        )
+    predictors = predictors or [PredictionSession(m) for m in models]
+    stopped = (
+        state.get("stopped", False)
+        or state.get("safeguard_triggered", False)
+        or safeguard_breached(mdd, config["max_drawdown"])
+    )
+    # Advance recurrent memory on every observed day, including non-rebalance days.
+    proposed = (
+        [p.predict(obs, env) for p in predictors] if recurrent and not stopped else None
+    )
     if (
         state.get("stopped", False)
         or state.get("safeguard_triggered", False)
@@ -77,7 +93,11 @@ def predict_weights(data, config, models, scaler, state=None):
         weights, status = held, "hold_until_rebalance"
     else:
         weights = np.mean(
-            [env.action_weights(m.predict(obs, deterministic=True)[0]) for m in models],
+            (
+                proposed
+                if proposed is not None
+                else [p.predict(obs, env) for p in predictors]
+            ),
             axis=0,
         )
         status = "target_proposal"
@@ -124,7 +144,24 @@ def main():
     parser.add_argument("--news", type=Path)
     parser.add_argument("--state", type=Path)
     parser.add_argument("--output", type=Path)
+    parser.add_argument("--bundle", type=Path, help="Single-model bundle")
     args = parser.parse_args()
+    if args.bundle:
+        if args.run:
+            parser.error("Choose --bundle or --run")
+        from .serving import InvestmentService
+
+        service = InvestmentService(args.bundle)
+        state = (
+            json.loads(args.state.read_text(encoding="utf-8-sig"))
+            if args.state
+            else None
+        )
+        if args.data or args.news:
+            parser.error("Use API market/news inputs for an explicit single bundle")
+        result = service.optimize(state=state)
+        print(json.dumps(result, indent=2))
+        return
     run = resolve_run(args.run)
     selected = json.loads((run / "selection.json").read_text())
     paths = [run / "final" / f"seed_{seed}" for seed in selected["seeds"]]

@@ -192,10 +192,12 @@ def run_experiment(config, run_id=None):
             }
         )
     pd.DataFrame(sensitivity).to_csv(run / "cost_sensitivity.csv", index=False)
-    prediction = predict_weights(data, final_config, models, scaler)
-    save_prediction(prediction, run)
+    if config.get("model_type", "ppo") != "recurrent_ppo":
+        prediction = predict_weights(data, final_config, models, scaler)
+        save_prediction(prediction, run)
     summary = {
         "run_id": run_id,
+        "model_type": config.get("model_type", "ppo"),
         "synthetic": not config["data_path"],
         "dates": len(data.dates),
         "assets": len(data.assets),
