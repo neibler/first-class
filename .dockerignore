@@ -67,7 +67,9 @@ frontend/fixtures/**
 
 !Dockerfile.investment
 !backend/investment_ai/
-!backend/investment_ai/**
+backend/investment_ai/**
+!backend/investment_ai/*.py
+!backend/investment_ai/requirements.txt
 !frontend/investment_client.py
 
 !backend/news_research/
@@ -80,8 +82,8 @@ frontend/fixtures/**
 backend/performance/**
 !backend/performance/*.py
 !backend/performance/requirements.txt
-!frontend/research_client.py
 
 !config/
 !config/agent.yaml
 !config/etf_news_map.yaml
+!config/investment_ai.json
