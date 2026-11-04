@@ -474,7 +474,21 @@ def parse_args(argv=None):
         default=DEFAULT_TEST_DAYS,
         help=f"테스트 거래일 (기본 {DEFAULT_TEST_DAYS} = 1년)",
     )
-    parser.add_argument("--rolling", action="store_true", help="확장 대신 롤링 윈도우")
+    parser.add_argument(
+        "--window-scheme",
+        choices=("rolling", "expanding"),
+        default="rolling",
+        help=(
+            "walk-forward 윈도우 방식. 기본 rolling 은 과제 명세와 같이 학습 "
+            "시작을 매 window 마다 이동시킨다(2019~2022 -> 2020~2023). "
+            "expanding 은 학습 시작을 고정해 학습 구간이 누적된다(명세와 다름)."
+        ),
+    )
+    parser.add_argument(
+        "--rolling",
+        action="store_true",
+        help="(구버전 호환) --window-scheme rolling 과 같다",
+    )
     parser.add_argument(
         "--auto-windows",
         action="store_true",
@@ -571,9 +585,17 @@ def main(argv=None) -> dict:
             train_days=args.train_days,
             test_days=args.test_days,
             folds=args.folds,
-            expanding=not args.rolling,
+            expanding=(args.window_scheme == "expanding" and not args.rolling),
             allow_shrink=args.auto_windows,
         )
+        print(
+            f"[walk-forward] 방식={plan['scheme']} "
+            f"학습 {plan['used']['train_days']}일 / 테스트 "
+            f"{plan['used']['test_days']}일 x {plan['used']['folds']} window",
+            flush=True,
+        )
+        if plan["scheme_note"]:
+            print(f"[경고] {plan['scheme_note']}", flush=True)
         for warning in plan["warnings"]:
             print(f"[경고] {warning}", flush=True)
         walk_forward = run_walk_forward(
