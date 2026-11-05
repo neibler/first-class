@@ -5,7 +5,7 @@ import json
 import hashlib
 from pathlib import Path
 import torch
-from stable_baselines3 import PPO
+from .model_factory import create_model, load_model
 from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common.logger import configure
 from stable_baselines3.common.monitor import Monitor
@@ -125,10 +125,12 @@ def train_model(data, config, train_end, seed, output, resume=None):
     scaler = FeatureScaler.fit(data, train_end)
     data_hash = fingerprint(data)
     if resume:
-        old = json.loads((Path(resume) / "manifest.json").read_text())
-        old_config = json.loads((Path(resume) / "config.json").read_text())
+        old = json.loads((Path(resume) / "manifest.json").read_text(encoding="utf-8"))
+        old_config = json.loads(
+            (Path(resume) / "config.json").read_text(encoding="utf-8")
+        )
         ignored = {"total_timesteps", "checkpoint_steps"}
-        if any(old_config[k] != config[k] for k in config if k not in ignored):
+        if any(old_config.get(k) != config[k] for k in config if k not in ignored):
             raise ValueError(
                 "Resume requires unchanged configuration except "
                 "steps/checkpoint interval"
@@ -152,17 +154,16 @@ def train_model(data, config, train_end, seed, output, resume=None):
         str(output / "monitor.csv"),
     )
     if resume:
-        model = PPO.load(Path(resume) / "model.zip", env=env, device="cpu")
-    else:
-        model = PPO(
-            "MlpPolicy",
-            env,
-            n_steps=config["n_steps"],
-            batch_size=config["batch_size"],
-            seed=seed,
-            device="cpu",
-            verbose=0,
+        model = load_model(
+            Path(resume) / "model.zip",
+            config.get("model_type", "ppo"),
+            env=env,
+            device=config.get("device", "cpu"),
         )
+        if config.get("model_type") in {"sac", "td3"}:
+            model.load_replay_buffer(Path(resume) / "replay_buffer.pkl")
+    else:
+        model = create_model(config.get("model_type", "ppo"), env, config, seed)
     model.set_logger(configure(str(output), ["csv"]))
     scaler.save(output / "scaler.json")
     write_json(output / "config.json", config)
@@ -173,9 +174,11 @@ def train_model(data, config, train_end, seed, output, resume=None):
     while model.num_timesteps < target:
         steps = min(config["checkpoint_steps"], target - model.num_timesteps)
         model.learn(total_timesteps=steps, callback=callback, reset_num_timesteps=False)
-        # Save after complete PPO updates, not during rollout collection.
+        # Save after complete algorithm updates, not during rollout collection.
         model.save(output / "model_pending.zip")
         (output / "model_pending.zip").replace(output / "model.zip")
+        if config.get("model_type") in {"sac", "td3"}:
+            model.save_replay_buffer(output / "replay_buffer.pkl")
         checkpoint = output / "checkpoints"
         checkpoint.mkdir(exist_ok=True)
         model.save(checkpoint / f"step_{model.num_timesteps}.zip")
@@ -183,6 +186,11 @@ def train_model(data, config, train_end, seed, output, resume=None):
             output / "manifest.json",
             {
                 "schema_version": SCHEMA_VERSION,
+                "model_type": config.get("model_type", "ppo"),
+                "reward_type": config["reward"],
+                "timesteps": config["total_timesteps"],
+                "train_start": str(data.dates[0])[:10],
+                "train_end": str(data.dates[train_end])[:10],
                 "seed": seed,
                 "data_hash": data_hash,
                 "source_hash": source_hash(),
@@ -190,7 +198,7 @@ def train_model(data, config, train_end, seed, output, resume=None):
                 "train_end_date": str(data.dates[train_end])[:10],
                 "actual_timesteps": model.num_timesteps,
                 "initial_timesteps": initial_steps,
-                "completed": model.num_timesteps == target,
+                "completed": model.num_timesteps >= target,
                 "resume_source": str(resume) if resume else None,
             },
         )
@@ -209,8 +217,12 @@ def load_bundle(path, data=None, exact_data=False):
     if data is not None and schema != schema_for(data, config):
         raise ValueError("Model assets/features/order do not match input")
     if exact_data and data is not None:
-        manifest = json.loads((path / "manifest.json").read_text())
+        manifest = json.loads((path / "manifest.json").read_text(encoding="utf-8"))
         if manifest["data_hash"] != fingerprint(data):
             raise ValueError("Evaluation dataset changed since training")
     scaler = FeatureScaler.load(path / "scaler.json")
-    return PPO.load(path / "model.zip", device="cpu"), scaler, config
+    return (
+        load_model(path / "model.zip", config.get("model_type", "ppo")),
+        scaler,
+        config,
+    )

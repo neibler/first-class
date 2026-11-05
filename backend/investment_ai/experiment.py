@@ -7,7 +7,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 import pandas as pd
 from stable_baselines3.common.env_checker import check_env
-from .settings import ROOT, SOURCE_DIR, write_json
+from .settings import ROOT, SOURCE_DIR, write_json, validate_config
 from .data_loader import load_data, prepare_data, fingerprint
 from .synthetic import generate
 from .portfolio_env import PortfolioEnv
@@ -19,9 +19,18 @@ from .infer import predict_weights, save_prediction
 from .report import build_report
 from .records import save_asset_history
 from .rewards import canonical_reward
+from .prediction import PredictionSession
 
 
 def run_experiment(config, run_id=None):
+    validate_config(config)
+    recurrent = config.get("model_type", "ppo") == "recurrent_ppo"
+    if recurrent and len(config["seeds"]) != 1:
+        raise ValueError(
+            "Legacy recurrent_ppo supports exactly one seed for inference; "
+            "use mode=single or mode=walk-forward for separate seed bundles. "
+            "No training started."
+        )
     run_id = run_id or datetime.now(ZoneInfo("Asia/Seoul")).strftime("%Y%m%d_%H%M%S")
     if not run_id or any(
         x not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-"
@@ -192,10 +201,15 @@ def run_experiment(config, run_id=None):
             }
         )
     pd.DataFrame(sensitivity).to_csv(run / "cost_sensitivity.csv", index=False)
-    prediction = predict_weights(data, final_config, models, scaler)
+    # Match serving's explicit new-portfolio episode; never reuse test LSTM state.
+    predictors = [PredictionSession(models[0], "recurrent_ppo")] if recurrent else None
+    prediction = predict_weights(
+        data, final_config, models, scaler, predictors=predictors
+    )
     save_prediction(prediction, run)
     summary = {
         "run_id": run_id,
+        "model_type": config.get("model_type", "ppo"),
         "synthetic": not config["data_path"],
         "dates": len(data.dates),
         "assets": len(data.assets),
@@ -226,8 +240,8 @@ def run_experiment(config, run_id=None):
         "final_test": metrics,
         "completed": True,
     }
-    write_json(run / "summary.json", summary)
     build_report(run, summary, metrics, histories, rows, stress)
+    write_json(run / "summary.json", summary)
     write_json(ROOT / "runs/latest.json", {"run_id": run_id})
     print(f"COMPLETE {run}", flush=True)
     return run

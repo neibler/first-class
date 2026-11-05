@@ -6,6 +6,7 @@ from .portfolio_env import PortfolioEnv
 from .accounting import equity_curve, sharpe_ratio
 from .records import save_asset_history
 from .rewards import calculate_reward
+from .prediction import PredictionSession
 
 
 def performance(frame, annual_rf=0.0):
@@ -36,15 +37,15 @@ def run_backtest(data, config, start, end, models=None, scaler=None, strategy="p
             raise ValueError("SPY benchmark requires SPY in universe")
         initial_target[:] = 0
         initial_target[data.assets.index("SPY")] = 1
+    predictors = [
+        PredictionSession(m, config.get("model_type", "ppo")) for m in (models or [])
+    ]
     while True:
-        if strategy == "ppo":
+        if strategy in ("ppo", "model", "recurrent_ppo", "sac", "td3"):
             if not models:
                 raise ValueError("PPO models required")
             weights = np.mean(
-                [
-                    env.action_weights(model.predict(obs, deterministic=True)[0])
-                    for model in models
-                ],
+                [predictor.predict(obs, env) for predictor in predictors],
                 axis=0,
             )
             obs, _, terminated, truncated, _ = env.step_weights(weights)

@@ -85,3 +85,5 @@ backend/performance/**
 !config/
 !config/agent.yaml
 !config/etf_news_map.yaml
+
+!config/serving.json

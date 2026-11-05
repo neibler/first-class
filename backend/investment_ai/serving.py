@@ -3,6 +3,8 @@
 import json
 import os
 import hashlib
+from pathlib import Path
+from copy import deepcopy
 from threading import RLock
 import numpy as np
 import pandas as pd
@@ -13,12 +15,28 @@ from .training import load_bundle, schema_for
 from .infer import resolve_run, predict_weights
 from .backtest import performance
 from .accounting import equity_curve
+from .prediction import PredictionSession
 
 
 class InvestmentService:
     def __init__(self, run=None):
         torch.set_num_threads(1)
+        serving_file = Path(__file__).resolve().parents[2] / "config/serving.json"
+        serving = (
+            json.loads(serving_file.read_text(encoding="utf-8"))
+            if serving_file.exists()
+            else {}
+        )
         configured = run or os.environ.get("INVESTMENT_AI_RUN")
+        selected_bundle = serving.get("model_path") if not configured else None
+        if selected_bundle:
+            configured = Path(selected_bundle)
+            if not configured.is_absolute():
+                configured = ROOT / configured
+            if configured.suffix == ".zip":
+                if configured.name != "model.zip":
+                    raise ValueError("Select the bundle directory or its model.zip")
+                configured = configured.parent
         self.run = resolve_run(configured)
         self.run_id = self.run.name
         self.lock = RLock()
@@ -27,18 +45,45 @@ class InvestmentService:
         self.latches = (
             json.loads(self.latch_path.read_text()) if self.latch_path.exists() else {}
         )
-        self.summary = json.loads(
-            (self.run / "summary.json").read_text(encoding="utf-8")
-        )
-        if not self.summary.get("completed"):
-            raise ValueError("Run is not complete")
-        selection = json.loads(
-            (self.run / "selection.json").read_text(encoding="utf-8")
-        )
-        paths = [self.run / "final" / f"seed_{seed}" for seed in selection["seeds"]]
-        if not paths:
-            raise ValueError("No ensemble members")
+        self.recurrent_sessions = {}
+        single = (self.run / "run_spec.json").exists()
+        if single:
+            manifest = json.loads(
+                (self.run / "manifest.json").read_text(encoding="utf-8")
+            )
+            spec = json.loads((self.run / "run_spec.json").read_text(encoding="utf-8"))
+            if not manifest.get("completed"):
+                raise ValueError("Training bundle is incomplete")
+            evaluation = self.run / "evaluation.json"
+            self.summary = (
+                json.loads(evaluation.read_text(encoding="utf-8"))
+                if evaluation.exists()
+                else {
+                    "completed": True,
+                    "synthetic": spec["synthetic"],
+                    "final_test": {},
+                }
+            )
+            paths = [self.run]
+        else:
+            self.summary = json.loads(
+                (self.run / "summary.json").read_text(encoding="utf-8")
+            )
+            if not self.summary.get("completed"):
+                raise ValueError("Run is not complete")
+            selection = json.loads(
+                (self.run / "selection.json").read_text(encoding="utf-8")
+            )
+            paths = [self.run / "final" / f"seed_{seed}" for seed in selection["seeds"]]
+            if not paths:
+                raise ValueError("No model members")
         config = json.loads((paths[0] / "config.json").read_text(encoding="utf-8"))
+        if selected_bundle and config.get("model_type", "ppo") != serving.get(
+            "model_type", "ppo"
+        ):
+            raise ValueError("Serving model_type does not match saved bundle")
+        if config.get("model_type") == "recurrent_ppo" and len(paths) != 1:
+            raise ValueError("Serve one recurrent model; choose an individual bundle")
         self.model_config = config.copy()
         self.schema = json.loads((paths[0] / "schema.json").read_text(encoding="utf-8"))
         config["macro_columns"] = self.schema["macros"]
@@ -52,6 +97,8 @@ class InvestmentService:
             self.data_source = "configured_parquet"
         elif self.summary["synthetic"]:
             config["data_path"] = str(self.run / "synthetic_market.parquet")
+            if single:
+                config["news_path"] = str(self.run / "news_metadata.parquet")
             self.data_source = "synthetic"
         else:
             self.data_source = "configured_parquet"
@@ -73,7 +120,10 @@ class InvestmentService:
                     raise ValueError("Ensemble preprocessing mismatch")
         self.histories = {}
         for strategy in self.summary["final_test"]:
-            history = pd.read_csv(self.run / f"{strategy}_history.csv")
+            history = pd.read_csv(
+                (self.run / "evaluation" if single else self.run)
+                / f"{strategy}_history.csv"
+            )
             if (
                 history.empty
                 or not history.date.is_unique
@@ -89,7 +139,7 @@ class InvestmentService:
                 atol=1e-9,
             )
             self.histories[strategy] = history
-        if "ppo" not in self.histories:
+        if self.histories and "ppo" not in self.histories:
             raise ValueError("PPO history missing")
         for history in self.histories.values():
             if not history.date.equals(self.histories["ppo"].date):
@@ -133,9 +183,13 @@ class InvestmentService:
                         "Episode is safeguarded; supply state or explicitly reset"
                     )
                 state["safeguard_triggered"] = True
-            prediction = predict_weights(
-                data, self.config, self.models, self.scaler, state
-            )
+            recurrent = self.config.get("model_type") == "recurrent_ppo"
+            if recurrent:
+                prediction = self._recurrent_prediction(data, state, episode_id, reset)
+            else:
+                prediction = predict_weights(
+                    data, self.config, self.models, self.scaler, state
+                )
             # Persist after validation; an API restart must not clear a stop.
             self.latches[episode_id] = prediction["safeguard_triggered"]
             self.latch_path.parent.mkdir(parents=True, exist_ok=True)
@@ -166,7 +220,57 @@ class InvestmentService:
             "is_order": False,
         }
 
+    def _recurrent_prediction(self, data, state, episode_id, reset):
+        date = str(data.dates[-1])[:10]
+        # Include the full supplied panel: changing a repeated observation is an error.
+        from .data_loader import fingerprint
+
+        signature = hashlib.sha256(
+            (fingerprint(data) + json.dumps(state, sort_keys=True)).encode()
+        ).hexdigest()
+        old = self.recurrent_sessions.get(episode_id)
+        if old and old["date"] == date and old["signature"] == signature:
+            return deepcopy(old["prediction"])
+        if reset:
+            old = None
+        if old:
+            if state is None:
+                raise ValueError(
+                    "Supply current portfolio state to continue recurrent episode"
+                )
+            dates = [str(d)[:10] for d in data.dates]
+            if old["date"] not in dates or dates.index(old["date"]) != len(dates) - 2:
+                raise ValueError(
+                    "Recurrent episode requires consecutive daily observations; "
+                    "reset to start again"
+                )
+            sessions = [
+                PredictionSession(p.model, p.model_type) for p in old["sessions"]
+            ]
+            for new, previous in zip(sessions, old["sessions"]):
+                new.lstm_states = deepcopy(previous.lstm_states)
+                new.episode_start = previous.episode_start
+        else:
+            if state is not None and not reset:
+                raise ValueError(
+                    "Recurrent state is absent (new process/episode); "
+                    "explicit reset_episode is required"
+                )
+            sessions = [PredictionSession(m, "recurrent_ppo") for m in self.models]
+        prediction = predict_weights(
+            data, self.config, self.models, self.scaler, state, sessions
+        )
+        self.recurrent_sessions[episode_id] = {
+            "date": date,
+            "signature": signature,
+            "sessions": sessions,
+            "prediction": deepcopy(prediction),
+        }
+        return prediction
+
     def backtest(self, benchmark="spy_buy_hold", observations=None):
+        if not self.histories:
+            raise ValueError("No saved backtest; run evaluate --bundle first")
         if benchmark not in self.histories or benchmark == "ppo":
             raise ValueError("Unknown benchmark")
         p = self.histories["ppo"].copy()

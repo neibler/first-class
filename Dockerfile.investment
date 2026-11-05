@@ -11,7 +11,7 @@ COPY backend/investment_ai/ /app/backend/investment_ai/
 COPY backend/news_research/ /app/backend/news_research/
 # 결과 JSON 을 읽어 내보내는 /performance 라우터 (무거운 분석 의존성 없음).
 COPY backend/performance/ /app/backend/performance/
-COPY config/agent.yaml config/etf_news_map.yaml /app/config/
+COPY config/agent.yaml config/etf_news_map.yaml config/serving.json /app/config/
 COPY backend/main.py backend/research_api.py backend/research_schemas.py backend/research_service.py /app/backend/
 ENV RESULTS_DIR=/runtime/results
 USER appuser

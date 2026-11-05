@@ -45,10 +45,9 @@ def validate_config(c):
         raise ValueError("observation_lag must be a nonnegative integer")
     if c["batch_size"] < 2 or c["n_steps"] < 2 or c["reward_window"] < 2:
         raise ValueError("batch_size, n_steps, reward_window must be >= 2")
-    if c["total_timesteps"] % c["n_steps"] or c["n_steps"] % c["batch_size"]:
-        raise ValueError("Invalid PPO rollout/batch divisibility")
-    if c["checkpoint_steps"] % c["n_steps"]:
-        raise ValueError("checkpoint_steps must be a multiple of n_steps")
+    from .model_factory import validate_model_config
+
+    validate_model_config(c)
     for key in (
         "max_drawdown",
         "transaction_cost_bps",
