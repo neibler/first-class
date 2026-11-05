@@ -1,11 +1,17 @@
 import pytest
 from streamlit.testing.v1 import AppTest
 
-from frontend import api_client
+from frontend import api_client, performance_client
 
 
 @pytest.fixture
 def page(monkeypatch):
+    def no_backtest():
+        raise performance_client.PerformanceAPIError(
+            "백테스트 분석 결과가 아직 준비되지 않았습니다."
+        )
+
+    monkeypatch.setattr(performance_client, "get_backtest", no_backtest)
     monkeypatch.setattr(
         api_client,
         "get_health",
@@ -32,6 +38,9 @@ def test_navigation_all_six_pages_and_placeholder_scope(page):
             assert page.text_area(key="research_question")
             assert page.date_input(key="research_date")
             assert not page.selectbox
+        elif slug == "performance":
+            assert "백테스트 분석 결과" in page.warning[0].value
+            assert page.button(key="refresh_performance")
         elif slug != "shap":
             assert page.info[0].value == "화면 준비 중"
             assert not page.selectbox

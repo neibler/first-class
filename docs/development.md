@@ -1,11 +1,31 @@
 # 개발 상태와 CI/CD
 
+## 강화학습 성과 HTTP 연동 (#22)
+
+- `frontend/performance_client.py`는 기존 API_BASE_URL로 GET /performance/backtest를 호출한다.
+  투자 3.0 계약과 분리해 performance-1 응답을 검증하며 전체 전략과 일별 경로를 조회한다.
+- `performance_view.py`, `charts.py`, `app_pages/performance.py`는 서버 라벨별 value-1 차트와
+  기존 순서의 12개 지표 표(null=—), 평가 기간·evaluation·window_plan·smoke를 표시한다.
+  지표를 다시 계산하지 않고 서버 값을 사용한다. 실패·빈 결과에서도 메뉴·새로고침은 유지한다.
+- 공용 상태 안내는 투자 모델 준비 상태와 저장된 성과 결과 준비 상태를 구분한다.
+  .dockerignore는 실제 이미지에 신규 프론트 모듈이 포함되도록 갱신했다.
+- 공용 docker-compose.yml·local_run.py의 실행 기본값은 유지한다. 개발자별 결과 폴더는
+  Git 제외 대상인 docker-compose.override.yml로 연결한다. 일반 Compose 명령에서 자동 적용된다.
+  Python에서는 RESULTS_DIR를 명시한다. 설정 예시는 backend/performance/README.md를 따른다.
+- runtime/, artifacts/, docs/local/, .env와 로컬 실행 설정은 공유 변경에 포함하지 않는다.
+  모델·결과 파일·개인 작업 기록을 팀원의 환경에 적용하지 않는다.
+- 성과 HTTP·표시·오류 복구·메뉴 테스트를 추가하고 기존 준비 화면 검사를 갱신했다.
+  tests/test_performance.py의 하위 프로세스는 Windows 시스템 환경을 유지하고 UTF-8을 사용한다.
+  전체 pytest 381개 및 Black·flake8·pip check를 통과했다.
+- 기존 공유 모델의 2025-05-28~2025-12-31 단일 홀드아웃 결과로 실제 HTTP·화면을 검증했다.
+  모델 재학습과 백테스트 로직 변경은 하지 않았다. 학습 곡선과 다른 분석 화면은 후속 범위다.
+
 ## 현재 범위
 
 ```mermaid
 flowchart LR
     Browser[브라우저 :8501] --> Dashboard[Streamlit dashboard]
-    Dashboard -->|HTTP health, investment, research| API[FastAPI api]
+    Dashboard -->|HTTP health, investment, research, performance| API[FastAPI api]
 ```
 
 - Python 3.12를 사용한다. 학교의 필수 기준은 Python 3.10 이상이며,
@@ -28,7 +48,7 @@ flowchart LR
 
 - `POST /explain`은 미구현이다. 투자 `/optimize`·`/backtest`는 main 구현을 유지한다.
 - 6개 페이지 내비게이션은 유지한다. 포트폴리오·리서치는 HTTP로 연결하고,
-  SHAP은 샘플이며 성과·ANOVA·리스크는 준비 화면이다.
+  SHAP은 샘플이며 성과는 저장 결과 HTTP, ANOVA·리스크는 준비 화면이다.
 - main의 데이터 처리·Gymnasium·PPO·Safe-Guard·실험·백테스트 코드는 유지했다.
   이번 충돌 통합에서는 실제 학습·사용자 모델/데이터의 학교 성능 요건을 다시 검증하지 않는다.
 - SHAP, ANOVA·사후 검정, 리서치 결과의 투자 모델·리스크 모니터링 연동.

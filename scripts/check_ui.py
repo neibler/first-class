@@ -79,6 +79,15 @@ def run(base, dev, output):
                 expect(
                     page.get_by_role("button", name="분석 실행", exact=True)
                 ).to_be_visible()
+            elif title == "강화학습 성과":
+                expect(
+                    page.get_by_role("heading", name="전략 성과 비교", exact=True)
+                ).to_be_visible()
+                expect(
+                    page.get_by_role(
+                        "button", name="백테스트 결과 새로고침", exact=True
+                    )
+                ).to_be_visible()
             else:
                 expect(page.get_by_text("화면 준비 중", exact=True)).to_be_visible()
         page.get_by_role("link", name="포트폴리오 현황").click()

@@ -6,12 +6,13 @@
 
 FastAPI 앱 생성 함수에서 투자 모델 생명주기를 관리하고 투자·리서치 API를 제공합니다.
 포트폴리오는 투자 HTTP API를 사용하며, SHAP은 **고정된 샘플 데이터**입니다.
-리서치 화면은 HTTP API에 연결되어 있고 성과·ANOVA·리스크 화면은 준비 화면입니다.
+리서치와 강화학습 성과 화면은 HTTP API에 연결되어 있고 ANOVA·리스크는 준비 화면입니다.
 `/health`는 서버 연결 및 투자 모델 로드 상태를, `/ready`는 투자 모델 준비 상태를 반환합니다.
 모델이 없으면 포트폴리오는 준비 부족을 안내하며 샘플 성공으로 대체하지 않습니다.
 `POST /research`는 기존 뉴스 에이전트와 연결되며 서버의 Claude 키, 기존 DB,
 로컬 임베딩 모델이 필요합니다. 실제 Claude·DB 전체 실행과 5초 성능은 미검증입니다.
-투자는 `/optimize`·`/backtest`를 사용하며 SHAP 분석 API는 아직 없습니다.
+투자는 `/optimize`·`/backtest`를 사용합니다. 저장 결과용 `/performance/explain`은
+별도 API이며 SHAP 화면에는 아직 연결하지 않았습니다.
 
 ## Docker 실행
 
@@ -33,6 +34,33 @@ docker compose ps
 실제 API 연결 상태와 모델 미로드 안내를 확인할 수 있습니다.
 `연결 상태 새로고침` 버튼으로 다시 조회합니다.
 컨테이너 내부에서는 dashboard가 `http://api:8000`으로 HTTP 요청합니다.
+
+### 강화학습 성과 결과 준비
+
+`http://localhost:8501/performance`는 저장된 실제 백테스트의 전략별 누적수익률과
+12개 지표, 평가 기간·방식을 표시합니다. 투자 모델 로드 여부와 별개입니다.
+공용 Compose의 기본 경로는 유지합니다. 결과를 조회할 개발자는
+[로컬 결과 연결 설정](backend/performance/README.md#공유-모델로-성과-화면-준비)에 따라
+Git에서 제외되는 `docker-compose.override.yml`을 만들어 결과 폴더를 연결합니다.
+이 파일은 일반 `docker compose up`에서도 자동 적용되므로 재실행 시 연결이 유지됩니다.
+
+팀원이 만든 결과가 있으면 **`runtime/results/api/backtest.json`**에 넣습니다.
+보기만 할 때는 모델·시장 데이터가 필요하지 않습니다. 파일이 없다면
+[성과 결과 생성 안내](backend/performance/README.md#공유-모델로-성과-화면-준비)를 따라
+공유 모델과 실제 데이터로 평가 결과만 생성합니다. 실행 전에 기존 결과를 보존하세요.
+
+```bash
+docker compose up --build -d --wait --wait-timeout 120
+curl http://localhost:8000/performance/health
+curl http://localhost:8000/performance/backtest
+```
+
+`available.backtest=true`, 백테스트 HTTP `200`을 확인합니다. `503`이면 파일 위치와
+`docker inspect first-class-api-1`의 Mounts를 확인하세요. 다른 결과 폴더를 쓰려면
+`.env`에 `PERFORMANCE_RESULTS_DIR`를 지정하고 컨테이너를 재생성합니다.
+경로는 `api`의 부모 폴더입니다. SHAP 결과가 없어 전체 `ready=false`여도 백테스트를 볼 수 있습니다.
+Python 실행은 서버를 시작하기 전에 `RESULTS_DIR`를 실제 결과 폴더로 지정합니다.
+로컬 설정·결과·백업은 커밋하지 않습니다.
 
 화면의 메뉴로 6개 페이지를 이동합니다.
 포트폴리오의 분석 기간, SHAP의 자산·결정일을 선택할 수 있습니다.

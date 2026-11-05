@@ -1034,7 +1034,8 @@ def _run_in_layout(tmp_path, mutate, snippet):
         cwd=workspace,
         capture_output=True,
         text=True,
-        env={"PYTHONPATH": ".", "PATH": os.environ.get("PATH", "")},
+        encoding="utf-8",
+        env={**os.environ, "PYTHONPATH": ".", "PYTHONIOENCODING": "utf-8"},
     )
 
 
