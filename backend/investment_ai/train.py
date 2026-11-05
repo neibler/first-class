@@ -81,9 +81,13 @@ def main(argv=None):
                 config[key] = argument
         mode = (
             args.mode
-            or config.get("mode")
-            or ("single" if "model_type" in config else "legacy")
+            if args.mode is not None
+            else config.get("mode", "single" if "model_type" in config else "legacy")
         )
+        if mode not in ("single", "walk-forward", "legacy"):
+            raise ValueError(
+                f"Unsupported mode {mode!r}; choose single, walk-forward or legacy"
+            )
         if mode == "legacy" and (
             args.model
             or args.reward

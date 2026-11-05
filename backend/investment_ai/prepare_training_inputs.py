@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 
 from .data_loader import prepare_data, read_table, parse_dates, fingerprint
-from .settings import ROOT
+from .settings import ROOT, validate_config
 
 PROJECT = Path(__file__).resolve().parents[2]
 ETF_COLUMNS = {
@@ -60,7 +60,7 @@ def adapt_inputs(market, news, assets, start, end):
     return market, data.news_metadata, data
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument("--start", help="Default: first common market/news date")
     parser.add_argument("--end", help="Default: last common market/news date")
@@ -72,12 +72,27 @@ def main():
     parser.add_argument(
         "--news", type=Path, default=ROOT / "data/news/raw/news_risk_nyt_2021_2025.csv"
     )
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     configs = [
         PROJECT / "config/investment_ai.json",
         PROJECT / "config/multi_model.json",
     ]
-    config = json.loads(configs[0].read_text(encoding="utf-8"))
+    # Read and validate every target before generating or publishing any output.
+    targets = [(path, json.loads(path.read_text(encoding="utf-8"))) for path in configs]
+    for path, cfg in targets:
+        assets = cfg.get("assets")
+        if (
+            not isinstance(assets, list)
+            or not assets
+            or any(not isinstance(a, str) or not a or a.strip() != a for a in assets)
+            or len(assets) != len(set(assets))
+        ):
+            raise ValueError(
+                f"Invalid assets in {path}: expected unique ticker strings"
+            )
+        if assets != targets[0][1]["assets"]:
+            raise ValueError(f"Config asset order mismatch: {path}")
+    config = targets[0][1]
     raw_market, raw_news = read_table(args.market), read_table(args.news)
     market_dates, news_dates = parse_dates(raw_market.date), parse_dates(raw_news.date)
     args.start = args.start or str(max(market_dates.min(), news_dates.min()).date())
@@ -97,9 +112,6 @@ def main():
         json.dumps([source_hashes, args.start, args.end, data.assets]).encode()
     ).hexdigest()[:12]
     folder = ROOT / "data/prepared" / identity
-    folder.mkdir(parents=True, exist_ok=True)
-    market.to_parquet(folder / "market.parquet", index=False)
-    news.to_parquet(folder / "news.parquet", index=False)
     report = {
         "training_executed": False,
         "market_source": str(args.market),
@@ -122,13 +134,8 @@ def main():
             "not certified strictly point-in-time."
         ),
     }
-    (folder / "provenance.json").write_text(
-        json.dumps(report, indent=2), encoding="utf-8"
-    )
-    for path in configs:
-        cfg = json.loads(path.read_text(encoding="utf-8"))
-        if cfg["assets"] != data.assets:
-            raise ValueError("Config asset order mismatch")
+    pending_configs = []
+    for path, cfg in targets:
         cfg.update(
             data_path=(folder / "market.parquet").relative_to(ROOT).as_posix(),
             news_path=(folder / "news.parquet").relative_to(ROOT).as_posix(),
@@ -136,7 +143,18 @@ def main():
             news_mode="required",
             synthetic_news=False,
         )
-        path.write_text(json.dumps(cfg, indent=2) + "\n", encoding="utf-8")
+        validate_config(cfg)
+        pending_configs.append(
+            (path, json.dumps(cfg, indent=2, allow_nan=False) + "\n")
+        )
+    report_text = json.dumps(report, indent=2, allow_nan=False)
+    # Validation/serialization errors above leave all existing files untouched.
+    folder.mkdir(parents=True, exist_ok=True)
+    market.to_parquet(folder / "market.parquet", index=False)
+    news.to_parquet(folder / "news.parquet", index=False)
+    (folder / "provenance.json").write_text(report_text, encoding="utf-8")
+    for path, content in pending_configs:
+        path.write_text(content, encoding="utf-8")
     print(json.dumps(report, indent=2))
 
 

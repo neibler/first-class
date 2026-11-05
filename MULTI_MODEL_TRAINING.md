@@ -1,18 +1,40 @@
-## 현재 입력 설정 (2026-11-04)
+# PPO / RecurrentPPO / SAC / TD3 실행 안내
+
+## 현재 입력과 중간 점검 (2026-11-05)
 
 시장 입력은 `data_process/processed/features_unscaled.parquet`, 뉴스 원본은
 `runtime/data/news/raw/news_risk_nyt_2021_2025.csv`입니다.
 공통 기간 전체 2021-01-04~2025-12-31 (1,255 거래일, 18,825행)을 사용합니다.
 `config/investment_ai.json`, `config/multi_model.json`은 검증된 `runtime/data/prepared/`의 파일을 읽습니다.
 15 ETF + 거시지표 13개 + 뉴스 risk_score를 사용하며 observation 크기는 376입니다.
+매크로 순서는 다음과 같습니다.
+
+```text
+core_pce_yoy, real_pce_mom, unemp, ism_pmi, effr,
+ust_2y, ust_10y, ust_30y, tips_10y, vix, usd_ret_20d, wti, yield_spread
+```
+
 `rsi_14`를 `rsi`로 연결하고, 조정종가 기준 원본 log_return을 보상 회계에 유지합니다.
 상류의 `*_z`는 쓰지 않고 기존 FeatureScaler가 학습 구간에서만 정규화 통계를 계산합니다.
 뉴스의 날짜·점수·위험 만료는 재계산하지 않으며, 근거와 출처 컬럼도 보존합니다.
 VIX/WTI의 정보 공개 시점 근사 한계는 상류 데이터 설명을 따릅니다.
-기본 single 모드는 앞 80% 학습 / 뒤 20% 평가를 유지합니다.
+이번 중간 점검은 `single` 모드의 앞 80% 학습 / 뒤 20% 평가입니다.
+약 4년 학습 + 약 1년 테스트를 한 번 수행했으며, 여러 윈도우 Walk-Forward와 구분합니다.
+
+| 구분 | 실제 기간 | 거래일 |
+| --- | --- | ---: |
+| Train | 2021-01-04~2024-12-30 | 1,004 |
+| Test | 2024-12-31~2025-12-31 | 251 |
+
+현재 학습 설정은 유지합니다. Walk-Forward 반복 검증은 시장·뉴스 데이터가 더 모인 뒤 수행합니다.
 이 설정 변경은 학습을 실행하지 않으며 기존 모델·서비스 선택을 변경하지 않습니다.
 
-입력 재생성 (PowerShell):
+새 clone에서는 먼저 [README의 입력 설치 절차](README.md#투자-강화학습-모델-4종-학습은-수동-실행)를 실행하세요.
+공유 패키지의 준비된 Parquet로 Dry Run할 때는 원본 CSV를 다시 준비할 필요가 없습니다.
+아래 재생성은 시장 원본과 **별도 전달받은 뉴스 원본 CSV가 모두 있을 때만** 실행합니다.
+원본 뉴스 CSV는 Git에 포함되지 않으며, install_trained_models.py도 원본 CSV를 설치하지 않습니다.
+
+입력 재생성 (PowerShell, 프로젝트 루트):
 ```powershell
 $env:INVESTMENT_AI_HOME = (Resolve-Path runtime).Path
 .\.venv312\Scripts\python.exe -m backend.investment_ai.prepare_training_inputs
@@ -20,13 +42,9 @@ $env:INVESTMENT_AI_HOME = (Resolve-Path runtime).Path
 ```
 기간을 지정하지 않으면 두 원본의 공통 기간 전체를 사용합니다.
 뉴스가 없는 2018~2020년과 2026년은 포함하지 않습니다.
-아래의 과거 3년 데이터 설명보다 이 현재 입력 설정이 우선합니다.
-
-# PPO / RecurrentPPO / SAC / TD3 실행 안내
-
-이번 변경은 학습 가능한 코드 구조만 추가합니다. 구현 검증 중 `.learn()`은 실행하지 않았습니다.
-기존 학습된 PPO 데모, 실제 데이터, 뉴스 AI 변경 사항은 보존합니다.
-현재 2023~2025 데이터에는 매크로가 없으며 추가하면 모든 모델이 같은 동적 입력을 사용합니다.
+준비 명령은 모든 대상 config의 자산 목록·순서와 최종 설정을 저장 전에 검사합니다.
+검증에 실패하면 Parquet, provenance, config를 변경하지 않습니다.
+기존 학습된 모델, 데이터와 서비스 선택은 이 안내를 읽거나 Dry Run하는 것만으로 바뀌지 않습니다.
 
 ## 환경과 설정
 
@@ -48,7 +66,12 @@ SAC/TD3의 timesteps는 learning_starts보다 커야 합니다. replay buffer �
 모든 모델은 동일한 PortfolioEnv, 관측·비중 softmax·수수료·슬리피지·MDD 안전장치·회계를 사용합니다.
 raw action은 동적 자산 수의 Box(-1, 1)입니다. reward는 모델과 독립적으로 선택합니다.
 새 경로는 모델별/시드별 단일 모델이며 평균·앙상블·자동 best 선택을 하지 않습니다.
-기존 옵션 없는 train의 legacy PPO 보상 선정·앙상블 경로는 호환성을 위해 그대로 남아 있습니다.
+기존 legacy PPO 보상 선정·앙상블 경로는 유지합니다.
+legacy Recurrent PPO는 단일 seed만 지원하며, 새 포트폴리오의 명시적 LSTM session으로
+최종 추론까지 성공해야 run을 완료 처리합니다. 여러 seed의 recurrent legacy 앙상블은
+서비스가 지원하지 않으므로 데이터 로드·학습·결과 생성 전에 오류로 차단합니다.
+Recurrent PPO의 `single` / `walk-forward`에서는 여러 seed를 각각 독립 bundle로 학습할 수 있습니다.
+config의 mode와 CLI의 --mode는 `single`, `walk-forward`, `legacy`만 허용합니다.
 
 ## 학습 없이 계획 확인
 
@@ -98,18 +121,37 @@ metadata에는 model_type, reward_type, seed, 요청/실제 timesteps, train_sta
 Python에서는 `model_runs.run_seed_experiments(config, model_type="sac", reward_type="return_mdd", seeds=[42,123,2026])`를 호출합니다.
 공통 저수준 함수 `training.train_model(data, config, train_end, seed, output, resume=None)`도 유지합니다.
 
-## Walk-Forward: 달력 기준 Train 4년 / Test 1년
+## 향후 Walk-Forward: 데이터 추가 확보 후 실행
+
+현재 중간 점검의 약 4년 Train + 약 1년 Test는 완료한 단일 구간 평가입니다.
+이를 실패한 학습이나 미완료 실험으로 해석하지 않습니다. 학습 설정을 더 짧게 변경하지 않습니다.
+
+`walk-forward` 모드는 첫 거래일을 기준으로 달력 연도를 더하고, 고정 길이 Train 구간을
+`test_years`만큼 이동합니다. 각 window의 scaler/model/LSTM 메모리는 새로 시작합니다.
+현재 시작일 2021-01-04에 4년 + 1년을 더하면 첫 테스트 종료 경계는 **2026-01-04**입니다.
+현재 마지막 데이터 2025-12-31의 다음 평일은 2026-01-01이므로, 현 구현의
+`stop_date <= last_date + BDay(1)` 완전 윈도우 조건을 충족하지 못합니다.
+따라서 **현재 데이터로 `--train-years 4 --test-years 1`은 첫 윈도우부터 거부**합니다.
+이 조건은 거래소 휴일 달력이 아닌 pandas BDay(주말 제외 평일)를 사용합니다.
+
+데이터가 추가되면 아래 Dry Run으로 실제 생성되는 구간을 먼저 확인하세요.
+4년/1년을 여러 번 반복하려면 각 다음 윈도우의 종료 경계까지도 시장·뉴스 공통 패널이 필요합니다.
 
 ```powershell
 .\.venv312\Scripts\python.exe local_run.py train --config config/multi_model.json --model td3 --reward return_mdd --timesteps 100000 --seeds 42 123 2026 --mode walk-forward --train-years 4 --test-years 1 --run-id wf_01 --dry-run
 ```
 
-계획을 확인한 후 나중에 `--dry-run`을 제거하면 학습합니다.
-고정 길이 rolling train window를 사용하고 test_years만큼 이동합니다.
-데이터의 날짜를 기준으로 분할하며, 각 window에서 scaler/model/LSTM 메모리는 새로 시작합니다.
-현재 3년 데이터로 4년/1년은 불가능합니다. 데이터 부족 시 학습 시작 전에 명확하게 실패합니다.
-시장과 뉴스의 동일한 거래일 패널을 최소 5년 이상 준비해야 합니다. 마지막 불완전 테스트 window는 제외합니다.
-일반 holdout과 기존 expanding validation 실험은 이 달력 기반 rolling 방식과 다릅니다.
+데이터가 충분해 계획이 정상 출력된 뒤에만 `--dry-run`을 제거합니다.
+마지막 불완전 테스트 window는 제외합니다. legacy의 expanding validation과도 다른 방식입니다.
+
+참고로 현재 날짜 패널에 대한 분할 검증에서는 3년/1년은 1개, 2년/1년은 2개 window가 가능합니다.
+이는 분할 가능성을 확인한 결과일 뿐이며 이번 중간 점검 설정을 바꾸거나 추가 학습하지 않았습니다.
+
+| 달력 기준 설정 | Train 실제 거래일 범위 | Test 실제 거래일 범위 |
+| --- | --- | --- |
+| 3년/1년, window 0 | 2021-01-04~2024-01-03 | 2024-01-04~2025-01-03 |
+| 2년/1년, window 0 | 2021-01-04~2023-01-03 | 2023-01-04~2024-01-03 |
+| 2년/1년, window 1 | 2022-01-04~2024-01-03 | 2024-01-04~2025-01-03 |
 
 ## 저장된 모델 평가와 비교 (학습 후 명시적으로 실행)
 
@@ -173,8 +215,10 @@ UI 모델 선택 기능은 추가하지 않았습니다. 변경 후 API를 재�
 
 ## 검증 범위와 남은 작업
 
-실제 .learn(), 장시간 학습, 모델 성능 실험은 수행하지 않았습니다.
-모델 생성·zero-step save/load·상태 전달·CLI·분할·비어 있는 비교 입력·PPO 회귀를 단위 테스트합니다.
+공유 완료 모델은 4종 모두 seed 42, return_mdd, 100,000 step의 단일 구간 중간 점검 결과입니다.
+학습·평가 기간과 지표는 [공유 모델 안내](shared/TRAINED_MODELS.md)를 참고하세요.
+코드 회귀 검사는 모델 생성·save/load·상태 전달·CLI·분할·입력 검증·완료 처리 등을 확인하며,
+수정 사항 검증을 위해 실제 장시간 재학습을 시작하지 않습니다.
 하이퍼파라미터 튜닝, 새로운 앙상블, 자동 모델 선정, UI 모델 선택은 구현하지 않습니다.
 실제 성능·학습 수렴·GPU 속도는 사용자가 학습한 뒤 확인해야 합니다.
 
@@ -198,4 +242,4 @@ UI 모델 선택 기능은 추가하지 않았습니다. 변경 후 API를 재�
 - `tests/test_research_agent.py`: 로컬 Gemini 설정에 영향받지 않도록 기존 Claude 테스트 격리
 
 PortfolioEnv·portfolio accounting·reward 구현 자체는 변경하지 않았습니다.
-이전 Gemini 기능의 미커밋 변경은 유지했습니다. 이번 작업으로 Git commit/push하지 않았습니다.
+기존 Claude 기반 뉴스 리서치 호출 방식은 이 학습 안내와 독립적입니다.

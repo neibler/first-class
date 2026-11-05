@@ -360,3 +360,47 @@ def test_serving_config_selects_bundle_and_rejects_type_mismatch(tmp_path, monke
     )
     with pytest.raises(ValueError, match="does not match"):
         serving.InvestmentService()
+
+
+@pytest.mark.parametrize("mode", ["walk_forward", "typo", "", None, [], 7])
+def test_config_mode_rejected_before_dispatch(tmp_path, monkeypatch, mode):
+    c = small_config("ppo")
+    c["mode"] = mode
+    path = tmp_path / "config.json"
+    path.write_text(json.dumps(c))
+    monkeypatch.setattr(
+        train, "run_experiment", lambda *a: pytest.fail("legacy called")
+    )
+    monkeypatch.setattr(
+        model_runs,
+        "run_seed_experiments",
+        lambda *a, **k: pytest.fail("training called"),
+    )
+    with pytest.raises(ValueError, match="Unsupported mode"):
+        train.main(["--config", str(path)])
+
+
+@pytest.mark.parametrize("mode", ["single", "walk-forward", "legacy"])
+def test_valid_config_modes_keep_dispatch(monkeypatch, mode):
+    c = small_config("recurrent_ppo")
+    c["mode"] = mode
+    monkeypatch.setattr(train, "read_config", lambda *a: c)
+    calls = []
+    monkeypatch.setattr(train, "run_experiment", lambda *a: calls.append("legacy"))
+    monkeypatch.setattr(
+        model_runs,
+        "run_seed_experiments",
+        lambda *a, **k: calls.append(k["walk_forward"]) or [],
+    )
+    train.main([])
+    assert calls == ["legacy" if mode == "legacy" else mode == "walk-forward"]
+
+
+def test_current_calendar_coverage_boundary():
+    dates = pd.bdate_range("2021-01-04", "2025-12-31")
+    with pytest.raises(ValueError, match="Insufficient data"):
+        model_runs.calendar_windows(dates, 4, 1)
+    assert len(model_runs.calendar_windows(dates, 3, 1)) == 1
+    assert len(model_runs.calendar_windows(dates, 2, 1)) == 2
+    extended = pd.bdate_range("2021-01-04", "2026-01-02")
+    assert len(model_runs.calendar_windows(extended, 4, 1)) == 1
