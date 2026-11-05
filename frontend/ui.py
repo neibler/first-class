@@ -132,7 +132,7 @@ def load_sample(loader, key):
 
 
 @st.fragment
-def health_panel(sample=True, investment=False, research=False):
+def health_panel(sample=True, investment=False, research=False, performance=False):
     with st.expander("API 연결 및 모델 준비 상태"):
         st.button("연결 상태 새로고침", key="refresh_health")
         try:
@@ -143,11 +143,20 @@ def health_panel(sample=True, investment=False, research=False):
             st.success("API 연결 정상")
             if health.model_loaded:
                 st.info("모델 로드됨")
+            elif performance:
+                st.caption(
+                    "투자 모델 미로드 · 저장된 성과 결과 조회에는 필요하지 않습니다."
+                )
             else:
                 st.warning("모델이 로드되지 않았습니다.")
         if investment:
             st.caption(
                 "포트폴리오 화면은 저장 모델의 백테스트와 추론 API를 사용합니다."
+            )
+        elif performance:
+            st.caption(
+                "이 화면은 저장된 백테스트 결과를 조회합니다. /health의 투자 모델 상태와 "
+                "성과 결과의 준비 상태는 별개입니다."
             )
         elif research:
             st.caption(

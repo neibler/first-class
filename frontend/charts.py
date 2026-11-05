@@ -24,6 +24,47 @@ def chart_style(chart):
     )
 
 
+def performance_comparison(records):
+    names = list(dict.fromkeys(row["label"] for row in records))
+    days = len({row["date"] for row in records})
+    chart = (
+        alt.Chart(alt.Data(values=records))
+        .mark_line(strokeWidth=2, point=days == 1)
+        .encode(
+            x=alt.X(
+                "date:T",
+                title="평가일",
+                scale=alt.Scale(type="utc"),
+                axis=alt.Axis(
+                    format="%Y-%m-%d",
+                    tickCount=alt.TimeIntervalStep(
+                        interval="day", step=max(1, days // 4)
+                    ),
+                    labelOverlap=True,
+                ),
+            ),
+            y=alt.Y(
+                "cumulative_return:Q",
+                title="누적수익률",
+                axis=alt.Axis(format=".0%"),
+            ),
+            color=alt.Color(
+                "label:N",
+                title="전략",
+                scale=alt.Scale(domain=names, range=COLORS),
+                legend=alt.Legend(orient="bottom", columns=1, labelLimit=220),
+            ),
+            detail="strategy:N",
+            tooltip=[
+                alt.Tooltip("date:T", title="평가일", format="%Y-%m-%d"),
+                alt.Tooltip("label:N", title="전략"),
+                alt.Tooltip("cumulative_return:Q", title="누적수익률", format="+.2%"),
+            ],
+        )
+    )
+    return chart_style(chart.properties(height=340))
+
+
 def allocation(assets):
     chart = (
         alt.Chart(alt.Data(values=assets))

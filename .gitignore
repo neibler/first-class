@@ -221,7 +221,9 @@ __marimo__/
 /docs/reference/
 /docs/ui-reference/
 /docs/progress.md
+/docs/local/
 /AGENTS.md
+/docker-compose.override.yml
 .env
 .env.*
 !.env.example
