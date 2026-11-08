@@ -136,3 +136,32 @@ def summary() -> dict:
     if not path.exists():
         raise HTTPException(503, f"요약 파일이 없습니다: {path}")
     return _read(str(path), path.stat().st_mtime)
+
+
+@router.get("/model-shap")
+def model_shap(model: str = Query(pattern="^(ppo|recurrent_ppo|sac|td3)$")):
+    from backend.investment_ai.settings import ROOT
+    import hashlib
+
+    registry = (
+        Path(__file__).resolve().parents[2] / "shared/trained_models_manifest.json"
+    )
+    if not registry.exists():
+        raise HTTPException(503, "공유 모델 목록이 없습니다.")
+    item = json.loads(registry.read_text(encoding="utf-8"))["models"].get(model)
+    if not item:
+        raise HTTPException(404, "모델이 없습니다.")
+    bundle = (ROOT / item["path"]).resolve()
+    if not bundle.is_relative_to(ROOT.resolve()):
+        raise HTTPException(503, "모델 경로 설정 오류")
+    path = bundle / "shap.json"
+    if not path.exists() or not (bundle / "model.zip").exists():
+        raise HTTPException(
+            503,
+            "이 모델의 실제 SHAP 결과가 없습니다. 해석 계산 또는 공유본 설치가 필요합니다.",
+        )
+    payload = _read(str(path), path.stat().st_mtime_ns)
+    digest = hashlib.sha256((bundle / "model.zip").read_bytes()).hexdigest()
+    if payload["model_sha256"] != digest or payload["model_type"] != model:
+        raise HTTPException(409, "모델과 SHAP 결과가 다릅니다. 다시 계산하세요.")
+    return payload

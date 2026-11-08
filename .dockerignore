@@ -87,3 +87,6 @@ backend/performance/**
 !config/etf_news_map.yaml
 
 !config/serving.json
+
+!shared/
+!shared/trained_models_manifest.json

@@ -9,7 +9,7 @@ from threading import RLock
 import numpy as np
 import pandas as pd
 import torch
-from .settings import ROOT
+from .settings import bundle_input_root, ROOT
 from .data_loader import load_data, prepare_data
 from .training import load_bundle, schema_for
 from .infer import resolve_run, predict_weights
@@ -38,6 +38,12 @@ class InvestmentService:
                     raise ValueError("Select the bundle directory or its model.zip")
                 configured = configured.parent
         self.run = resolve_run(configured)
+        if not self.run.is_dir():
+            raise FileNotFoundError(
+                f"Selected model directory does not exist: {self.run}. "
+                "Run python scripts/install_trained_models.py --activate ppo "
+                "or select an installed bundle."
+            )
         self.run_id = self.run.name
         self.lock = RLock()
         state_key = hashlib.sha256(str(self.run.resolve()).encode()).hexdigest()
@@ -107,7 +113,9 @@ class InvestmentService:
                 "Saved input or explicit parquet path required; "
                 "API never generates data"
             )
-        self.data, _ = load_data(config, ROOT)
+        self.data, _ = load_data(
+            config, ROOT if external else bundle_input_root(paths[0], ROOT)
+        )
         self.config = self.model_config.copy()
         bundles = [load_bundle(path, self.data) for path in paths]
         if any(bundle[2] != self.model_config for bundle in bundles):

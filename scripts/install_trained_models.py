@@ -3,6 +3,7 @@
 import argparse
 import hashlib
 import json
+import os
 from pathlib import Path, PurePosixPath
 import zipfile
 
@@ -41,6 +42,45 @@ def install(destination, shared=None):
                     )
             else:
                 pending.append((target, content))
+        for model in manifest.get("models", {}).values():
+            name = model["path"]
+            rel = PurePosixPath(name)
+            if (
+                rel.is_absolute()
+                or ".." in rel.parts
+                or "\\" in name
+                or ":" in name
+                or not rel.parts
+            ):
+                raise ValueError("Unsafe model path")
+            bundle = (destination / name).resolve()
+            if not bundle.is_relative_to(destination):
+                raise ValueError("Unsafe model path")
+            config = json.loads(z.read(f"{name}/config.json"))
+            for key in ("data_path", "news_path"):
+                value = config[key]
+                path = PurePosixPath(value)
+                if (
+                    path.is_absolute()
+                    or ".." in path.parts
+                    or "\\" in value
+                    or ":" in value
+                    or value not in manifest["files"]
+                ):
+                    raise ValueError(f"Missing or unsafe bundled input: {key}")
+            marker = bundle / "installed_inputs.json"
+            if marker.relative_to(destination).as_posix() in manifest["files"]:
+                raise ValueError("Archive must not supply installation metadata")
+            content = (
+                json.dumps(
+                    {"relative_root": os.path.relpath(destination, bundle)}, indent=2
+                )
+                + "\n"
+            ).encode()
+            if marker.exists() and marker.read_bytes() != content:
+                raise ValueError("Existing installation metadata differs")
+            if not marker.exists():
+                pending.append((marker, content))
         # Validate the whole archive and all conflicts before writing any files.
         for target, content in pending:
             target.parent.mkdir(parents=True, exist_ok=True)
@@ -57,7 +97,9 @@ def main():
     manifest = install(args.destination)
     if args.activate:
         bundle = args.destination.resolve() / manifest["models"][args.activate]["path"]
-        default = (PROJECT / "runtime").resolve()
+        default = Path(
+            os.environ.get("INVESTMENT_AI_HOME", PROJECT / "runtime")
+        ).resolve()
         model_path = (
             bundle.relative_to(default).as_posix()
             if bundle.is_relative_to(default)

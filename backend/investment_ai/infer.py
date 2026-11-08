@@ -16,7 +16,14 @@ from .prediction import PredictionSession
 def resolve_run(path=None):
     if path:
         return Path(path).resolve()
-    pointer = json.loads((ROOT / "runs/latest.json").read_text())
+    pointer_path = ROOT / "runs/latest.json"
+    if not pointer_path.is_file():
+        raise FileNotFoundError(
+            f"No selected model: {pointer_path}. Install and activate a model with "
+            "python scripts/install_trained_models.py --activate ppo, "
+            "or supply --bundle."
+        )
+    pointer = json.loads(pointer_path.read_text())
     return ROOT / "runs" / pointer["run_id"]
 
 
@@ -137,7 +144,7 @@ def save_prediction(prediction, output):
     ).to_csv(output / "latest_weights.csv", index=False)
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument("--run", type=Path)
     parser.add_argument("--data", type=Path)
@@ -145,7 +152,7 @@ def main():
     parser.add_argument("--state", type=Path)
     parser.add_argument("--output", type=Path)
     parser.add_argument("--bundle", type=Path, help="Single-model bundle")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     if args.bundle:
         if args.run:
             parser.error("Choose --bundle or --run")
@@ -174,13 +181,26 @@ def main():
         config["news_path"] = str(args.news.resolve()) if args.news else None
     elif args.news:
         raise ValueError("--news requires --data")
+    recurrent = config.get("model_type") == "recurrent_ppo"
+    if recurrent and (len(paths) != 1 or args.state):
+        raise ValueError(
+            "Legacy recurrent CLI requires one model and a fresh cash episode; "
+            "use the persistent API for an existing recurrent episode."
+        )
     data, _ = load_data(config, ROOT)
     bundles = [load_bundle(path, data) for path in paths]
     state = (
         json.loads(args.state.read_text(encoding="utf-8-sig")) if args.state else None
     )
     result = predict_weights(
-        data, config, [b[0] for b in bundles], bundles[0][1], state
+        data,
+        config,
+        [b[0] for b in bundles],
+        bundles[0][1],
+        state,
+        predictors=(
+            [PredictionSession(bundles[0][0], "recurrent_ppo")] if recurrent else None
+        ),
     )
     save_prediction(result, args.output or run / "inference")
     print(json.dumps(result, indent=2))

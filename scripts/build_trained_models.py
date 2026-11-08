@@ -1,5 +1,7 @@
 """Package completed, evaluated models and exact inputs; never train."""
 
+import argparse
+import csv
 import hashlib
 import json
 from pathlib import Path
@@ -10,7 +12,11 @@ RUNTIME = PROJECT / "runtime"
 KINDS = ("ppo", "recurrent_ppo", "sac", "td3")
 
 
-def build():
+def build(seed=None, selections=None):
+    selections = selections or {}
+    if set(selections) - set(KINDS):
+        raise ValueError("Unknown model selection")
+    periods = set()
     payload = {}
     models = {}
 
@@ -27,13 +33,63 @@ def build():
             for p in (RUNTIME / "models" / kind).rglob("manifest.json")
             if json.loads(p.read_text(encoding="utf-8")).get("completed")
         ]
+        if kind in selections:
+            selected = (RUNTIME / selections[kind]).resolve()
+            candidates = [p for p in candidates if p.resolve() == selected]
+        if seed is not None:
+            candidates = [
+                p
+                for p in candidates
+                if json.loads((p / "manifest.json").read_text(encoding="utf-8")).get(
+                    "seed"
+                )
+                == seed
+            ]
         if len(candidates) != 1:
-            raise ValueError(f"Select exactly one completed {kind} bundle")
+            raise ValueError(
+                f"Select exactly one completed {kind} bundle using --seed "
+                f"or --bundle {kind}=PATH"
+            )
         bundle = candidates[0]
         config = json.loads((bundle / "config.json").read_text(encoding="utf-8"))
         meta = json.loads((bundle / "manifest.json").read_text(encoding="utf-8"))
         if config.get("model_type") != kind:
             raise ValueError("Model type mismatch")
+        spec = json.loads((bundle / "run_spec.json").read_text(encoding="utf-8"))
+        evaluation = json.loads(
+            (bundle / "evaluation.json").read_text(encoding="utf-8")
+        )
+        if not evaluation.get("completed"):
+            raise ValueError("Evaluation is incomplete")
+        for key in ("model_type", "seed", "data_hash"):
+            if meta.get(key) != spec.get(key) or spec.get(key) != evaluation.get(key):
+                raise ValueError(f"Bundle metadata mismatch: {key}")
+        for key in ("start_date", "end_date", "test_start_index"):
+            if spec[key] != evaluation[key]:
+                raise ValueError(f"Evaluation period mismatch: {key}")
+        with (bundle / "evaluation/ppo_history.csv").open(
+            encoding="utf-8", newline=""
+        ) as f:
+            dates = [row["date"] for row in csv.DictReader(f)]
+        if (
+            not dates
+            or dates != sorted(set(dates))
+            or dates[0] != evaluation["test_start"]
+            or dates[-1] != evaluation["test_end"]
+        ):
+            raise ValueError("Evaluation history dates mismatch")
+        periods.add(
+            (
+                spec["start_date"],
+                spec["end_date"],
+                spec["test_start_index"],
+                meta["train_start"],
+                meta["train_end"],
+                evaluation["test_start"],
+                evaluation["test_end"],
+                evaluation["comparison_group"],
+            )
+        )
         for name in (
             "model.zip",
             "config.json",
@@ -44,6 +100,8 @@ def build():
             "evaluation.json",
         ):
             add(bundle / name)
+        if (bundle / "shap.json").exists():
+            add(bundle / "shap.json")
         for path in (bundle / "evaluation").glob("*.csv"):
             add(path)
         for key in ("data_path", "news_path"):
@@ -68,7 +126,12 @@ def build():
         }
     if len({m["data_hash"] for m in models.values()}) != 1:
         raise ValueError("Models use different input datasets")
+    if len(periods) != 1:
+        raise ValueError(
+            "Models use different training/evaluation periods or comparison groups"
+        )
     output = PROJECT / "shared/trained_models.zip"
+    output.parent.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED) as z:
         for name, content in sorted(payload.items()):
             z.writestr(name, content)
@@ -86,4 +149,14 @@ def build():
 
 
 if __name__ == "__main__":
-    build()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--seed", type=int)
+    parser.add_argument("--bundle", action="append", default=[], metavar="MODEL=PATH")
+    args = parser.parse_args()
+    choices = {}
+    for value in args.bundle:
+        kind, separator, path = value.partition("=")
+        if not separator or not path or kind in choices:
+            parser.error("Use one --bundle MODEL=PATH per model")
+        choices[kind] = path
+    build(seed=args.seed, selections=choices)

@@ -107,3 +107,18 @@ def write_json(path, value):
         json.dumps(value, indent=2, ensure_ascii=False, allow_nan=False),
         encoding="utf-8",
     )
+
+
+def bundle_input_root(bundle, default=ROOT):
+    """Resolve portable installed inputs without rewriting signed bundle files."""
+    bundle = Path(bundle).resolve()
+    marker = bundle / "installed_inputs.json"
+    if not marker.exists():
+        return default
+    relative = json.loads(marker.read_text(encoding="utf-8"))["relative_root"]
+    if not isinstance(relative, str) or Path(relative).is_absolute():
+        raise ValueError("Invalid installed input root")
+    root = (bundle / relative).resolve()
+    if root not in bundle.parents:
+        raise ValueError("Installed input root must contain the model bundle")
+    return root

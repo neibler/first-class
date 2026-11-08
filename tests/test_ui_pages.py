@@ -6,6 +6,10 @@ from frontend import api_client
 
 @pytest.fixture
 def page(monkeypatch):
+    from frontend import shap_client
+    from tests.test_model_shap import payload
+
+    monkeypatch.setattr(shap_client, "load_model_shap", lambda model: payload(model))
     monkeypatch.setattr(
         api_client,
         "get_health",
@@ -48,31 +52,26 @@ def test_period_and_shap_filters_change_results(page):
     assert not page.exception
     assert page.metric[0].value != before
     page.switch_page("app_pages/shap.py").run()
+    page.button(key="shap_details_button").click().run()
     before = str(page.dataframe[0].value)
     page.selectbox(key="shap_asset").set_value("QQQ").run()
-    page.selectbox(key="shap_date").set_value("2026-04-30").run()
+    page.selectbox(key="shap_date").set_value("2025-01-02").run()
     assert not page.exception
     assert str(page.dataframe[0].value) != before
 
 
-@pytest.mark.parametrize("slug", ["shap"])
-@pytest.mark.parametrize("state", ["empty", "error", "loading"])
-def test_sample_states_and_retry_keep_navigation(page, monkeypatch, slug, state):
-    monkeypatch.setenv("FIRST_CLASS_UI_DEV", "1")
-    page.switch_page(f"app_pages/{slug}.py")
-    page.query_params["ui_state"] = state
-    page.run()
+def test_real_shap_unavailable_has_no_sample_fallback(page, monkeypatch):
+    from frontend import shap_client
+
+    def unavailable(model):
+        raise api_client.APIError("실제 SHAP 결과를 불러오지 못했습니다.")
+
+    monkeypatch.setattr(shap_client, "load_model_shap", unavailable)
+    page.switch_page("app_pages/shap.py").run()
     assert not page.exception
-    assert len(page.get("page_link")) == 6
-    if state == "error":
-        assert "샘플 데이터 오류" in page.error[0].value
-    else:
-        assert "샘플" in page.info[0].value
-    key = f"finish_{slug}" if state == "loading" else f"retry_{slug}"
-    page.button(key=key).click().run()
-    assert not page.exception
-    assert not page.error
-    assert page.metric if slug == "portfolio" else page.dataframe
+    assert page.error
+    assert not page.dataframe
+    assert page.button(key="retry_shap")
 
 
 def test_state_query_is_ignored_without_dev_flag(page, monkeypatch):
@@ -82,30 +81,6 @@ def test_state_query_is_ignored_without_dev_flag(page, monkeypatch):
     assert not page.exception
     assert not page.error
     assert page.metric
-
-
-@pytest.mark.parametrize("slug", ["shap"])
-@pytest.mark.parametrize("error_type", [OSError, ValueError, KeyError])
-def test_sample_errors_do_not_expose_exception_text(
-    page, monkeypatch, caplog, slug, error_type
-):
-    from frontend import sample_data
-
-    private_detail = "PRIVATE_TEST_DETAIL_NOT_FOR_DISPLAY"
-
-    def unavailable():
-        raise error_type(private_detail)
-
-    monkeypatch.setattr(sample_data, f"load_{slug}", unavailable)
-    page.switch_page(f"app_pages/{slug}.py").run()
-    assert not page.exception
-    assert "샘플 데이터 오류" in page.error[0].value
-    assert "다시 시도" in page.error[0].value
-    assert private_detail not in page.error[0].value
-    assert "SAMPLE_LOAD_FAILED" in caplog.text
-    assert private_detail not in caplog.text
-    assert len(page.get("page_link")) == 6
-    assert page.button(key=f"retry_{slug}")
 
 
 def test_portfolio_api_failure_is_visible(page, monkeypatch):
@@ -122,3 +97,18 @@ def test_portfolio_api_failure_is_visible(page, monkeypatch):
     assert page.error
     assert not page.metric
     assert len(page.get("page_link")) == 6
+
+
+def test_shap_raw_features_are_opt_in_and_correlation_separate(page):
+    page.switch_page("app_pages/shap.py").run()
+    assert not page.exception
+    assert not page.dataframe
+    assert not page.get("progress")
+    assert not any("이번 결정에서" in c.value for c in page.caption)
+    page.button(key="shap_details_button").click().run()
+    assert not page.exception
+    assert "macro_vix" in str(page.dataframe[2].value)
+    assert "absolute contribution (%p)" in page.dataframe[2].value.columns
+    assert any("Rolling Correlation" in c.value for c in page.caption)
+    page.button(key="shap_details_button").click().run()
+    assert not page.dataframe

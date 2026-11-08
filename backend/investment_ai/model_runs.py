@@ -6,7 +6,7 @@ from pathlib import Path
 import hashlib
 import json
 import pandas as pd
-from .settings import ROOT, validate_config, write_json
+from .settings import bundle_input_root, ROOT, validate_config, write_json
 from .data_loader import load_data, fingerprint
 from .training import train_model, load_bundle
 from .backtest import compare
@@ -180,7 +180,10 @@ def evaluate_bundle(path):
     if not manifest.get("completed"):
         raise ValueError("Training bundle is incomplete")
     config = json.loads((path / "config.json").read_text(encoding="utf-8"))
-    data, _ = load_data({**config, "seed": spec.get("data_seed", config["seed"])}, ROOT)
+    data, _ = load_data(
+        {**config, "seed": spec.get("data_seed", config["seed"])},
+        bundle_input_root(path, ROOT),
+    )
     dates = pd.DatetimeIndex(data.dates)
     data = subset(
         data,

@@ -1,4 +1,4 @@
 {
-  "model_type": "recurrent_ppo",
-  "model_path": "models/recurrent_ppo/full_data_20261104_014257/holdout/recurrent_ppo_return_mdd_seed42"
+  "model_type": "ppo",
+  "model_path": null
 }

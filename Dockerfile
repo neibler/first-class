@@ -21,6 +21,7 @@ COPY backend/news_research/ /app/backend/news_research/
 # (scipy/statsmodels/shap/matplotlib)은 설치하지 않는다 — 분석은 컨테이너 밖에서
 # 돌리고 results/ 를 RESULTS_DIR 로 마운트한다.
 COPY backend/performance/ /app/backend/performance/
+COPY shared/trained_models_manifest.json /app/shared/trained_models_manifest.json
 COPY config/agent.yaml config/etf_news_map.yaml config/serving.json /app/config/
 ENV RESULTS_DIR=/results
 USER appuser

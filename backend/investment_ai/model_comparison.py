@@ -74,7 +74,11 @@ def compare_completed(root, output):
             }
         )
     if not rows:
-        print("No completed model runs found.")
+        output = Path(output)
+        # Only remove outputs owned by this comparison, never saved model results.
+        output.unlink(missing_ok=True)
+        output.with_name(output.stem + "_seed_summary.csv").unlink(missing_ok=True)
+        print("No completed model runs found. Stale comparison outputs removed.")
         return pd.DataFrame()
     table = pd.DataFrame(rows)
     output = Path(output)
