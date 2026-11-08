@@ -53,6 +53,9 @@ class OptimizeResponse(Contract):
     execution_date: str | None
     first_return_end_date: str | None
     first_return_end_delay_trading_bars: int
+    model_target_weights: dict[str, float] = Field(default_factory=dict)
+    rebalance_reasons: list[str] = Field(default_factory=list)
+    should_rebalance: bool = False
     target_weights: dict[str, float]
     current_weights: dict[str, float]
     cash_weight: float

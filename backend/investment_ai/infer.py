@@ -11,6 +11,7 @@ from .portfolio_env import PortfolioEnv
 from .training import load_bundle
 from .accounting import safeguard_breached
 from .prediction import PredictionSession
+from .rebalancing import get_rebalance_reasons
 
 
 def resolve_run(path=None):
@@ -86,30 +87,39 @@ def predict_weights(data, config, models, scaler, state=None, predictors=None):
         or state.get("safeguard_triggered", False)
         or safeguard_breached(mdd, config["max_drawdown"])
     )
-    # Advance recurrent memory on every observed day, including non-rebalance days.
-    proposed = (
-        [p.predict(obs, env) for p in predictors] if recurrent and not stopped else None
+    # All policies compute a fresh target every day, even when no trade is due.
+    # A latched safety stop needs no further model calls until explicit reset.
+    target = (
+        np.zeros(len(data.assets))
+        if stopped
+        else np.mean([p.predict(obs, env) for p in predictors], axis=0)
     )
-    if (
-        state.get("stopped", False)
-        or state.get("safeguard_triggered", False)
-        or safeguard_breached(mdd, config["max_drawdown"])
-    ):
+    reasons = get_rebalance_reasons(
+        data.dates[-1],
+        data.dates[-2] if len(data.dates) > 1 else None,
+        held,
+        target,
+        data.risk[-1],
+        mdd,
+        config,
+        stopped=stopped,
+    )
+    if reasons == ["mdd_stop"]:
         weights, status = np.zeros(len(data.assets)), "cash_safeguard"
-    elif phase != 0:
-        weights, status = held, "hold_until_rebalance"
+    elif reasons == ["hold"]:
+        weights, status = held.copy(), "hold_until_rebalance"
     else:
-        weights = np.mean(
-            (
-                proposed
-                if proposed is not None
-                else [p.predict(obs, env) for p in predictors]
-            ),
-            axis=0,
-        )
-        status = "target_proposal"
+        weights, status = target.copy(), "target_proposal"
+    # A normal signal queues a t+1 target even if today's weights already match:
+    # prices can drift before the fill. A latched cash stop never queues an exit.
+    should_trade = reasons != ["hold"] and (
+        reasons != ["mdd_stop"] or bool(np.any(held > 1e-12))
+    )
     return {
         "as_of_date": date,
+        "model_target_weights": dict(zip(data.assets, map(float, target))),
+        "rebalance_reasons": reasons,
+        "should_rebalance": should_trade,
         "mode": mode,
         "status": status,
         "safeguard_triggered": status == "cash_safeguard",
@@ -117,10 +127,12 @@ def predict_weights(data, config, models, scaler, state=None, predictors=None):
         "decision_date": date,
         "execution_date": None,
         "first_return_end_date": None,
-        "first_return_end_delay_trading_bars": 2,
-        "execution_delay_trading_bars": 1,
+        "first_return_end_delay_trading_bars": 1 if stopped else 2,
+        "execution_delay_trading_bars": 0 if stopped else 1,
         "note": (
-            "Target proposal for the next eligible close; "
+            "Immediate cash safeguard proposal. No order submitted."
+            if stopped
+            else "Target proposal for the next eligible close; "
             "reconcile holdings at execution. No order submitted."
         ),
         "cash_weight": float(np.clip(1 - weights.sum(), 0, 1)),

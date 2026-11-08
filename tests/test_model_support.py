@@ -138,7 +138,11 @@ def test_recurrent_advances_on_hold_days_and_safeguard_stops_calls():
     sessions = [PredictionSession(model, "recurrent_ppo")]
     s = state(d)
     s.update(
-        max_drawdown=0.0, portfolio_value=1.0, peak_value=1.0, days_since_rebalance=1
+        max_drawdown=0.0,
+        portfolio_value=1.0,
+        peak_value=1.0,
+        days_since_rebalance=1,
+        weights={"SPY": 0.5, "QQQ": 0.5},
     )
     result = predict_weights(d, c, [model], None, s, sessions)
     assert result["status"] == "hold_until_rebalance" and len(model.calls) == 1

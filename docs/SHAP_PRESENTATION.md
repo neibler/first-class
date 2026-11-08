@@ -4,28 +4,28 @@ SHAP 계산·모델·입력·API는 변경하지 않는다. frontend/shap_explan
 
 | 원본 규칙 | 사용자 요인 | 의미 분류 |
 |---|---|---|
-| log_return_lag_*_<ETF> | 자산명(ETF)의 최근 움직임 | 선택 ETF: 자산 자체 가격/추세, 그 외: 다른 자산 움직임 |
-| rsi_div_100, rsi, macd, macd_signal, macd_hist, macd_histogram + _<ETF> | 자산명(ETF)의 최근 움직임 (가격 lag와 통합) | 위와 동일 |
-| macro_effr | 미국 기준금리 | 금리 환경 |
-| macro_ust_2y | 미국 단기금리 | 금리 환경 |
-| macro_ust_10y | 미국 장기금리 | 금리 환경 |
-| macro_ust_30y | 미국 장기금리 | 금리 환경 |
-| macro_tips_10y | 미국 실질금리 | 금리 환경 |
-| macro_yield_spread | 장기·단기 금리 차이 | 금리 환경 |
-| macro_core_pce_yoy | 미국 물가 흐름 | 경기/물가 |
-| macro_real_pce_mom | 미국 소비 흐름 | 경기/물가 |
-| macro_unemp | 미국 고용 상황 | 경기/물가 |
-| macro_ism_pmi | 미국 제조업 경기 | 경기/물가 |
-| macro_vix | 시장 변동성(VIX) | 시장 위험 |
-| macro_usd_ret_20d | 달러 가치의 최근 움직임 | 환율/원자재 |
-| macro_wti | 국제 유가 | 환율/원자재 |
-| risk_score_<ETF> | 최근 뉴스 위험 (모든 자산 통합) | 뉴스 위험 |
-| current_weight_<ETF> | 현재 자산 배분 상태 (모든 자산 합산) | 현재 포트폴리오 |
-| drawdown, mdd | 현재 손실과 누적 낙폭 | 운용 상태 |
-| rebalance_phase | 비중 조정 주기 | 운용 상태 |
+| `log_return_lag_*_<ETF>` | 자산명(ETF)의 최근 움직임 | 선택 ETF: 자산 자체 가격/추세, 그 외: 다른 자산 움직임 |
+| `rsi_div_100, rsi, macd, macd_signal, macd_hist, macd_histogram + _<ETF>` | 자산명(ETF)의 최근 움직임 (가격 lag와 통합) | 위와 동일 |
+| `macro_effr` | 미국 기준금리 | 금리 환경 |
+| `macro_ust_2y` | 미국 단기금리 | 금리 환경 |
+| `macro_ust_10y` | 미국 장기금리 | 금리 환경 |
+| `macro_ust_30y` | 미국 장기금리 | 금리 환경 |
+| `macro_tips_10y` | 미국 실질금리 | 금리 환경 |
+| `macro_yield_spread` | 장기·단기 금리 차이 | 금리 환경 |
+| `macro_core_pce_yoy` | 미국 물가 흐름 | 경기/물가 |
+| `macro_real_pce_mom` | 미국 소비 흐름 | 경기/물가 |
+| `macro_unemp` | 미국 고용 상황 | 경기/물가 |
+| `macro_ism_pmi` | 미국 제조업 경기 | 경기/물가 |
+| `macro_vix` | 시장 변동성 | 시장 위험 |
+| `macro_usd_ret_20d` | 달러 가치의 최근 움직임 | 환율/원자재 |
+| `macro_wti` | 국제 유가 | 환율/원자재 |
+| `risk_score_<ETF>` | 최근 뉴스 위험 (모든 자산 통합) | 뉴스 위험 |
+| `current_weight_<ETF>` | 현재 자산 배분 상태 (모든 자산 합산) | 현재 포트폴리오 |
+| `drawdown, mdd` | 현재 손실과 누적 낙폭 | 운용 상태 |
+| `rebalance_phase` | 비중 조정 주기 | 운용 상태 |
 | 미등록 입력 | 기타 모델 입력 정보 | 기타 정보 |
 
-동일 ETF의 수익률 lag·RSI·MACD 계열을 단일 asset_<ETF> 요인으로 합친다.
+동일 ETF의 수익률 lag·RSI·MACD 계열을 단일 `asset_<ETF>` 요인으로 합친다.
 GLD는 금(GLD) 관련 신호로 표시하며, 동일 자산이 증가·감소 목록에 중복되지 않는다.
 10년물·30년물 금리는 미국 장기금리로 합친다. 자산 이름 15개는 ASSET_NAMES에 명시한다.
 현재 관측에는 MACD signal/histogram과 risk_type이 없다. MACD 별칭은 향후 호환용이며

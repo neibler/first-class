@@ -63,5 +63,7 @@
   "max_drawdown": 0.15,
   "reward": "return",
   "execution_delay": 1,
-  "news_mode": "required"
+  "news_mode": "required",
+  "risk_rebalance_threshold": 0.7,
+  "weight_drift_threshold": 0.05
 }

@@ -166,7 +166,7 @@ def test_recovered_mdd_still_stops_inference():
     result = predict_weights(data(), config(), [NoPredict()], None, state(data()))
     assert result["safeguard_triggered"] and result["cash_weight"] == 1
     assert sum(result["weights"].values()) == 0
-    assert result["execution_delay_trading_bars"] == 1
+    assert result["execution_delay_trading_bars"] == 0
 
 
 def test_sharpe_common_annualization_and_warmup():

@@ -55,6 +55,14 @@ python -m pip install -r requirements-dev.txt
 python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000
 ```
 
+직접 Uvicorn으로 실행해도 `INVESTMENT_AI_HOME`이 없으면 저장소의 `runtime/`을
+사용합니다. 공유 모델 설치·활성화, `--all-shared` SHAP 계산 및
+`/performance/model-shap`은 같은 기본 경로를 사용합니다. 별도 배포 경로를
+사용하면 서버 시작 전에 `INVESTMENT_AI_HOME`을 지정하세요. 명시한 절대·상대
+경로는 유지되며, 상대 경로는 실행 작업 폴더 기준입니다. 다른 폴더에 모델을
+설치했다면 그 경로를 지정하고 `--destination`도 동일하게 설정하세요.
+
+
 ```powershell
 python -m streamlit run frontend/app.py --server.port 8501
 ```

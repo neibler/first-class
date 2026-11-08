@@ -7,7 +7,9 @@ import numpy as np
 
 SOURCE_DIR = Path(__file__).resolve().parent
 ROOT = (
-    Path(os.environ.get("INVESTMENT_AI_HOME", SOURCE_DIR.parent)).expanduser().resolve()
+    Path(os.environ.get("INVESTMENT_AI_HOME", SOURCE_DIR.parent.parent / "runtime"))
+    .expanduser()
+    .resolve()
 )
 SCHEMA_VERSION = 3
 REWARDS = ("return", "sharpe", "return_mdd", "portfolio_return", "rolling_sharpe")
@@ -22,6 +24,9 @@ def read_config(path=None):
 
 
 def validate_config(c):
+    from .rebalancing import validate_rebalancing
+
+    validate_rebalancing(c)
     if c.get("observation_lag", 0) != 0 or c.get("execution_delay", 1) != 1:
         raise ValueError("Schema v3 requires observation_lag=0 and execution_delay=1")
     if c.get("news_mode") not in {"required", "development"}:

@@ -81,6 +81,9 @@ def run_backtest(data, config, start, end, models=None, scaler=None, strategy="p
             exit_cost=0.0,
             cost_amount=0.0,
             rebalanced=False,
+            should_rebalance=False,
+            rebalance_reasons=["mdd_stop"],
+            rebalance_reason="mdd_stop",
             cash_weight=1.0,
             stop_reason="cash_after_stop",
             reward=0.0,
@@ -92,6 +95,7 @@ def run_backtest(data, config, start, end, models=None, scaler=None, strategy="p
                 "previous_weight",
                 "current_weight",
                 "target_weight",
+                "model_target_weight",
                 "weight_change",
             ]:
                 row[f"{prefix}_{asset.lower()}"] = 0.0

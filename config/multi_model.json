@@ -106,5 +106,7 @@
       "gradient_steps": 1,
       "action_noise_std": 0.1
     }
-  }
+  },
+  "risk_rebalance_threshold": 0.7,
+  "weight_drift_threshold": 0.05
 }

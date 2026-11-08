@@ -218,9 +218,14 @@ class InvestmentService:
             "decision_date": prediction["decision_date"],
             "execution_date": prediction["execution_date"],
             "first_return_end_date": prediction["first_return_end_date"],
-            "first_return_end_delay_trading_bars": 2,
+            "first_return_end_delay_trading_bars": prediction[
+                "first_return_end_delay_trading_bars"
+            ],
             "mode": prediction["mode"],
             "target_weights": prediction["weights"],
+            "model_target_weights": prediction["model_target_weights"],
+            "rebalance_reasons": prediction["rebalance_reasons"],
+            "should_rebalance": prediction["should_rebalance"],
             "current_weights": current,
             "cash_weight": prediction["cash_weight"],
             "current_cash_weight": float(np.clip(1 - sum(current.values()), 0, 1)),

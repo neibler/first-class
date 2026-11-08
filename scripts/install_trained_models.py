@@ -97,9 +97,11 @@ def main():
     manifest = install(args.destination)
     if args.activate:
         bundle = args.destination.resolve() / manifest["models"][args.activate]["path"]
-        default = Path(
-            os.environ.get("INVESTMENT_AI_HOME", PROJECT / "runtime")
-        ).resolve()
+        default = (
+            Path(os.environ.get("INVESTMENT_AI_HOME", PROJECT / "runtime"))
+            .expanduser()
+            .resolve()
+        )
         model_path = (
             bundle.relative_to(default).as_posix()
             if bundle.is_relative_to(default)
