@@ -11,8 +11,8 @@ FastAPI 앱 생성 함수에서 투자 모델 생명주기를 관리하고 투�
 모델이 없으면 포트폴리오는 준비 부족을 안내하며 샘플 성공으로 대체하지 않습니다.
 `POST /research`는 기존 뉴스 에이전트와 연결되며 서버의 Claude 키, 기존 DB,
 로컬 임베딩 모델이 필요합니다. 실제 Claude·DB 전체 실행과 5초 성능은 미검증입니다.
-투자는 `/optimize`·`/backtest`를 사용합니다. 저장 결과용 `/performance/explain`은
-별도 API이며 SHAP 화면에는 아직 연결하지 않았습니다.
+투자는 `/optimize`·`/backtest`를 사용합니다. 저장된 성과·SHAP 결과는 `/performance/*`에서
+조회할 수 있으며 화면 연결 상태와 실행 방법은 [성능 분석 안내](backend/performance/README.md)를 따릅니다.
 
 ## Docker 실행
 
@@ -191,7 +191,9 @@ Remove-Item Env:FIRST_CLASS_UI_DEV
 호스트 포트를 변경하려면 `.env.example`을 `.env`로 복사하고 포트를 수정합니다.
 포트 변경 후에도 컨테이너 내부 API 주소는 그대로입니다.
 서비스는 호스트의 `127.0.0.1`에만 공개됩니다.
-`.env`, API 키, 실제 데이터와 모델 파일은 Git이나 이미지에 포함하지 않습니다.
+`.env`, API 키, 개인 데이터·추가 학습 모델·실행 상태는 Git이나 이미지에 포함하지 않습니다.
+팀이 명시적으로 배포하는 `shared/investment_demo.zip`은 Git 추적 예외이며 기본 이미지에는 포함하지 않습니다.
+투자 실행과 Docker 권한 준비는 [투자 실행 안내](docs/investment.md)를 참고하세요.
 
 ## 중지
 

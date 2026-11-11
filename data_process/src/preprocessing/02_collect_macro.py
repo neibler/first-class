@@ -217,7 +217,8 @@ def main() -> None:
         "collected_at": pd.Timestamp.now(tz="UTC").isoformat(),
         "series": SERIES,
         "vintage_chunk_days": VINTAGE_CHUNK_DAYS,
-        "pmi_file": str(args.pmi_file.resolve()),
+        # Published provenance must not contain the collector's personal path.
+        "pmi_file": args.pmi_file.name,
         "pmi_weekend_release_dates": pmi.loc[
             pmi["release_date"].dt.dayofweek.ge(5), "release_date"
         ].dt.strftime("%Y-%m-%d").tolist(),

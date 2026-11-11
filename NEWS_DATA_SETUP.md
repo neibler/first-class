@@ -13,7 +13,8 @@ feature/11의 종가·로그수익률·RSI·MACD를 연결했습니다. 매크�
 - `config/real_market.json`: 실제 시장 데이터용 설정
 - `runtime/preflight.json`: 최근 입력 및 환경 검증 결과
 
-원본 데이터는 Git에서 제외됩니다. 뉴스의 has_news=0인 날도 기존 risk_score를 보존합니다.
+개인 원본 데이터와 추가 실행 산출물은 Git에서 제외합니다. 팀 공유 데모 ZIP에는 실행에 필요한
+시장 parquet·뉴스 점수 CSV가 명시적으로 포함됩니다. 뉴스의 has_news=0인 날도 기존 risk_score를 보존합니다.
 뉴스 추가 열은 메타데이터로 보존하고 PPO에는 risk_score만 사용합니다.
 관측 지연은 0이며 주문만 다음 거래일 종가에 체결합니다. 별도 config/hybrid_news.json에서만 더미 시장 + 실제 뉴스를 사용할 수 있습니다.
 
