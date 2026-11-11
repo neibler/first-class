@@ -22,7 +22,7 @@ COPY backend/news_research/ /app/backend/news_research/
 # 돌리고 results/ 를 RESULTS_DIR 로 마운트한다.
 COPY backend/performance/ /app/backend/performance/
 COPY shared/trained_models_manifest.json /app/shared/trained_models_manifest.json
-COPY config/agent.yaml config/etf_news_map.yaml config/serving.json /app/config/
+COPY config/agent.yaml config/etf_news_map.yaml config/serving.json config/investment_ai.json config/multi_model.json /app/config/
 ENV RESULTS_DIR=/results
 USER appuser
 EXPOSE 8000

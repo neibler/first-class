@@ -133,7 +133,7 @@ def load_sample(loader, key):
 
 
 @st.fragment
-def health_panel(sample=True, investment=False, research=False):
+def health_panel(sample=True, investment=False, research=False, statistics=False):
     with st.expander("API 연결 및 모델 준비 상태"):
         st.button("연결 상태 새로고침", key="refresh_health")
         try:
@@ -154,6 +154,11 @@ def health_panel(sample=True, investment=False, research=False):
             st.caption(
                 "/health는 서버 연결 상태입니다. 리서치에 필요한 키·뉴스 DB·임베딩 모델의 "
                 "준비 여부는 분석 요청에서 확인하며, model_loaded는 리서치 준비 상태가 아닙니다."
+            )
+        elif statistics:
+            st.caption(
+                "이 화면은 저장된 통계 결과를 조회합니다. /health의 투자 모델 상태와 "
+                "SHAP 준비 여부는 통계 결과 조회 가능 여부와 별개입니다."
             )
         elif sample:
             st.caption(

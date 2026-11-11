@@ -216,12 +216,18 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+**/.streamlit/secrets.toml
 
 # Local project context and environment
 /docs/reference/
 /docs/ui-reference/
 /docs/progress.md
 /AGENTS.md
+/LOCAL_INTEGRATION.md
+/docs/local/
+/.codex/
+/.agents/
+/.idea/
 .env
 .env.*
 !.env.example
@@ -249,12 +255,27 @@ checkpoints/
 *.zip
 *.pem
 *.key
+*.p12
+*.pfx
+id_rsa
+id_dsa
+id_ecdsa
+id_ecdsa_sk
+id_ed25519
+id_ed25519_sk
+id_mldsa44_ed25519
+*.sqlite3
+*.sqlite3-*
+*.db
+*.db-*
 credentials*.json
 secrets*.json
 .aws/
 
 # Local datasets, saved models and run outputs
 /runtime/
+/results/
+/data_process/raw/*.xlsx
 
 # Deliberate small, verified team inference bundle
 !/shared/investment_demo.zip
@@ -264,3 +285,4 @@ secrets*.json
 # Verified final four-model inference/evaluation bundle
 !/shared/trained_models.zip
 /config/serving.before_shared_install.json
+.DS_Store

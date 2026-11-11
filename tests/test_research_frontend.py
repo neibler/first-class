@@ -8,7 +8,7 @@ import pytest
 from streamlit.testing.v1 import AppTest
 
 from backend.research_schemas import ResearchResponse
-from frontend import api_client
+from frontend import api_client, statistics_client
 
 
 @pytest.fixture
@@ -63,6 +63,11 @@ def post(monkeypatch, body):
 
 @pytest.fixture
 def page(monkeypatch, post):
+    monkeypatch.setattr(
+        statistics_client,
+        "get_statistics",
+        lambda: statistics_client.StatisticsResult([]),
+    )
     monkeypatch.setattr(
         api_client,
         "get_health",

@@ -11,6 +11,7 @@ def investment_ui_fixture(request, monkeypatch):
         "test_dashboard",
         "test_ui_pages",
         "test_research_frontend",
+        "test_statistics_frontend",
     }:
         return
 

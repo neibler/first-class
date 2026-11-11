@@ -47,6 +47,16 @@ page.switch_page("app_pages/research.py").run()
 assert not page.exception, page.exception
 assert page.text_area(key="research_question").value == ""
 assert str(page.date_input(key="research_date").value) == "2025-04-10"
-assert len(page.get("page_link")) == 6
+assert len(page.get("page_link")) == 7
 assert not page.button(key="research_submit").disabled
 print("PASS: research form, demo date, six links; no research submitted")
+
+page.switch_page("app_pages/anova.py").run()
+assert not page.exception, page.exception
+assert any("통계 분석 결과가 아직 준비되지" in w.value for w in page.warning)
+assert not page.dataframe
+assert len(page.get("page_link")) == 7
+page.button(key="refresh_statistics").click().run()
+assert not page.exception, page.exception
+assert any("통계 분석 결과가 아직 준비되지" in w.value for w in page.warning)
+print("PASS: statistics HTTP 503 guidance, navigation and refresh")
