@@ -5,10 +5,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $runtimePath = Join-Path $PSScriptRoot '.venv\Scripts\python.exe'
 if (-not (Test-Path -LiteralPath $runtimePath)) {
-    $runtimePath = Join-Path $PSScriptRoot '..\..\work\python\python.exe'
-}
-if (-not (Test-Path -LiteralPath $runtimePath)) {
-    throw 'Create .venv and install requirements-dev.txt first. See LOCAL_INTEGRATION.md.'
+    throw 'Create .venv and install requirements-dev.txt first. See docs/investment.md.'
 }
 & $runtimePath (Join-Path $PSScriptRoot 'local_run.py') $Task @ExtraArgs
 if ($LASTEXITCODE -ne 0) { throw "Execution failed: $LASTEXITCODE" }

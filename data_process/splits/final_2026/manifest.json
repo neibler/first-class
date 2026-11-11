@@ -233,7 +233,7 @@
     "timing_limitations": "Native ALFRED dates do not contain intraday timestamps. H.15/H.10 clocks use official schedules and federal holiday calendar, not a fully verified intraday archive; H.15 revisions use a conservative assumed clock."
   },
   "input_sha256": {
-    "processed/features_unscaled.parquet": "af8ea56adda1c83964d4c951355a4c2f607e816845ef2748d5844088414f3b27",
+    "processed/features_unscaled.parquet": "53d516002c5ec34011dffefae9f57df17ed7c42706b8a8c7002813a9c807742e",
     "processed/log_returns.parquet": "1a89723c71e1546c490e2769c50af71d2127c57265e57df1b3f632b41adf2f61",
     "raw/benchmark.parquet": "834557ac685290bd31d2eb8bf0e05ba88721accd2bc951b711b4db9c82e830aa"
   },
