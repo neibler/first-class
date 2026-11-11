@@ -32,8 +32,13 @@ http://localhost:8000/ready 에서 model_loaded=true를 확인하세요.
 
 ```powershell
 $env:INVESTMENT_AI_RUNTIME=(Resolve-Path runtime).Path
+# 공유 데모를 선택한다. 기존 사용자 모델이면 해당 runs/<실행 ID> 이름으로 바꾼다.
 $env:INVESTMENT_AI_RUN_ID='20261028_005508'
+$env:INVESTMENT_AI_STATE_GID='10001'
 docker compose -f docker-compose.yml -f docker-compose.investment.yml up --build
 ```
+
+Linux에서는 `INVESTMENT_AI_STATE_GID`를 로컬 실행 사용자의 `id -g` 값으로 설정한다.
+기존 모델 선택과 호스트·Docker 상태 파일 권한은 [투자 실행 안내](../docs/investment.md#docker)를 따른다.
 
 기본 CI Compose는 별도의 모델 없는 서버 동작을 검사합니다.

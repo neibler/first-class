@@ -40,4 +40,5 @@ health_panel(
     investment=cockpit,
     research=page.url_path == "research",
     performance=page.url_path == "performance",
+    statistics=page.url_path == "anova",
 )

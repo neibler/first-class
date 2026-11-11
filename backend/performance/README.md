@@ -103,6 +103,10 @@ $env:RESULTS_DIR=(Resolve-Path runtime/results).Path
 원래 경로 구조대로 설치해야 합니다.
 정확한 파일 목록과 해시는 `shared/manifest.json`을 기준으로 확인합니다.
 
+ANOVA 화면은 `/performance/statistics`에 연결되어 있습니다. 조회에 필요한 파일은
+`<RESULTS_DIR>/statistics/anova.json`입니다. 기존 결과를 연결하는 방법은
+[루트 실행 안내](../../README.md#anova-결과-연결)를 참고하세요.
+
 ## 테스트
 
 ```bash

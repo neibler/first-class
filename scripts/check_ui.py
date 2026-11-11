@@ -88,6 +88,11 @@ def run(base, dev, output):
                         "button", name="백테스트 결과 새로고침", exact=True
                     )
                 ).to_be_visible()
+            elif title == "ANOVA 검증":
+                expect(
+                    page.get_by_role("button", name="통계 결과 새로고침", exact=True)
+                ).to_be_visible()
+                expect(page.locator('[data-testid="stException"]')).to_have_count(0)
             else:
                 expect(page.get_by_text("화면 준비 중", exact=True)).to_be_visible()
         page.get_by_role("link", name="포트폴리오 현황").click()

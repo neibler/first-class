@@ -15,7 +15,7 @@
 - runtime/, artifacts/, docs/local/, .env와 로컬 실행 설정은 공유 변경에 포함하지 않는다.
   모델·결과 파일·개인 작업 기록을 팀원의 환경에 적용하지 않는다.
 - 성과 HTTP·표시·오류 복구·메뉴 테스트를 추가하고 기존 준비 화면 검사를 갱신했다.
-  tests/test_performance.py의 하위 프로세스는 Windows 시스템 환경을 유지하고 UTF-8을 사용한다.
+  tests/test_performance.py의 하위 프로세스는 필요한 환경변수(Windows SystemRoot 포함)만 받고 UTF-8을 사용한다.
   전체 pytest 381개 및 Black·flake8·pip check를 통과했다.
 - 기존 공유 모델의 2025-05-28~2025-12-31 단일 홀드아웃 결과로 실제 HTTP·화면을 검증했다.
   모델 재학습과 백테스트 로직 변경은 하지 않았다. 학습 곡선과 다른 분석 화면은 후속 범위다.
@@ -25,7 +25,7 @@
 ```mermaid
 flowchart LR
     Browser[브라우저 :8501] --> Dashboard[Streamlit dashboard]
-    Dashboard -->|HTTP health, investment, research, performance| API[FastAPI api]
+    Dashboard -->|HTTP health, investment, research, performance, statistics| API[FastAPI api]
 ```
 
 - Python 3.12를 사용한다. 학교의 필수 기준은 Python 3.10 이상이며,
@@ -47,11 +47,12 @@ flowchart LR
 ## 학교 요구사항 중 남은 검증과 미구현
 
 - `POST /explain`은 미구현이다. 투자 `/optimize`·`/backtest`는 main 구현을 유지한다.
-- 6개 페이지 내비게이션은 유지한다. 포트폴리오·리서치는 HTTP로 연결하고,
-  SHAP은 샘플이며 성과는 저장 결과 HTTP, ANOVA·리스크는 준비 화면이다.
+  저장된 성과·SHAP 결과를 조회하는 `/performance/*`는 별도로 제공한다.
+- 6개 페이지 내비게이션은 유지한다. 포트폴리오·리서치·성과·ANOVA는 HTTP로 연결하고
+  (성과·ANOVA는 저장 결과 조회), SHAP은 샘플이며 리스크는 준비 화면이다.
 - main의 데이터 처리·Gymnasium·PPO·Safe-Guard·실험·백테스트 코드는 유지했다.
   이번 충돌 통합에서는 실제 학습·사용자 모델/데이터의 학교 성능 요건을 다시 검증하지 않는다.
-- SHAP, ANOVA·사후 검정, 리서치 결과의 투자 모델·리스크 모니터링 연동.
+- SHAP, 리서치 결과의 투자 모델·리스크 모니터링 연동.
 - 모델 로딩과 추론 시간·투자 성과 기준 검증.
 - 보상 함수 설계 근거, 성능·ANOVA 요약, 에러 분석 및 20페이지 이상 실험 리포트.
 
@@ -60,81 +61,23 @@ flowchart LR
 MLflow, 주기적 수집·재학습, 이상거래 탐지,
 멀티모달, 공정성 분석은 학교의 선택 과제다.
 
-## 2026-11-03 PR #15 통합 검증
+## ANOVA 화면 API 연동
 
-기준은 `feature/12=6f5bad1`, `main=19a5c7c`다. 취소한 병합을 복원하지 않고 새로 병합했다.
-아래는 이번 코드에서 직접 실행한 로컬 검사이며, 뒤의 과거 작업 기록이나 GitHub CI 결과와 구분한다.
-
-- Black check(87개 파일), flake8, 로컬·두 Docker 컨테이너의 pip check 통과.
-- 전체 pytest: **284 passed, 1 skipped**(184.73초). skip은 미배포 공유 데이터가 필요한
-  `test_real_news_is_preserved_in_hybrid_input`이다. 투자 계약, 단일 리서치 라우트,
-  입력/상태/오류, DB·임베딩, timeout·busy, 세션 재사용 및 페이지 회귀를 포함한다.
-- `scripts/check_ui.py`는 별도 mock 투자 HTTP 서버와 실제 Edge에서 기본·`--dev` 경로를 통과했다.
-  6개 메뉴, 필터, 애니메이션, 반응형 배치, SHAP 개발 상태를 확인했다.
-- 별도 mock 리서치 API와 실제 Edge에서 진행 중 버튼이 활성화됨을 확인했다.
-  B 재클릭은 A 시작 약 1.16초 뒤 전달되어 busy를 받았고 A는 약 8초 뒤 완료했다.
-  성공 재사용·페이지 이동에서 추가 POST 없음, 1440/390px 배치도 확인했다.
-  이는 해당 환경의 관찰이며 즉시 전달·서버 취소를 보장하는 계약이 아니다.
-- 기본 Compose build/up/wait, 두 서비스 healthy, `scripts/smoke.py`, 실제 HTTP와 브라우저에서
-  빈 질문 422 및 정상 질문 503 `research_key_missing` 안내 통과. 컨테이너 키 부재를 먼저 확인했다.
-- 사용자 DB는 SQLite `mode=ro&immutable=1`로 설정 메타데이터만 확인했다:
-  `financial_news`, 384차원, all-MiniLM-L6-v2/default, schema의 cosine.
-  Chroma로 사용자 DB를 열거나 검색·변경하지 않았다. 실제 Claude·임베딩 실행과 5초 성능은 미검증이다.
-- 선택 investment/research overlay는 `config --quiet`만 확인했다. 별도 `Dockerfile.investment`
-  빌드 및 실제 모델·DB·캐시를 마운트한 전체 운영 검증은 미실행이다.
-
-```powershell
-.venv/Scripts/python.exe -m black --check --workers 1 backend frontend tests scripts
-.venv/Scripts/python.exe -m flake8 backend frontend tests scripts
-.venv/Scripts/python.exe -m pytest -q -rs --basetemp=artifacts/pytest-pr15-final -o cache_dir=artifacts/pytest-cache-pr15-final --junitxml=artifacts/pytest-pr15-final.xml
-.venv/Scripts/python.exe -X utf8 artifacts/check_pr15_ui.py
-.venv/Scripts/python.exe -X utf8 artifacts/check-research-reuse-browser.py
-docker compose up --build -d --wait --wait-timeout 120
-.venv/Scripts/python.exe -X utf8 artifacts/check_pr15_compose.py
-```
-
-`artifacts/`의 mock 서버·스크린샷·JUnit 보고서는 검증 전용 로컬 자료이며 앱의 성공 대체 경로가 아니다.
-학교 스펙 §9~12의 Self-Correction·출처·API 계약·HTTP 화면·Docker·테스트와 관련된 통합이다.
-완료 후 실행 요약을 유지하며 스펙의 로그 항목을 실시간 스트리밍 구현으로 주장하지 않는다.
-요청당 5초는 필수 성능 기준이지만 이번 mock/오류 검사를 달성 근거로 사용하지 않는다.
-
-## 2026-11-03 PR #15 통합 검증
-
-기준은 `feature/12=6f5bad1`, `main=19a5c7c`다. 취소한 병합을 복원하지 않고 새로 병합했다.
-아래는 이번 코드에서 직접 실행한 로컬 검사이며, 뒤의 과거 작업 기록이나 GitHub CI 결과와 구분한다.
-
-- Black check(87개 파일), flake8, 로컬·두 Docker 컨테이너의 pip check 통과.
-- 전체 pytest: **284 passed, 1 skipped**(184.73초). skip은 미배포 공유 데이터가 필요한
-  `test_real_news_is_preserved_in_hybrid_input`이다. 투자 계약, 단일 리서치 라우트,
-  입력/상태/오류, DB·임베딩, timeout·busy, 세션 재사용 및 페이지 회귀를 포함한다.
-- `scripts/check_ui.py`는 별도 mock 투자 HTTP 서버와 실제 Edge에서 기본·`--dev` 경로를 통과했다.
-  6개 메뉴, 필터, 애니메이션, 반응형 배치, SHAP 개발 상태를 확인했다.
-- 별도 mock 리서치 API와 실제 Edge에서 진행 중 버튼이 활성화됨을 확인했다.
-  B 재클릭은 A 시작 약 1.16초 뒤 전달되어 busy를 받았고 A는 약 8초 뒤 완료했다.
-  성공 재사용·페이지 이동에서 추가 POST 없음, 1440/390px 배치도 확인했다.
-  이는 해당 환경의 관찰이며 즉시 전달·서버 취소를 보장하는 계약이 아니다.
-- 기본 Compose build/up/wait, 두 서비스 healthy, `scripts/smoke.py`, 실제 HTTP와 브라우저에서
-  빈 질문 422 및 정상 질문 503 `research_key_missing` 안내 통과. 컨테이너 키 부재를 먼저 확인했다.
-- 사용자 DB는 SQLite `mode=ro&immutable=1`로 설정 메타데이터만 확인했다:
-  `financial_news`, 384차원, all-MiniLM-L6-v2/default, schema의 cosine.
-  Chroma로 사용자 DB를 열거나 검색·변경하지 않았다. 실제 Claude·임베딩 실행과 5초 성능은 미검증이다.
-- 선택 investment/research overlay는 `config --quiet`만 확인했다. 별도 `Dockerfile.investment`
-  빌드 및 실제 모델·DB·캐시를 마운트한 전체 운영 검증은 미실행이다.
-
-```powershell
-.venv/Scripts/python.exe -m black --check --workers 1 backend frontend tests scripts
-.venv/Scripts/python.exe -m flake8 backend frontend tests scripts
-.venv/Scripts/python.exe -m pytest -q -rs --basetemp=artifacts/pytest-pr15-final -o cache_dir=artifacts/pytest-cache-pr15-final --junitxml=artifacts/pytest-pr15-final.xml
-.venv/Scripts/python.exe -X utf8 artifacts/check_pr15_ui.py
-.venv/Scripts/python.exe -X utf8 artifacts/check-research-reuse-browser.py
-docker compose up --build -d --wait --wait-timeout 120
-.venv/Scripts/python.exe -X utf8 artifacts/check_pr15_compose.py
-```
-
-`artifacts/`의 mock 서버·스크린샷·JUnit 보고서는 검증 전용 로컬 자료이며 앱의 성공 대체 경로가 아니다.
-학교 스펙 §9~12의 Self-Correction·출처·API 계약·HTTP 화면·Docker·테스트와 관련된 통합이다.
-완료 후 실행 요약을 유지하며 스펙의 로그 항목을 실시간 스트리밍 구현으로 주장하지 않는다.
-요청당 5초는 필수 성능 기준이지만 이번 mock/오류 검사를 달성 근거로 사용하지 않는다.
+- `frontend/statistics_client.py`는 기존 `API_BASE_URL`로 `GET /performance/statistics`를
+  한 번 호출한다. connect 3초/read 10초 timeout, 자동 재시도·프론트 캐시 없음.
+  최초 진입·페이지 재진입·명시적 새로고침 때 조회하며 투자 모델 및 전체 ready 상태로 차단하지 않는다.
+- One-way와 Two-way 응답을 별도로 검증하고 서버 계산값을 표시한다. 검증 식별에는
+  `test`, `groups_label`, `factors`를 사용한다. 일부 검증 생략은 허용하며 알 수 없는 검정은
+  개수를 안내하고 제외한다. 알려진 검정의 계약 위반은 잘못된 응답으로 처리한다.
+- `statistics_view.py`는 표시 단위와 표·평균 차트를 구성한다. 원시 표본을 추정하거나
+  통계 검정을 재계산하지 않는다. 사후검정은 직접 객체/요인별 객체 구조를 각각 처리한다.
+  Tukey 평균차는 그룹 2−그룹 1이며 신뢰구간과 함께 %p로 표시한다.
+- null, 비유의, 사후검정 미제공, 유의한 비교 쌍 없음, 부분 결과를 구분한다.
+  평가 기간과 실행 ID는 응답에 없어 다른 파일에서 추정하지 않는다.
+  표본 출처·가정 점검·독립성·보조 검정은 제공된 범위에서 표시한다.
+- `tests/test_statistics_frontend.py`는 HTTP 오류와 계약, 값·단위·판정 표시,
+  부분 결과·새로고침·메뉴 이동 및 저장 파일을 읽는 FastAPI 라우터를 검사한다.
+  `scripts/smoke.py`는 모델·결과가 없는 Docker의 실제 HTTP 503 안내도 검사한다.
 
 ## PR CI
 
@@ -165,52 +108,6 @@ GitHub에서 첫 PR의 CI 실행 후 기본 브랜치의 Settings → Rules → 
 `quality`, `docker-smoke`를 지정한다. 상태 검사 목록에서는 `CI` 워크플로의
 해당 이름을 선택한다. 워크플로 파일만 추가해도 병합 차단 규칙이 자동 설정되지는 않는다.
 기존 Issue 브랜치 워크플로와 Issue/PR 템플릿은 유지한다.
-
-## 로컬 검증 결과 (2026-10-02)
-
-- `python -m pip check`, Black 검사, flake8 통과.
-- `python -m pytest -q`: 18개 케이스 통과(테스트 함수 10개, 매개변수 사례 포함).
-  Starlette TestClient의 httpx 사용에 대한 폐기 예정 경고 1건이 있다.
-  실제 금융·모델 기능 검증을 대신하는 테스트가 아니다.
-- `docker compose config --quiet`, `docker compose build` 통과.
-- `docker compose up --build -d --wait --wait-timeout 120`: 두 서비스 healthy.
-- 호스트의 `/health`: HTTP 200, `{"status":"ok","model_loaded":false}`.
-  Streamlit `/_stcore/health`: HTTP 200, `ok`.
-- dashboard 컨테이너 안에서 `scripts/smoke.py` 실행 통과:
-  실제 `api` 서비스 HTTP 호출, 모델 미로드 표시, 화면 새로고침 확인.
-  PowerShell에서는 UTF-8로 스크립트를 표준입력으로 전달했다.
-- 두 컨테이너의 `python -m pip check` 통과. `/app`에는 각 서비스의 소스와
-  requirements 파일만 있으며 `.env`, 데이터, 모델 파일이 없음을 확인했다.
-- Git 제외 규칙 확인: `.env`, `.env.local`, 실제 데이터 경로, 모델 파일,
-  Streamlit secrets, credentials는 제외된다. `.env.example`과 `.gitkeep`은 유지한다.
-- 첫 로컬 pytest 시도는 패키지 설치가 완료되기 전에 실행해 수집에 실패했다.
-  설치 완료 후 위 검사 전체를 다시 실행해 통과했다.
-- `docker compose down` 성공. 검증용 컨테이너와 프로젝트 네트워크를 종료·제거했다.
-- CI YAML 구조를 확인했다. GitHub 호스팅 runner의 실제 PR 워크플로 실행은
-  아직 미확인이다. 커밋·push 없이 로컬 코드와 Docker 실행을 검증했다.
-
-## 로컬 검증 결과 (2026-10-02)
-
-- `python -m pip check`, Black 검사, flake8 통과.
-- `python -m pytest -q`: 18개 케이스 통과(테스트 함수 10개, 매개변수 사례 포함).
-  Starlette TestClient의 httpx 사용에 대한 폐기 예정 경고 1건이 있다.
-  실제 금융·모델 기능 검증을 대신하는 테스트가 아니다.
-- `docker compose config --quiet`, `docker compose build` 통과.
-- `docker compose up --build -d --wait --wait-timeout 120`: 두 서비스 healthy.
-- 호스트의 `/health`: HTTP 200, `{"status":"ok","model_loaded":false}`.
-  Streamlit `/_stcore/health`: HTTP 200, `ok`.
-- dashboard 컨테이너 안에서 `scripts/smoke.py` 실행 통과:
-  실제 `api` 서비스 HTTP 호출, 모델 미로드 표시, 화면 새로고침 확인.
-  PowerShell에서는 UTF-8로 스크립트를 표준입력으로 전달했다.
-- 두 컨테이너의 `python -m pip check` 통과. `/app`에는 각 서비스의 소스와
-  requirements 파일만 있으며 `.env`, 데이터, 모델 파일이 없음을 확인했다.
-- Git 제외 규칙 확인: `.env`, `.env.local`, 실제 데이터 경로, 모델 파일,
-  Streamlit secrets, credentials는 제외된다. `.env.example`과 `.gitkeep`은 유지한다.
-- 첫 로컬 pytest 시도는 패키지 설치가 완료되기 전에 실행해 수집에 실패했다.
-  설치 완료 후 위 검사 전체를 다시 실행해 통과했다.
-- `docker compose down` 성공. 검증용 컨테이너와 프로젝트 네트워크를 종료·제거했다.
-- CI YAML 구조를 확인했다. GitHub 호스팅 runner의 실제 PR 워크플로 실행은
-  아직 미확인이다. 커밋·push 없이 로컬 코드와 Docker 실행을 검증했다.
 
 ## CD에서 결정할 사항
 
@@ -291,6 +188,14 @@ Chroma가 내부 클라이언트를 재사용할 수 있어 프로세스 내 리
 현재 실행 명령처럼 단일 worker를 기준으로 한다. 여러 worker/프로세스의 공유 DB 운영은 후속 검증 대상이다.
 
 ### 시간 제한과 성능 검증
+
+리뷰에서 analyst(`claude-sonnet-5-5`, medium effort, 최대 출력 8,000토큰)의 지연 측정을
+요청했지만 현재 실측 근거는 없다. 8,000은 출력 상한이며 매번 그만큼 생성한다는 뜻은 아니다.
+20초의 적정성을 검증했다고 주장하지 않으며, 기존 결정대로 timeout·SDK 재시도 0회를 유지한다.
+비용이 승인된 별도 검증에서 동일 질문·기준일·근거와 설정으로 planner/analyst 호출별 경과 시간,
+성공·timeout, 실제 출력 토큰을 기록하고 냉시작/반복 실행의 p50·p95와 전체 지연을 구분해야 한다.
+실제 timeout이 확인된 경우에만 역할별 제한을 재검토한다. 자동 재시도 추가는 비용·중복 호출과
+기존 재시도 금지 결정을 함께 검토해야 하므로 이번 리뷰 수정에는 포함하지 않는다.
 
 설치된 Anthropic SDK 기본값은 호출당 600초·재시도 2회였다.
 API와 CLI 기본 LLM 생성에는 20초 timeout과 재시도 0회를 명시했다.
@@ -383,7 +288,7 @@ POST 자동 재시도·redirect 추적·샘플 성공 대체는 하지 않는다
 사용자가 명시적으로 제출하고 마지막 성공과 다른 요청일 때만 새 POST를 보낸다.
 재클릭·페이지 이동·연결 종료가 서버의 진행 중 분석이나 유료 호출을 취소/재시작한다는 보장은 없다.
 
-### 마지막 성공 결과의 세션 재사용 (2026-10-30)
+### 마지막 성공 결과의 세션 재사용
 
 개인용 화면에서 반복 제출의 시간·비용 낭비를 줄이기 위해 영구 이력 대신 마지막 성공 한 개만 임시 보관한다.
 `research_outcome`은 현재 제출의 질문·기준일·결과/오류·재사용 여부를 표시하고,
@@ -414,52 +319,8 @@ API에 데이터·모델·분석 버전 식별 계약이 없으므로 같은 주
 처리 중 재클릭은 Streamlit 실행·rerun 상황에 따라 지연되거나 합쳐질 수 있으므로 클릭마다 즉시 전달을 보장하지 않는다.
 진행 중 rerun으로 중단된 화면 실행은 이전 응답을 저장/표시하지 못할 수도 있지만 서버 작업의 취소를 의미하지 않는다.
 
-검증 결과 (2026-10-30):
-
-- 전체 pytest **252개 통과**(158.17초). 같은 요청/앞뒤 공백 재사용, 다른 질문·문장부호·대소문자·내부 공백·기준일의
-  새 요청, A→B→A 교체, 실패/근거 부족 후 A 복원, 새 세션 격리, API 주소 변경 무효화와 기존 페이지 회귀를 확인했다.
-  관련 검사 첫 실행은 95개 통과·1개 초기화 timeout이었다. 분석 호출 전 포트폴리오 초기 렌더링이 10초를 넘겼으며,
-  해당 테스트 단독 재실행과 최종 전체 검사는 제한/검증을 완화하지 않고 통과했다.
-- Black 55개 파일·flake8·pip check·diff 검사 통과. Black의 샌드박스 종료 지연은 해당 실행을 정리한 뒤
-  일반 권한의 `--check --workers 1`로 검증했다.
-- 실제 Edge + 별도 localhost mock HTTP 서버로 8초 지연 응답 중 재클릭을 시험했다.
-  버튼과 질문 입력이 활성화됐고, B 제출은 A 시작 약 1.08초 후 도착해 mock `research_busy`를 받았다.
-  A는 8초 뒤 서버에서 완료됐으며 화면은 B의 busy 안내를 유지했다. 관찰한 POST는 명시적 두 제출의 두 건이었다.
-  이는 현재 Streamlit 실행 환경에서의 관찰이며 실제 Claude/DB 서버의 취소·재시작 또는 모든 클릭의 즉시 전달 보장이 아니다.
-- 같은 브라우저 세션의 성공 재제출은 추가 HTTP 없이 재사용됐고, ANOVA 왕복 후에도 결과가 유지됐다.
-  1440/390px 화면의 6개 메뉴·기내 경계·가로 넘침·화면 예외를 검사하고 캡처를 확인했다.
-  성공 응답은 테스트 서버가 만든 명시적인 MOCK 데이터이며 운영 화면에 fallback을 넣지 않았다.
-  재현 스크립트와 캡처: `artifacts/check-research-reuse-browser.py`, `artifacts/ui/research-reuse/` (Git 제외).
-- 별도 Compose 프로젝트 `first-class-research-reuse-check`(18013/18513)의 build·wait·두 서비스 healthy,
-  컨테이너 내부 기존 `scripts/smoke.py`의 실제 health HTTP·폼·기본일·6개 메뉴 검사 통과.
-  검증용 Streamlit/mock 서버·Compose 컨테이너만 종료했다. 기존 서버는 종료하지 않았다.
-- 실제 Claude 호출·모델 다운로드·뉴스 수집·사용자 DB 수정은 하지 않았다. 실제 분석 성능·5초 기준과
-  실제 외부 호출, Docker RAG 키·DB·임베딩 환경은 별도 후속 검증이다.
-
-검증 결과 (2026-10-30):
-
-- 전체 pytest **252개 통과**(158.17초). 같은 요청/앞뒤 공백 재사용, 다른 질문·문장부호·대소문자·내부 공백·기준일의
-  새 요청, A→B→A 교체, 실패/근거 부족 후 A 복원, 새 세션 격리, API 주소 변경 무효화와 기존 페이지 회귀를 확인했다.
-  관련 검사 첫 실행은 95개 통과·1개 초기화 timeout이었다. 분석 호출 전 포트폴리오 초기 렌더링이 10초를 넘겼으며,
-  해당 테스트 단독 재실행과 최종 전체 검사는 제한/검증을 완화하지 않고 통과했다.
-- Black 55개 파일·flake8·pip check·diff 검사 통과. Black의 샌드박스 종료 지연은 해당 실행을 정리한 뒤
-  일반 권한의 `--check --workers 1`로 검증했다.
-- 실제 Edge + 별도 localhost mock HTTP 서버로 8초 지연 응답 중 재클릭을 시험했다.
-  버튼과 질문 입력이 활성화됐고, B 제출은 A 시작 약 1.08초 후 도착해 mock `research_busy`를 받았다.
-  A는 8초 뒤 서버에서 완료됐으며 화면은 B의 busy 안내를 유지했다. 관찰한 POST는 명시적 두 제출의 두 건이었다.
-  이는 현재 Streamlit 실행 환경에서의 관찰이며 실제 Claude/DB 서버의 취소·재시작 또는 모든 클릭의 즉시 전달 보장이 아니다.
-- 같은 브라우저 세션의 성공 재제출은 추가 HTTP 없이 재사용됐고, ANOVA 왕복 후에도 결과가 유지됐다.
-  1440/390px 화면의 6개 메뉴·기내 경계·가로 넘침·화면 예외를 검사하고 캡처를 확인했다.
-  성공 응답은 테스트 서버가 만든 명시적인 MOCK 데이터이며 운영 화면에 fallback을 넣지 않았다.
-  재현 스크립트와 캡처: `artifacts/check-research-reuse-browser.py`, `artifacts/ui/research-reuse/` (Git 제외).
-- 별도 Compose 프로젝트 `first-class-research-reuse-check`(18013/18513)의 build·wait·두 서비스 healthy,
-  컨테이너 내부 기존 `scripts/smoke.py`의 실제 health HTTP·폼·기본일·6개 메뉴 검사 통과.
-  검증용 Streamlit/mock 서버·Compose 컨테이너만 종료했다. 기존 서버는 종료하지 않았다.
-- 실제 Claude 호출·모델 다운로드·뉴스 수집·사용자 DB 수정은 하지 않았다. 실제 분석 성능·5초 기준과
-  실제 외부 호출, Docker RAG 키·DB·임베딩 환경은 별도 후속 검증이다.
-
-Dockerfile의 기존 frontend COPY와 .dockerignore가 수정 파일들을 이미 포함하므로
-이번 UI 연결을 위한 Docker/Compose 변경은 필요하지 않았다. scripts/smoke.py는 기존 health 검사 후
+Dockerfile의 frontend COPY와 .dockerignore가 화면 실행 파일을 포함한다.
+scripts/smoke.py는 health 검사 후
 리서치 폼·기본일·6개 링크를 확인하며 실제 분석을 제출하지 않아 키가 있는 환경에서도 유료 호출을 하지 않는다.
 정상 응답·근거 부족·오류·재실행·안전한 렌더링은 테스트 내부 mock으로 확인한다.
 
@@ -469,37 +330,3 @@ Dockerfile의 기존 frontend COPY와 .dockerignore가 수정 파일들을 이�
 
 후속 작업은 실제 Claude·기존 DB 전체 실행, 실제 처리 시간·5초 성능 검증,
 Docker RAG 의존성·키·DB·임베딩 캐시 구성이다. 화면 로딩 표시나 빠른 오류 응답을 성능 달성으로 보지 않는다.
-
-### 연결 검증 결과 (2026-10-29)
-
-- HTTP 클라이언트·Streamlit AppTest 관련 79개 통과, 최종 전체 pytest 235개 통과(111.36초).
-  Black 55개 파일, flake8, pip check, staged/unstaged diff --check 통과.
-- `first-class-research-ui-check` 별도 Compose 프로젝트(18012/18512)에서 build·wait·두 서비스 healthy 확인.
-  컨테이너 내부 `scripts/smoke.py`의 실제 health HTTP, 페이지 새로고침, 리서치 폼·기준일·6개 링크 확인 통과.
-- 첫 smoke 실패는 PowerShell 파이프의 한글 인코딩 문제였다. UTF-8 전달 후에는 날짜 최소 연도의
-  Linux 직렬화 문제가 드러났으며, UI 날짜 하한 수정·재빌드 후 통과했다. 기존 테스트를 완화하지 않았다.
-- 로컬 설정과 검증 API 컨테이너의 키 부재를 값 출력 없이 확인했다. 실제 Edge에서 빈 질문 → 422,
-  정상 질문 → 503 research_key_missing 안내를 확인했다. API access log상 POST는 두 번이고,
-  같은 세션 페이지 이동·결과 재표시와 다른 페이지 진입은 추가 POST를 만들지 않았다.
-- 1440/900/390px × 6개 페이지를 확인했다. 분석 5개 페이지의 프레임·좌석 경계·활성 메뉴·6개 링크와
-  전체 페이지의 가로 넘침·화면 예외를 검사했다. 캡처도 직접 확인했다.
-  자료: `artifacts/ui/research-api/`, 검증 스크립트: `artifacts/research-ui-browser-check.py` (Git 제외).
-- 검증용 컨테이너와 네트워크만 정리했다. 성공·근거 부족·외부 오류·timeout은 테스트 mock 검증이며
-  실제 Claude·사용자 DB·모델·5초 성능은 미검증이다. 실제 성공 리포트의 브라우저 검증도 아직 하지 않았다.
-
-### 연결 검증 결과 (2026-10-29)
-
-- HTTP 클라이언트·Streamlit AppTest 관련 79개 통과, 최종 전체 pytest 235개 통과(111.36초).
-  Black 55개 파일, flake8, pip check, staged/unstaged diff --check 통과.
-- `first-class-research-ui-check` 별도 Compose 프로젝트(18012/18512)에서 build·wait·두 서비스 healthy 확인.
-  컨테이너 내부 `scripts/smoke.py`의 실제 health HTTP, 페이지 새로고침, 리서치 폼·기준일·6개 링크 확인 통과.
-- 첫 smoke 실패는 PowerShell 파이프의 한글 인코딩 문제였다. UTF-8 전달 후에는 날짜 최소 연도의
-  Linux 직렬화 문제가 드러났으며, UI 날짜 하한 수정·재빌드 후 통과했다. 기존 테스트를 완화하지 않았다.
-- 로컬 설정과 검증 API 컨테이너의 키 부재를 값 출력 없이 확인했다. 실제 Edge에서 빈 질문 → 422,
-  정상 질문 → 503 research_key_missing 안내를 확인했다. API access log상 POST는 두 번이고,
-  같은 세션 페이지 이동·결과 재표시와 다른 페이지 진입은 추가 POST를 만들지 않았다.
-- 1440/900/390px × 6개 페이지를 확인했다. 분석 5개 페이지의 프레임·좌석 경계·활성 메뉴·6개 링크와
-  전체 페이지의 가로 넘침·화면 예외를 검사했다. 캡처도 직접 확인했다.
-  자료: `artifacts/ui/research-api/`, 검증 스크립트: `artifacts/research-ui-browser-check.py` (Git 제외).
-- 검증용 컨테이너와 네트워크만 정리했다. 성공·근거 부족·외부 오류·timeout은 테스트 mock 검증이며
-  실제 Claude·사용자 DB·모델·5초 성능은 미검증이다. 실제 성공 리포트의 브라우저 검증도 아직 하지 않았다.

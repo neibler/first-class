@@ -260,6 +260,39 @@ def test_plan_keeps_requested_windows_when_data_is_long_enough():
     assert len(windows) == 3
 
 
+def test_cli_defaults_to_the_rolling_scheme_required_by_the_spec():
+    """기본 윈도우 방식은 rolling 이어야 한다.
+
+    과제 명세와 data_process/splits/ 는 학습 시작이 매 window 마다 이동한다
+    (2019~2022 -> 2020~2023). 기본값이 expanding 이면 학습 시작이 가장 이른
+    날짜에 고정된 채 보고서에 실려도 아무도 알아채지 못한다.
+    """
+    from backend.performance import run_analysis
+
+    args = run_analysis.parse_args(["--walk-forward"])
+    assert args.window_scheme == "rolling"
+    assert (args.window_scheme == "expanding" and not args.rolling) is False
+
+    explicit = run_analysis.parse_args(
+        ["--walk-forward", "--window-scheme", "expanding"]
+    )
+    assert (explicit.window_scheme == "expanding" and not explicit.rolling) is True
+
+    # 구버전 호환: --rolling 은 계속 rolling 을 뜻한다.
+    legacy = run_analysis.parse_args(["--walk-forward", "--rolling"])
+    assert (legacy.window_scheme == "expanding" and not legacy.rolling) is False
+
+
+def test_expanding_scheme_is_flagged_so_it_cannot_reach_a_report_silently():
+    _, rolling = walk_forward.plan_windows(1826, lookback=20, expanding=False)
+    assert rolling["scheme"] == "rolling"
+    assert rolling["scheme_note"] is None
+
+    _, expanding = walk_forward.plan_windows(1826, lookback=20, expanding=True)
+    assert expanding["scheme"] == "expanding"
+    assert "rolling" in expanding["scheme_note"]
+
+
 def test_plan_without_shrink_still_raises():
     with pytest.raises(ValueError):
         walk_forward.plan_windows(752, lookback=20, allow_shrink=False)
@@ -1030,12 +1063,18 @@ def _run_in_layout(tmp_path, mutate, snippet):
     )
     mutate(workspace)
     return subprocess.run(
-        [sys.executable, "-c", snippet],
+        [sys.executable, "-X", "utf8", "-c", snippet],
         cwd=workspace,
         capture_output=True,
         text=True,
         encoding="utf-8",
-        env={**os.environ, "PYTHONPATH": ".", "PYTHONIOENCODING": "utf-8"},
+        # Minimal env: inherited flags such as PYTHONOPTIMIZE would strip the
+        # snippet's asserts. Windows needs SystemRoot for socket initialization.
+        env={
+            "PYTHONPATH": ".",
+            "PATH": os.environ.get("PATH", ""),
+            **{k: os.environ[k] for k in ("SystemRoot",) if k in os.environ},
+        },
     )
 
 

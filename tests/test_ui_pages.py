@@ -1,7 +1,7 @@
 import pytest
 from streamlit.testing.v1 import AppTest
 
-from frontend import api_client, performance_client
+from frontend import api_client, performance_client, statistics_client
 
 
 @pytest.fixture
@@ -12,6 +12,11 @@ def page(monkeypatch):
         )
 
     monkeypatch.setattr(performance_client, "get_backtest", no_backtest)
+    monkeypatch.setattr(
+        statistics_client,
+        "get_statistics",
+        lambda: statistics_client.StatisticsResult([]),
+    )
     monkeypatch.setattr(
         api_client,
         "get_health",
@@ -41,6 +46,9 @@ def test_navigation_all_six_pages_and_placeholder_scope(page):
         elif slug == "performance":
             assert "백테스트 분석 결과" in page.warning[0].value
             assert page.button(key="refresh_performance")
+        elif slug == "anova":
+            assert page.info[0].value == "표시할 통계 검증 결과가 없습니다."
+            assert page.button(key="refresh_statistics")
         elif slug != "shap":
             assert page.info[0].value == "화면 준비 중"
             assert not page.selectbox
