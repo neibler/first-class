@@ -81,6 +81,8 @@ backend/performance/**
 !backend/performance/*.py
 !backend/performance/requirements.txt
 !frontend/research_client.py
+!frontend/statistics_client.py
+!frontend/statistics_view.py
 
 !config/
 !config/agent.yaml

@@ -39,4 +39,5 @@ health_panel(
     sample=page.url_path == "shap",
     investment=cockpit,
     research=page.url_path == "research",
+    statistics=page.url_path == "anova",
 )

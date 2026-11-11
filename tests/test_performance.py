@@ -1030,11 +1030,13 @@ def _run_in_layout(tmp_path, mutate, snippet):
     )
     mutate(workspace)
     return subprocess.run(
-        [sys.executable, "-c", snippet],
+        [sys.executable, "-X", "utf8", "-c", snippet],
         cwd=workspace,
         capture_output=True,
         text=True,
-        env={"PYTHONPATH": ".", "PATH": os.environ.get("PATH", "")},
+        encoding="utf-8",
+        # Windows needs SystemRoot for socket initialization during imports.
+        env={**os.environ, "PYTHONPATH": "."},
     )
 
 
