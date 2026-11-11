@@ -1035,8 +1035,13 @@ def _run_in_layout(tmp_path, mutate, snippet):
         capture_output=True,
         text=True,
         encoding="utf-8",
-        # Windows needs SystemRoot for socket initialization during imports.
-        env={**os.environ, "PYTHONPATH": "."},
+        # Minimal env: inherited flags such as PYTHONOPTIMIZE would strip the
+        # snippet's asserts. Windows needs SystemRoot for socket initialization.
+        env={
+            "PYTHONPATH": ".",
+            "PATH": os.environ.get("PATH", ""),
+            **{k: os.environ[k] for k in ("SystemRoot",) if k in os.environ},
+        },
     )
 
 
