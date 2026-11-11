@@ -9,7 +9,7 @@ from .model_factory import create_model, load_model
 from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common.logger import configure
 from stable_baselines3.common.monitor import Monitor
-from .settings import SCHEMA_VERSION, SOURCE_DIR, write_json
+from .settings import SCHEMA_VERSION, SOURCE_DIR, write_json, risk_score_enabled
 from .data_loader import fingerprint
 from .portfolio_env import PortfolioEnv
 from .preprocessing import FeatureScaler
@@ -77,7 +77,8 @@ def feature_names(data, config):
     for kind in ["rsi_div_100", "macd", "current_weight"]:
         names.extend(f"{kind}_{a.lower()}" for a in data.assets)
     names.extend(f"macro_{name}" for name in data.macros)
-    names.extend(f"risk_score_{a.lower()}" for a in data.assets)
+    if risk_score_enabled(config):
+        names.extend(f"risk_score_{a.lower()}" for a in data.assets)
     return names + ["drawdown", "mdd", "rebalance_phase"]
 
 
@@ -100,17 +101,14 @@ def schema_for(data, config):
         "macros": data.macros,
         "lookback": config["lookback"],
         "observation_lag": config["observation_lag"],
-        "observation_size": config["lookback"] * len(data.assets)
-        + 4 * len(data.assets)
-        + len(data.macros)
-        + 3,
+        "observation_size": len(feature_names(data, config)),
         "order": [
             "log_return_history",
             "rsi_div_100",
             "macd",
             "weights",
             "macro",
-            "risk_score",
+            *(["risk_score"] if risk_score_enabled(config) else []),
             "drawdown",
             "mdd",
             "rebalance_phase",
@@ -129,6 +127,7 @@ def train_model(data, config, train_end, seed, output, resume=None):
         old_config = json.loads(
             (Path(resume) / "config.json").read_text(encoding="utf-8")
         )
+        old_config.setdefault("include_risk_score", True)
         ignored = {"total_timesteps", "checkpoint_steps"}
         if any(old_config.get(k) != config[k] for k in config if k not in ignored):
             raise ValueError(

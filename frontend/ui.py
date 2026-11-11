@@ -35,6 +35,7 @@ PAGE_INFO = [
     ("portfolio", "포트폴리오 현황", "dashboard"),
     ("performance", "강화학습 성과", "trending_up"),
     ("shap", "SHAP 해석", "hub"),
+    ("correlation", "자산 관계 분석", "compare_arrows"),
     ("research", "에이전트 리서치", "travel_explore"),
     ("anova", "ANOVA 검증", "analytics"),
     ("risk", "리스크 모니터링", "shield"),

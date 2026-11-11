@@ -11,7 +11,12 @@ from .portfolio_env import PortfolioEnv
 from .training import load_bundle
 from .accounting import safeguard_breached
 from .prediction import PredictionSession
-from .rebalancing import get_rebalance_reasons
+from .rebalancing import (
+    get_rebalance_reasons,
+    filter_target_weights,
+    portfolio_weight_distance,
+    MIN_WEIGHT_THRESHOLD,
+)
 
 
 def resolve_run(path=None):
@@ -89,11 +94,19 @@ def predict_weights(data, config, models, scaler, state=None, predictors=None):
     )
     # All policies compute a fresh target every day, even when no trade is due.
     # A latched safety stop needs no further model calls until explicit reset.
-    target = (
+    raw_target = (
         np.zeros(len(data.assets))
         if stopped
         else np.mean([p.predict(obs, env) for p in predictors], axis=0)
     )
+    target = (
+        raw_target.copy()
+        if stopped
+        else filter_target_weights(
+            raw_target, config.get("min_weight_threshold", MIN_WEIGHT_THRESHOLD)
+        )
+    )
+    distance = portfolio_weight_distance(held, target)
     reasons = get_rebalance_reasons(
         data.dates[-1],
         data.dates[-2] if len(data.dates) > 1 else None,
@@ -117,7 +130,11 @@ def predict_weights(data, config, models, scaler, state=None, predictors=None):
     )
     return {
         "as_of_date": date,
-        "model_target_weights": dict(zip(data.assets, map(float, target))),
+        "model_target_weights": dict(zip(data.assets, map(float, raw_target))),
+        "raw_target_weights": dict(zip(data.assets, map(float, raw_target))),
+        "filtered_target_weights": dict(zip(data.assets, map(float, target))),
+        "portfolio_weight_distance": distance,
+        "max_risk_score": float(data.risk[-1].max()),
         "rebalance_reasons": reasons,
         "should_rebalance": should_trade,
         "mode": mode,

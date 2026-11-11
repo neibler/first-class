@@ -52,7 +52,10 @@ def run_backtest(data, config, start, end, models=None, scaler=None, strategy="p
         elif strategy in ("equal_rebalanced", "equal_buy_hold", "spy_buy_hold"):
             weights = initial_target
             obs, _, terminated, truncated, _ = env.step_weights(
-                weights, execute=not (strategy.endswith("buy_hold") and env.history)
+                weights,
+                execute=not (strategy.endswith("buy_hold") and env.history),
+                force=not env.history,
+                apply_filter=False,
             )
         else:
             raise ValueError(f"Unknown strategy: {strategy}")
@@ -82,6 +85,11 @@ def run_backtest(data, config, start, end, models=None, scaler=None, strategy="p
             cost_amount=0.0,
             rebalanced=False,
             should_rebalance=False,
+            raw_target_weights={a: 0.0 for a in data.assets},
+            filtered_target_weights={a: 0.0 for a in data.assets},
+            current_weights={a: 0.0 for a in data.assets},
+            portfolio_weight_distance=0.0,
+            max_risk_score=float(data.risk[t - 1].max()),
             rebalance_reasons=["mdd_stop"],
             rebalance_reason="mdd_stop",
             cash_weight=1.0,
@@ -96,6 +104,9 @@ def run_backtest(data, config, start, end, models=None, scaler=None, strategy="p
                 "current_weight",
                 "target_weight",
                 "model_target_weight",
+                "raw_target_weight",
+                "filtered_target_weight",
+                "decision_current_weight",
                 "weight_change",
             ]:
                 row[f"{prefix}_{asset.lower()}"] = 0.0

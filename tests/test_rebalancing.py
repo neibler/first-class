@@ -35,9 +35,9 @@ def test_risk_boundary(risk, expected):
 
 
 @pytest.mark.parametrize(
-    "difference,expected", [(0.05, ["weight_drift"]), (0.049, ["hold"])]
+    "difference,expected", [(0.10, ["portfolio_weight_distance"]), (0.099, ["hold"])]
 )
-def test_weight_drift_boundary(difference, expected):
+def test_portfolio_distance_boundary(difference, expected):
     assert reasons(target=(0.5 + difference, 0.5 - difference)) == expected
 
 
@@ -56,9 +56,9 @@ def test_monthly_uses_first_trading_day_not_fixed_interval():
 
 def test_simultaneous_reasons_and_stop_priority():
     args = dict(
-        date="2024-06-03", previous="2024-05-31", target=(0.55, 0.45), risk=(0.7, 0.1)
+        date="2024-06-03", previous="2024-05-31", target=(0.60, 0.40), risk=(0.7, 0.1)
     )
-    assert reasons(**args) == ["monthly", "risk_score", "weight_drift"]
+    assert reasons(**args) == ["monthly", "risk_score", "portfolio_weight_distance"]
     assert reasons(**args, mdd=0.151) == ["mdd_stop"]
     assert reasons(stopped=True) == ["mdd_stop"]
 
@@ -93,7 +93,9 @@ def test_hold_allows_natural_price_drift_without_trading():
     assert row["portfolio_value"] == pytest.approx(1.05)
 
 
-@pytest.mark.parametrize("trigger", ["monthly", "risk_score", "weight_drift"])
+@pytest.mark.parametrize(
+    "trigger", ["monthly", "risk_score", "portfolio_weight_distance"]
+)
 def test_environment_triggers_fill_next_close_and_charge_existing_cost(trigger):
     env = environment(
         dates=(
@@ -105,8 +107,8 @@ def test_environment_triggers_fill_next_close_and_charge_existing_cost(trigger):
     target = [0.52, 0.48]
     if trigger == "risk_score":
         env.data.risk[env.t, 0] = 0.7
-    if trigger == "weight_drift":
-        target = [0.55, 0.45]
+    if trigger == "portfolio_weight_distance":
+        target = [0.60, 0.40]
     row = env.step_weights(target)[-1]
     assert row["rebalance_reasons"] == [trigger]
     assert row["rebalanced"]
@@ -200,7 +202,7 @@ def test_recurrent_memory_advances_on_hold_day():
     "key,value",
     [
         ("risk_rebalance_threshold", float("nan")),
-        ("weight_drift_threshold", -1),
+        ("portfolio_weight_distance_threshold", -1),
         ("max_drawdown", 1),
     ],
 )

@@ -14,6 +14,10 @@ from backend.investment_ai.data_loader import load_data, fingerprint
 from backend.investment_ai.model_runs import subset
 from backend.investment_ai.portfolio_env import PortfolioEnv
 from backend.investment_ai.prediction import PredictionSession
+from backend.investment_ai.rebalancing import (
+    filter_target_weights,
+    MIN_WEIGHT_THRESHOLD,
+)
 from backend.investment_ai.settings import bundle_input_root, ROOT
 from backend.investment_ai.training import load_bundle, feature_names
 
@@ -35,7 +39,15 @@ def policy_function(model, kind, env, state=None, episode_start=True):
                 episode_start=np.full(len(rows), episode_start, dtype=bool),
             )
         actions, _ = model.predict(rows, **kwargs)
-        return np.vstack([env.action_weights(a) for a in np.atleast_2d(actions)])
+        return np.vstack(
+            [
+                filter_target_weights(
+                    env.action_weights(a),
+                    env.config.get("min_weight_threshold", MIN_WEIGHT_THRESHOLD),
+                )
+                for a in np.atleast_2d(actions)
+            ]
+        )
 
     return predict
 
@@ -54,7 +66,8 @@ def replay(data, config, model, scaler, start, end):
         }
         target = session.predict(obs, env)
         obs, _, terminated, truncated, info = env.step_weights(target)
-        row.update(target=target, execution_date=str(data.dates[env.t])[:10])
+        filtered = np.array([info["filtered_target_weights"][a] for a in data.assets])
+        row.update(target=filtered, execution_date=str(data.dates[env.t])[:10])
         if info["rebalanced"] and not info["safeguard_triggered"]:
             rows.append(row)
         if terminated or truncated:

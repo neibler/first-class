@@ -4,9 +4,10 @@ import numpy as np
 import pandas as pd
 from .accounting import safeguard_breached
 
-REBALANCE_POLICY = "monthly_risk_drift_v1"
+REBALANCE_POLICY = "monthly_risk_distance_filtered_v2"
 RISK_REBALANCE_THRESHOLD = 0.7
-WEIGHT_DRIFT_THRESHOLD = 0.05
+MIN_WEIGHT_THRESHOLD = 0.03
+PORTFOLIO_WEIGHT_DISTANCE_THRESHOLD = 0.10
 MDD_STOP_THRESHOLD = 0.15
 ROUNDING_TOLERANCE = 1e-12
 
@@ -14,7 +15,8 @@ ROUNDING_TOLERANCE = 1e-12
 def validate_rebalancing(config):
     for key, default in (
         ("risk_rebalance_threshold", RISK_REBALANCE_THRESHOLD),
-        ("weight_drift_threshold", WEIGHT_DRIFT_THRESHOLD),
+        ("min_weight_threshold", MIN_WEIGHT_THRESHOLD),
+        ("portfolio_weight_distance_threshold", PORTFOLIO_WEIGHT_DISTANCE_THRESHOLD),
         ("max_drawdown", MDD_STOP_THRESHOLD),
     ):
         value = config.get(key, default)
@@ -22,7 +24,8 @@ def validate_rebalancing(config):
             isinstance(value, bool)
             or not isinstance(value, (int, float))
             or not np.isfinite(value)
-            or not 0 < value <= 1
+            or not 0 <= value <= 1
+            or (key != "min_weight_threshold" and value == 0)
             or (key == "max_drawdown" and value == 1)
         ):
             raise ValueError(f"Invalid {key}")
@@ -89,9 +92,52 @@ def get_rebalance_reasons(
     ):
         reasons.append("risk_score")
     if (
-        np.abs(target - current).max()
-        >= config.get("weight_drift_threshold", WEIGHT_DRIFT_THRESHOLD)
+        portfolio_weight_distance(current, target)
+        >= config.get(
+            "portfolio_weight_distance_threshold", PORTFOLIO_WEIGHT_DISTANCE_THRESHOLD
+        )
         - ROUNDING_TOLERANCE
     ):
-        reasons.append("weight_drift")
+        reasons.append("portfolio_weight_distance")
     return reasons or ["hold"]
+
+
+def filter_target_weights(raw_weights, threshold=MIN_WEIGHT_THRESHOLD):
+    """Drop strictly sub-threshold targets, then normalize; stable argmax fallback."""
+    raw = np.asarray(raw_weights, dtype=float)
+    if (
+        raw.ndim != 1
+        or not raw.size
+        or not np.isfinite(raw).all()
+        or np.any(raw < 0)
+        or not np.isclose(raw.sum(), 1)
+    ):
+        raise ValueError("Raw target weights must be nonnegative and sum to one")
+    validate_rebalancing({"min_weight_threshold": threshold})
+    filtered = np.where(raw >= threshold, raw, 0.0)
+    if filtered.sum() == 0:
+        filtered[np.argmax(raw)] = 1.0
+    else:
+        filtered /= filtered.sum()
+    return filtered
+
+
+def portfolio_weight_distance(current_weights, target_weights):
+    """ETF-only distance requested by policy; cash entry has distance 0.5.
+
+    For fully invested portfolios this equals one-way turnover. Execution fees
+    still use actual buy+sell turnover at the fill, including entry/liquidation.
+    """
+    current, target = np.asarray(current_weights, dtype=float), np.asarray(
+        target_weights, dtype=float
+    )
+    if (
+        current.ndim != 1
+        or not current.size
+        or current.shape != target.shape
+        or not np.isfinite([current, target]).all()
+        or np.any(current < 0)
+        or np.any(target < 0)
+    ):
+        raise ValueError("Invalid weights for portfolio distance")
+    return float(0.5 * np.abs(target - current).sum())

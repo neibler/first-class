@@ -48,14 +48,20 @@ def test_recurrent_perturbations_use_fixed_copied_memory():
             return result, state
 
     class Env:
+        config = {"min_weight_threshold": 0.03}
+
         def action_weights(self, row):
-            return row
+            return row / row.sum()
 
     state = (np.ones((1, 1, 2)), np.ones((1, 1, 2)))
     predict = policy_function(Model(), "recurrent_ppo", Env(), state, False)
     rows = np.array([[1.0, 2.0], [3.0, 4.0]])
-    np.testing.assert_equal(predict(rows), rows + 1)
-    np.testing.assert_equal(predict(rows), rows + 1)
+    np.testing.assert_allclose(
+        predict(rows), (rows + 1) / (rows + 1).sum(axis=1, keepdims=True)
+    )
+    np.testing.assert_allclose(
+        predict(rows), (rows + 1) / (rows + 1).sum(axis=1, keepdims=True)
+    )
     np.testing.assert_equal(state[0], 1)
 
 

@@ -1,41 +1,7 @@
-# 리밸런싱 정책: 매일 계산, 조건부 거래
+# 목표 비중 필터와 리밸런싱 v2
 
-`monthly_risk_drift_v1` 정책은 학습 환경, 백테스트, API/CLI 추론에 공통 적용됩니다.
-기존 모델의 observation/action 차원, softmax, reward, 비용 및 가치 계산은 유지합니다.
-
-## 판단 순서
-
-1. 누적 MDD가 `max_drawdown`(기본 0.15)을 **초과**했거나 이미 안전장치가
-   발동했다면 ETF 0%, cash 100%. 같은 episode에서는 reset 전 재진입하지 않습니다.
-2. 나머지 날은 모델 목표 비중을 매일 계산합니다. 아래 조건은 OR이며
-   동시에 만족한 모든 사유를 기록합니다.
-   - `monthly`: 직전 거래일과 당일의 월이 달라지는 월 첫 거래일.
-   - `risk_score`: 당일 15개 ETF 중 하나라도 위험 점수가 0.7 이상.
-   - `weight_drift`: 당일 현재 비중과 모델 목표의 차이가 하나라도 0.05 이상.
-3. 조건이 없으면 `hold`. 새 거래 없이 기존 보유 수량을 유지합니다.
-
-공통 함수는 `backend/investment_ai/rebalancing.py`의
-`get_rebalance_reasons()`와 `is_monthly_rebalance_day()`입니다.
-첫 입력 행에 직전 거래일이 없다면 달력상 1일만 월초로 확정합니다.
-중순에서 시작한 데이터에 임의로 월초 신호를 만들지 않습니다.
-15개 ETF를 대상으로 현금에서 시작할 때는 적어도 하나의 목표가 5%p보다
-크므로 비중 차이 조건으로 최초 매수가 가능합니다.
-
-## 관측과 체결 시점
-
-- t일 종가: t일까지의 정보로 모델 목표와 조건을 판단합니다.
-- 정상 리밸런싱: 기존 정책대로 t+1일 종가에서 체결합니다.
-- 체결 전 수익률은 기존 보유분에 귀속됩니다. 새 비중은 t+1→t+2부터 적용됩니다.
-- t+1 뉴스로 t일 결정을 바꾸지 않습니다.
-- MDD는 종가 기준으로 확인하고, 해당 종가에서 즉시 청산합니다.
-  체결 대기 주문보다 우선하며 반복 청산 비용을 부과하지 않습니다.
-- 무거래일에는 비용이 0이지만, 가격 변동으로 실제 보유 비중은 자연스럽게
-  변합니다. 매일 비중을 강제로 고정하는 거래는 하지 않습니다.
-
-`rebalance_days`는 기존 모델의 `rebalance_phase` 입력을 유지하기 위해 남아
-있으며 **거래 주기를 결정하지 않습니다**. 기존 입력 순서와 값의 계산 방식을
-불필요하게 바꾸지 않았습니다. buy-and-hold 벤치마크의 `execute=False`는 일반
-리밸런싱을 막지만 MDD 안전장치는 계속 적용됩니다.
+정책 버전: `monthly_risk_distance_filtered_v2`.
+관측/action 차원, softmax 원본 계산, reward, 거래비용·슬리피지·포트폴리오 회계는 유지합니다.
 
 ## 설정
 
@@ -43,55 +9,109 @@
 
 ```json
 {
+  "min_weight_threshold": 0.03,
+  "portfolio_weight_distance_threshold": 0.10,
   "risk_rebalance_threshold": 0.7,
-  "weight_drift_threshold": 0.05,
   "max_drawdown": 0.15
 }
 ```
 
-추론·재평가는 모델 번들의 `config.json`을 사용합니다. 새 두 항목이 없는 기존
-번들은 `rebalancing.py`의 상수 0.7/0.05를 기본값으로 사용합니다.
-`max_drawdown`은 기존 설정을 재사용합니다. 최상위 학습 config를 바꿔도 이미
-저장된 모델의 config는 자동으로 바뀌지 않습니다.
-경계값에는 1e-12 수준의 부동소수점 오차만 보정합니다. 따라서
-`0.55 - 0.50`은 5%p로 인정하고 `1 - 0.85`는 15% 초과로 보지 않습니다.
+- 최소 목표 비중은 0.01/0.03/0.05 등으로 비교할 수 있습니다. 0이면 필터를 끕니다.
+- 전체 거리 기준은 0.05/0.10/0.15 등으로 바꿀 수 있습니다.
+- 기존 `weight_drift_threshold` 개별 ETF 조건은 제거했고, 남아 있는 과거 번들의
+  해당 키도 실행 조건에 사용하지 않습니다.
+- 저장 모델의 추론·재평가는 해당 번들의 config를 읽습니다. 새 키가 없는 과거
+  번들은 기본 0.03/0.10을 사용합니다. 기존 모델 파일은 덮어쓰지 않습니다.
+- `rebalance_days`는 기존 observation의 phase 호환용이며 거래 주기를 결정하지 않습니다.
 
-## 결과 필드와 호환성
+## 하루 처리 순서
 
-API:
-- `model_target_weights`: 매일 계산한 모델 원래 목표. 안전장치 상태에서는 0.
-- `target_weights`: 거래 조건과 안전장치를 적용한 최종 실행 제안.
-  기존 API 의미를 유지하므로 hold에서는 현재 비중입니다.
-- `current_weights`: 전달된 실제 현재 보유 비중.
-- `rebalance_reasons`: `monthly`, `risk_score`, `weight_drift`, `mdd_stop`, `hold` 목록.
-- `should_rebalance`: 조건이 충족되어 다음 종가에 목표를 적용할지 여부.
-  당일 비중이 목표와 같아도 체결일까지 가격이 변할 수 있으므로 정상 조건이
-  충족되면 true입니다. 체결 시 비중 차이가 없으면 실제 거래·비용은 0입니다.
-  이미 현금 100%인 안전장치 상태에서는 false로 반복 청산을 막습니다.
-- API는 거래 주문을 전송하지 않습니다. `is_order=false`를 유지합니다.
+1. t일 종가까지 확정된 시장 정보와 가격 변화가 반영된 실제 보유 비중을 관측합니다.
+2. 모델 action을 softmax하여 raw 목표를 계산합니다. 앙상블은 raw 비중부터 평균냅니다.
+3. raw 비중이 0.03 미만인 ETF를 0으로 제거하고 나머지 합을 1로 재정규화합니다.
+   정확히 0.03은 유지합니다. 모두 제거되면 raw가 가장 큰 ETF 한 개를 100%로
+   유지하며, 동률은 고정 자산 순서의 첫 번째를 선택합니다.
+4. 당일 실제 비중과 필터 후 목표로 거리 `0.5 * sum(abs(target-current))`를 계산합니다.
+5. 월 첫 거래일 / 당일 최대 뉴스 점수 >= 0.7 / 거리 >= 0.10을 확인합니다.
+6. 누적 MDD > 0.15 또는 기존 안전장치 latch가 있으면 모두 무시하고 현금으로 전환합니다.
+7. 정상 조건이 하나라도 맞으면 목표를 다음 거래일 종가(t+1)에 체결합니다.
+   조건이 없으면 보유 수량 유지, 비용 0입니다.
 
-환경/history:
-- `rebalance_reasons`와 CSV용 `rebalance_reason`(`|`로 복수 사유 결합).
-- `rebalanced`: 실제 매매 또는 안전장치 청산이 발생했는지.
-- `model_target_weight_<ticker>`: 매일 계산한 목표.
-- 기존 `target_weight`, `previous_weight`, `current_weight`, 비용·가치 필드는 유지.
-- 자산별 CSV에도 `model_target_weight`와 `rebalance_reason`을 기록합니다.
-- stop 후 백테스트의 잔여 기간은 현금, 거래/비용 0으로 채웁니다.
+정상 거래의 다음 종가 체결 시간축은 기존 정책 그대로입니다. 체결 전 t→t+1 수익은
+기존 보유분으로 계산하고, 실제 거래량·비용은 t+1 가격으로 변한 비중을 기준으로
+기존 회계 함수에서 계산합니다. 목표 비중 거리 계산에 미래 가격·뉴스를 사용하지 않습니다.
+MDD가 체결 대기 중 악화하면 대기 매수를 취소하고 해당 종가에서 청산합니다.
+이미 현금인 경우 반복 비용을 청구하지 않으며 같은 episode에서는 reset 전 재진입하지 않습니다.
 
-## 기존 결과에 대한 주의
+거래가 없을 때 가격에 따라 실제 비중은 자연스럽게 변합니다. 현금/ETF 회계를 바꾸거나
+현재 비중을 목표에 맞추는 숨은 거래는 하지 않습니다.
 
-기존 모델 파일과 과거 평가 결과는 덮어쓰지 않습니다. 저장된 성과와 SHAP은
-이전 거래 정책의 결과일 수 있으므로 새 정책의 성과로 간주하지 않습니다.
-새 정책 평가에는 재평가가 필요하며, 정책에 맞춘 모델 최적화에는 재학습이
-필요합니다. 새 평가의 비교 그룹에는 정책 버전을 포함해 과거 정책 결과와
-같은 그룹으로 묶이지 않도록 합니다.
+## 거리와 현금
 
-## 검증
+ETF를 전부 보유한 포트폴리오끼리 비교하면 거리값은 one-way turnover와 같습니다.
+요청한 공식은 ETF만 포함하므로 현금 100%에서 최초 진입할 때는 0.5입니다.
+실제 최초 매수량은 1.0이고 비용은 실제 거래량에 부과합니다. 현금을 16번째 모델
+자산으로 추가하지 않습니다. MDD 상태에서는 ETF 합 0/cash 1, 나머지 체결 목표는 ETF 합 1입니다.
 
-`tests/test_rebalancing.py`는 월초/hold, 뉴스·비중·MDD 경계값, 복수 사유,
-다음 날 뉴스 누출 방지, 비용, 자연 비중 변동, 현금 반복 청산 방지,
-일별 추론과 Recurrent PPO 상태 유지, API 필드 및 잘못된 설정을 검증합니다.
+## 로그·API
 
-```powershell
-.\.venv312\Scripts\python.exe -m pytest tests/test_rebalancing.py -q
-```
+- `raw_target_weights`: 필터 전 모델 목표
+- `filtered_target_weights`: 필터·재정규화 후 목표
+- 환경 history의 `current_weights`: `decision_date` 종가의 실제 비중(거리 계산 기준)
+- `portfolio_weight_distance`, `max_risk_score`
+- `should_rebalance`: 목표 적용 요청 여부, `rebalanced`: 실제 거래/청산 여부
+- `rebalance_reasons`: 모든 충족 사유. `monthly`, `risk_score`,
+  `portfolio_weight_distance`, `mdd_stop`, `hold`.
+- CSV의 `rebalance_reason`: 복수 원인을 `|`로 연결
+- 기존 `turnover`, `cost`, `cost_amount`, `exit_turnover`, `exit_cost`는 그대로 유지
+
+기존 자산별 `previous_weight`는 체결 직전, `current_weight`는 체결 완료 후 의미를
+유지합니다. `decision_current_weight`, `raw_target_weight`, `filtered_target_weight`를
+추가해 판단 시점과 체결 시점을 구별합니다. 일반 history의 `date`는 체결 종가입니다.
+
+API는 실제 주문을 보내지 않습니다. `target_weights`는 조건과 안전장치 적용 후의
+실행 제안(hold면 현재 비중), `model_target_weights`는 raw 목표의 호환용 별칭입니다.
+현재 비중은 요청 state의 실제 보유 비중을 사용하므로 호출자는 당일 가격으로 평가한
+state를 전달해야 합니다. state가 없으면 신규 현금 포트폴리오입니다.
+API에는 미래 실제 체결 비용을 임의로 채워 넣지 않습니다.
+
+## 벤치마크와 SHAP
+
+모델 목표에만 필터를 적용합니다. 동일비중/매수 후 보유 벤치마크는 고정된 자산
+구성을 유지하고 최초 매수를 반드시 실행합니다. 이 최초 진입의 예외 사유는 `forced`이며,
+MDD가 우선합니다. buy-and-hold 최초 진입 후에는 가격 변화만 반영하며 추가 매수하지 않습니다.
+
+SHAP은 필터 후 모델 목표를 설명합니다. 계산 알고리즘과 입력 feature 순서는
+바꾸지 않고 설명 대상 함수에 동일한 필터를 적용합니다. 이전 SHAP 파일이나
+평가 결과는 자동 갱신하지 않습니다. 새 정책 평가 및 SHAP 계산은 별도로 실행해야 합니다.
+
+## 검증과 기존 결과
+
+`tests/test_target_filtering.py`, `tests/test_rebalancing.py`에서 필터 경계,
+모두 제거되는 경우, 거리 경계, 개별 5%p 조건 제거, 비용 0, 자연 비중 변화,
+MDD 우선순위, 앙상블 처리 순서, SHAP 출력, 벤치마크 최초 진입을 확인합니다.
+
+기존 학습 모델을 고정한 새 정책 평가도 가능하지만, 새 정책에 최적화하려면 재학습이
+필요합니다. 기존 결과 보존을 위해 번들 복사본/새 run-id를 사용하세요.
+새 평가 그룹에 정책 버전을 포함하므로 이전 정책 결과와 구분됩니다.
+## 이번 수정 파일
+
+- `backend/investment_ai/rebalancing.py`
+- `backend/investment_ai/portfolio_env.py`
+- `backend/investment_ai/infer.py`
+- `backend/investment_ai/serving.py`
+- `backend/investment_ai/api.py`
+- `backend/investment_ai/backtest.py`
+- `backend/investment_ai/records.py`
+- `backend/performance/model_shap.py`
+- `config/investment_ai.json`
+- `config/multi_model.json`
+- `config/multi_model_no_risk.json`
+- `config/dummy_only.json`
+- `config/hybrid_news.json`
+- `config/real_market.json`
+- `tests/test_target_filtering.py`
+- `tests/test_rebalancing.py`
+- `tests/test_model_shap.py`
+- `docs/REBALANCING.md`
+- `docs/RISK_INPUT_ABLATION.md`

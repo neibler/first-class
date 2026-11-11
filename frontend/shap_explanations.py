@@ -142,3 +142,24 @@ def category_totals(rows):
         total["순 기여 (%p)"] += row["signed_sum"] * 100
         total["전체 영향력 (%p)"] += row["absolute_sum"] * 100
     return sorted(groups.values(), key=lambda r: -r["전체 영향력 (%p)"])
+
+
+def group_shap_features(features, values, selected, decision):
+    """Enrich unchanged groups with verified state and non-causal explanations."""
+    from frontend.shap_state import (
+        observed_values,
+        summarize_feature_state,
+        generate_shap_explanation,
+    )
+
+    groups = aggregate(features, values, selected)
+    actual, previous, days = observed_values(features, decision)
+    contributions = dict(zip(features, values))
+    return [
+        generate_shap_explanation(
+            group,
+            selected,
+            summarize_feature_state(group, actual, previous, days, contributions),
+        )
+        for group in groups
+    ]

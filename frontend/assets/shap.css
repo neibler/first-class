@@ -36,7 +36,7 @@
 .cabin-window-panel {width:100%;aspect-ratio:1047/1332;
   background:var(--cabin-window-panel) center bottom / contain no-repeat;pointer-events:none;}
 .st-key-shap-rail > [data-testid="stLayoutWrapper"]:has(> .st-key-shap-nav) {flex:none;}
-.st-key-shap-nav {display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:repeat(6,60px);gap:10px;padding:6px 4px;align-items:stretch;justify-content:stretch;}
+.st-key-shap-nav {display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:repeat(7,60px);gap:10px;padding:6px 4px;align-items:stretch;justify-content:stretch;}
 .st-key-shap-nav > [data-testid="stLayoutWrapper"] {width:100%;height:100%;}
 .st-key-shap-nav :is([data-testid="stVerticalBlock"],[data-testid="stElementContainer"],[data-testid="stPageLink"],[data-testid="stPageLink"] > div) {height:100%;}
 .st-key-shap-nav :is([data-testid="stPageLink"],[data-testid="stPageLink"] > div) {width:100%;}
@@ -104,7 +104,7 @@
   .st-key-shap-screen {padding:14px;}
   .st-key-shap-plots > [data-testid="stLayoutWrapper"] > [data-testid="stHorizontalBlock"] {flex-direction:column;}
   .st-key-shap-plots [data-testid="stColumn"] {width:100%;flex:1 1 auto;}
-  .st-key-shap-nav {grid-template-rows:repeat(6,60px);height:auto;}
+  .st-key-shap-nav {grid-template-rows:repeat(7,60px);height:auto;}
 }
 @media(max-width:900px) {
   .stApp:has(.st-key-shap-cabin) .stMainBlockContainer {padding:0 12px 24px;}
@@ -121,7 +121,7 @@
      cabinet extension; hiding it avoids squeezing its texture into a strip. */
   .wine-top {aspect-ratio:793/810;background-position:center bottom;}
   .wine-body,.wine-base {display:none;}
-  .st-key-shap-nav {grid-template-columns:repeat(3,minmax(0,1fr));grid-template-rows:repeat(2,56px);gap:12px;}
+  .st-key-shap-nav {grid-template-columns:repeat(3,minmax(0,1fr));grid-auto-rows:56px;grid-template-rows:none;gap:12px;}
   .shap-ceiling {width:100%;min-width:0;height:90px;aspect-ratio:auto;background-size:auto 100%;}
   .shap-brand {font-size:20px;letter-spacing:.06em;}
   .cabin-lower {grid-template-columns:minmax(0,1fr);}
@@ -129,7 +129,7 @@
 }
 @media(max-width:600px) {
   .st-key-shap-cabin {--frame:12px;}
-  .st-key-shap-nav {grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:repeat(3,56px);}
+  .st-key-shap-nav {grid-template-columns:repeat(2,minmax(0,1fr));grid-auto-rows:56px;grid-template-rows:none;}
   .st-key-shap-nav [data-testid="stPageLink"] a {padding:8px;gap:7px;}
   .st-key-shap-nav [data-testid="stPageLink"] a p {font-size:12px;}
   .st-key-shap-nav [data-testid="stIconMaterial"] {font-size:21px;}

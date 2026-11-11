@@ -108,5 +108,7 @@
     }
   },
   "risk_rebalance_threshold": 0.7,
-  "weight_drift_threshold": 0.05
+  "include_risk_score": true,
+  "min_weight_threshold": 0.03,
+  "portfolio_weight_distance_threshold": 0.1
 }

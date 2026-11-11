@@ -1,6 +1,6 @@
 # Portfolio X-Ray 설명 레이어
 
-SHAP 계산·모델·입력·API는 변경하지 않는다. frontend/shap_explanations.py에서 선택 ETF 기준으로 합산한다.
+SHAP 계산·모델·학습 입력은 변경하지 않는다. API 응답에는 검증된 원본 시장 문맥만 추가한다. frontend/shap_explanations.py에서 선택 ETF 기준으로 합산한다.
 
 | 원본 규칙 | 사용자 요인 | 의미 분류 |
 |---|---|---|
@@ -50,3 +50,51 @@ Rolling Correlation: “이 자산은 무엇과 같이 움직이는가?”
 
 영향도는 ▰▰▰▰ 매우 큼 / ▰▰▰▱ 큼 / ▰▰▱▱ 보통 / ▰▱▱▱ 작음으로 표시한다.
 상관관계 설명은 상세 분석 안에서 SHAP과 구분하며 기본 요약에는 추가 영역을 만들지 않는다.
+
+
+## 실제 시장 상태와 모델 기여도
+
+`frontend/shap_explanations.py::group_shap_features`는 기존 집계 결과를 유지하면서
+`frontend/shap_state.py::summarize_feature_state`와 `generate_shap_explanation`을 연결한다.
+각 요인에 `group_name`, `asset`, `factor`, `actual_state_summary`, `shap_direction`,
+`shap_importance`, `explanation`, `raw_features`를 제공한다. 외부 LLM 호출은 없다.
+
+기본 화면은 증가/감소 Top 3 각각에 시장 상태를 덧붙인다. 요인 제목의 도움말과
+상세 분석의 설명 열에는 시장 상태 + 선택 ETF에 대한 모델 기여 방향을 함께 표시한다.
+기존 raw feature/model input/SHAP 수치 표와 Force Plot은 그대로 유지한다.
+
+### 데이터 확인
+
+기존 JSON의 `feature_values_raw`는 이름과 달리 모델에 투입한 관측값이다.
+수익률·MACD·거시지표는 표준화 및 clipping되어 있어 이를 원본 값으로 해석하지 않는다.
+`backend/performance/shap_context.py::attach_market_context`가 번들의 config,
+run_spec, 설치 입력 경로를 사용해 원본 패널을 읽고, SHAP의 `data_hash`와
+feature 순서가 일치할 때만 결정일의 `market_context`를 응답에 추가한다.
+저장된 SHAP 파일이나 모델은 수정하지 않는다. 요청 중 캐시 원본도 변경하지 않는다.
+
+원본 파일 부재·해시 불일치 시 `market_context_status=unavailable`로 반환하고,
+정규화하지 않은 RSI·뉴스 점수·포트폴리오 상태만 사용한다. 설명 불가 요인은
+데이터 부족으로 표시하며, SHAP 부호를 시장의 상승/하락으로 해석하지 않는다.
+
+### 상태 설명 규칙
+
+- 가격: 결정일을 포함한 연속 lag 0~4의 원본 로그수익률에
+  `expm1(sum(log_returns))*100` 적용. 부족하면 실제 확보한 연속 거래일 수를 표시한다.
+- RSI: 30 미만 과매도에 가까움, 30~45 미만 비교적 낮음,
+  45~55 중립, 55 초과~70 비교적 높음, 70 초과 과매수에 가까움.
+  화면 수치는 소수 첫째 자리로 표시하며, 미래 가격을 예측하지 않는다.
+- MACD: 검증된 signal이 있으면 관계를 설명한다. 현재 모델은 MACD만 있으므로
+  0 대비 부호만 설명한다. 같은 ETF에서 수익률·RSI·MACD 최대 3가지 사실을 사용한다.
+- 금리·VIX·기타 macro: 원본 현재 입력값과 5거래일 전 값을 비교한다.
+  5거래일을 확보하지 못하면 실제 비교 간격을 표시한다. 10년물과 30년물의
+  방향이 다르면 각각 설명한다. 과거 값이 없으면 현재 값만 표시하며 변화는 미확인으로 안내한다.
+  임의의 높음/낮음 기준이나 원본에 없는 단위는 붙이지 않는다.
+- 뉴스: 그룹 내 절대 SHAP 기여가 큰 실제 risk_score 최대 3개를 ETF명과 함께 표시한다.
+  risk_type별 기여도나 새 위험 등급을 만들지 않는다. risk_score 제외 모델에는 추가하지 않는다.
+- 현재 비중·낙폭: 관측 당시의 원래 상태 값만 표시한다.
+- 기여 방향: 기존 signed sum, 중요도: 기존 absolute sum. 시장 상태와 관계없이
+  선택된 출력 ETF의 비중을 높이는/낮추는 방향이라고 설명한다.
+
+현재 미제공 정보는 MACD signal/histogram, risk_type의 SHAP, 미등록 피처의 의미,
+리밸런싱 phase의 사용자용 상태 해석이다. 원본 문맥을 확인할 수 없는 수익률·MACD·macro도
+구체적 설명을 만들지 않는다. 실제 상태는 SHAP 결정일 기준이며 오늘의 실시간 시황이 아니다.

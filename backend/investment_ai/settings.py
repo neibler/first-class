@@ -23,7 +23,15 @@ def read_config(path=None):
     return config
 
 
+def risk_score_enabled(config):
+    value = config.get("include_risk_score", True)
+    if not isinstance(value, bool):
+        raise ValueError("include_risk_score must be boolean")
+    return value
+
+
 def validate_config(c):
+    risk_score_enabled(c)
     from .rebalancing import validate_rebalancing
 
     validate_rebalancing(c)

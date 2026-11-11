@@ -72,8 +72,12 @@ def small_config(kind):
 
 
 @pytest.mark.parametrize("kind", MODEL_TYPES)
-def test_factory_predict_save_load_and_spaces_without_learning(kind, tmp_path):
+@pytest.mark.parametrize("include_risk_score", [True, False])
+def test_factory_predict_save_load_and_spaces_without_learning(
+    kind, tmp_path, include_risk_score
+):
     c, d = small_config(kind), data()
+    c["include_risk_score"] = include_risk_score
     validate_model_config(c)
     scaler = FeatureScaler.fit(d, 2)
     env = PortfolioEnv(d, c, scaler=scaler)
@@ -95,6 +99,10 @@ def test_factory_predict_save_load_and_spaces_without_learning(kind, tmp_path):
     restored, _, _ = load_bundle(tmp_path, d)
     actual = PredictionSession(restored, kind).predict(obs, env)
     np.testing.assert_allclose(actual, weights)
+    changed = {**c, "include_risk_score": not include_risk_score}
+    write_json(tmp_path / "config.json", changed)
+    with pytest.raises(ValueError, match="features/order"):
+        load_bundle(tmp_path, d)
     session.reset()
     assert session.lstm_states is None and session.episode_start
     env.close()
