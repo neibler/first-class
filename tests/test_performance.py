@@ -1063,11 +1063,18 @@ def _run_in_layout(tmp_path, mutate, snippet):
     )
     mutate(workspace)
     return subprocess.run(
-        [sys.executable, "-c", snippet],
+        [sys.executable, "-X", "utf8", "-c", snippet],
         cwd=workspace,
         capture_output=True,
         text=True,
-        env={"PYTHONPATH": ".", "PATH": os.environ.get("PATH", "")},
+        encoding="utf-8",
+        # Minimal env: inherited flags such as PYTHONOPTIMIZE would strip the
+        # snippet's asserts. Windows needs SystemRoot for socket initialization.
+        env={
+            "PYTHONPATH": ".",
+            "PATH": os.environ.get("PATH", ""),
+            **{k: os.environ[k] for k in ("SystemRoot",) if k in os.environ},
+        },
     )
 
 

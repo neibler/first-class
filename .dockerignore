@@ -82,6 +82,8 @@ backend/investment_ai/**
 backend/performance/**
 !backend/performance/*.py
 !backend/performance/requirements.txt
+!frontend/statistics_client.py
+!frontend/statistics_view.py
 
 !config/
 !config/agent.yaml

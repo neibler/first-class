@@ -6,7 +6,7 @@
 
 FastAPI 앱 생성 함수에서 투자 모델 생명주기를 관리하고 투자·리서치 API를 제공합니다.
 포트폴리오는 투자 HTTP API를 사용하며, SHAP은 **고정된 샘플 데이터**입니다.
-리서치 화면은 HTTP API에 연결되어 있고 성과·ANOVA·리스크 화면은 준비 화면입니다.
+리서치·ANOVA 화면은 HTTP API에 연결되어 있고 성과·리스크 화면은 준비 화면입니다.
 `/health`는 서버 연결 및 투자 모델 로드 상태를, `/ready`는 투자 모델 준비 상태를 반환합니다.
 모델이 없으면 포트폴리오는 준비 부족을 안내하며 샘플 성공으로 대체하지 않습니다.
 `POST /research`는 기존 뉴스 에이전트와 연결되며 서버의 Claude 키, 기존 DB,
@@ -46,6 +46,32 @@ docker compose ps
 완료 후 실행 요약이 표시됩니다. 실패를 샘플 성공 결과로 대체하지 않습니다.
 
 ## Python 직접 실행
+
+### ANOVA 결과 연결
+
+ANOVA 화면은 `GET /performance/statistics`로 저장된 검증 결과를 조회합니다.
+서버에 `<결과 폴더>/statistics/anova.json`이 필요하며, 조회에는 모델·API 키가 필요하지 않습니다.
+팀원이 생성한 기존 결과를 사용합니다. 결과를 만들거나 재학습하는 기능은 화면에 포함하지 않습니다.
+
+Python 서버는 실행 전에 결과 폴더를 설정합니다:
+
+```powershell
+$env:RESULTS_DIR = (Resolve-Path runtime/results).Path
+```
+
+Docker는 기존 로컬 실행 설정의 `api.volumes`에 결과 폴더를 `/results`로 읽기 전용 연결합니다.
+예: `./runtime/results:/results:ro`. 기존 설정과 결과 파일을 보존하고 개인 절대 경로를
+공용 Compose에 넣지 않습니다. 컨테이너 내부 `RESULTS_DIR`는 `/results`입니다.
+
+`/performance/health`의 `available.statistics=true`와 `/performance/statistics`의
+HTTP 200을 확인한 뒤 `/anova` 화면을 엽니다. 파일이 없으면 503 안내가 표시됩니다.
+투자 모델 미로드나 SHAP 미준비로 전체 `ready=false`여도 ANOVA 조회는 가능합니다.
+
+One-way 2종·Two-way의 F값, p값, η²와 그룹 요약, 요인별 Tukey 결과를 표시합니다.
+계산 불가는 `—`, 미제공 검증은 별도 안내하며 새로고침으로 최신 파일을 다시 조회합니다.
+평가 기간은 통계 응답에 없으므로 표시하지 않습니다. 표본 출처와 가정 점검은 상세 영역에서 확인합니다.
+
+### 실행 명령
 
 저장소 루트에서 의존성을 설치한 뒤 두 터미널에서 실행합니다.
 Python 3.12와 활성화된 가상환경을 권장합니다. 아래 설치에는 이미지 전처리용
@@ -136,6 +162,9 @@ python scripts/check_cockpit_assets.py
 python scripts/check_shap_cabin.py
 python scripts/check_shared_cabin.py
 ```
+
+ANOVA의 실제 저장 결과가 연결된 서버에서는 `python scripts/check_anova.py`로
+데스크톱·모바일 차트, 표, 새로고침과 메뉴 이동을 검사할 수 있습니다.
 
 샘플 로딩·빈 상태·오류의 재시도 검사까지 수행하려면 별도 터미널에서 개발 UI를 실행합니다.
 다른 터미널에서 `python scripts/check_ui.py --dev http://localhost:8502`를 실행합니다.

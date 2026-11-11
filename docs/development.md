@@ -5,7 +5,7 @@
 ```mermaid
 flowchart LR
     Browser[브라우저 :8501] --> Dashboard[Streamlit dashboard]
-    Dashboard -->|HTTP health, investment, research| API[FastAPI api]
+    Dashboard -->|HTTP health, investment, research, statistics| API[FastAPI api]
 ```
 
 - Python 3.12를 사용한다. 학교의 필수 기준은 Python 3.10 이상이며,
@@ -28,11 +28,11 @@ flowchart LR
 
 - `POST /explain`은 미구현이다. 투자 `/optimize`·`/backtest`는 main 구현을 유지한다.
   저장된 성과·SHAP 결과를 조회하는 `/performance/*`는 별도로 제공한다.
-- 6개 페이지 내비게이션은 유지한다. 포트폴리오·리서치는 HTTP로 연결하고,
-  SHAP은 샘플이며 성과·ANOVA·리스크는 준비 화면이다.
+- 6개 페이지 내비게이션은 유지한다. 포트폴리오·리서치·ANOVA는 HTTP로 연결하고,
+  SHAP은 샘플이며 성과·리스크는 준비 화면이다.
 - main의 데이터 처리·Gymnasium·PPO·Safe-Guard·실험·백테스트 코드는 유지했다.
   이번 충돌 통합에서는 실제 학습·사용자 모델/데이터의 학교 성능 요건을 다시 검증하지 않는다.
-- SHAP, ANOVA·사후 검정, 리서치 결과의 투자 모델·리스크 모니터링 연동.
+- SHAP, 리서치 결과의 투자 모델·리스크 모니터링 연동.
 - 모델 로딩과 추론 시간·투자 성과 기준 검증.
 - 보상 함수 설계 근거, 성능·ANOVA 요약, 에러 분석 및 20페이지 이상 실험 리포트.
 
@@ -40,6 +40,24 @@ flowchart LR
 학교 최종 제출물 전체가 완성된 상태가 아니다. 스펙의 구현 순서는 권장사항이며,
 MLflow, 주기적 수집·재학습, 이상거래 탐지,
 멀티모달, 공정성 분석은 학교의 선택 과제다.
+
+## ANOVA 화면 API 연동
+
+- `frontend/statistics_client.py`는 기존 `API_BASE_URL`로 `GET /performance/statistics`를
+  한 번 호출한다. connect 3초/read 10초 timeout, 자동 재시도·프론트 캐시 없음.
+  최초 진입·페이지 재진입·명시적 새로고침 때 조회하며 투자 모델 및 전체 ready 상태로 차단하지 않는다.
+- One-way와 Two-way 응답을 별도로 검증하고 서버 계산값을 표시한다. 검증 식별에는
+  `test`, `groups_label`, `factors`를 사용한다. 일부 검증 생략은 허용하며 알 수 없는 검정은
+  개수를 안내하고 제외한다. 알려진 검정의 계약 위반은 잘못된 응답으로 처리한다.
+- `statistics_view.py`는 표시 단위와 표·평균 차트를 구성한다. 원시 표본을 추정하거나
+  통계 검정을 재계산하지 않는다. 사후검정은 직접 객체/요인별 객체 구조를 각각 처리한다.
+  Tukey 평균차는 그룹 2−그룹 1이며 신뢰구간과 함께 %p로 표시한다.
+- null, 비유의, 사후검정 미제공, 유의한 비교 쌍 없음, 부분 결과를 구분한다.
+  평가 기간과 실행 ID는 응답에 없어 다른 파일에서 추정하지 않는다.
+  표본 출처·가정 점검·독립성·보조 검정은 제공된 범위에서 표시한다.
+- `tests/test_statistics_frontend.py`는 HTTP 오류와 계약, 값·단위·판정 표시,
+  부분 결과·새로고침·메뉴 이동 및 저장 파일을 읽는 FastAPI 라우터를 검사한다.
+  `scripts/smoke.py`는 모델·결과가 없는 Docker의 실제 HTTP 503 안내도 검사한다.
 
 ## PR CI
 

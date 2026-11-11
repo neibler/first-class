@@ -38,7 +38,11 @@ python -m backend.performance.run_analysis --config config/dummy_only.json --smo
 | ANOVA·사후검정 결과 | `runtime/results/statistics/` |
 | API용 JSON | `runtime/results/api/` |
 
-결과 폴더는 `--output` 옵션으로 변경할 수 있습니다. FastAPI는 `RESULTS_DIR` 환경변수가 가리키는 결과를 읽으며 `/performance/health`, `/backtest`, `/explain`, `/statistics`, `/summary`를 제공합니다.
+결과 폴더는 `--output` 옵션으로 변경할 수 있습니다. FastAPI는 `RESULTS_DIR` 환경변수가 가리키는 결과를 읽으며 `/performance/health`, `/performance/backtest`, `/performance/explain`, `/performance/statistics`, `/performance/summary`를 제공합니다.
+
+ANOVA 화면은 `/performance/statistics`에 연결되어 있습니다. 조회에 필요한 파일은
+`<RESULTS_DIR>/statistics/anova.json`입니다. 기존 결과를 연결하는 방법은
+[루트 실행 안내](../../README.md#anova-결과-연결)를 참고하세요.
 
 ## 테스트
 
