@@ -142,7 +142,9 @@ class PortfolioEnv(gym.Env):
         raw_target = target.copy()
         if apply_filter:
             target = filter_target_weights(
-                target, self.config.get("min_weight_threshold", MIN_WEIGHT_THRESHOLD)
+                target,
+                self.config.get("min_weight_threshold", MIN_WEIGHT_THRESHOLD),
+                self.config.get("max_holdings"),
             )
         decision_weights = self.weights.copy()
         distance = portfolio_weight_distance(decision_weights, target)

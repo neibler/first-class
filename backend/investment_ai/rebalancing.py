@@ -13,6 +13,11 @@ ROUNDING_TOLERANCE = 1e-12
 
 
 def validate_rebalancing(config):
+    limit = config.get("max_holdings")
+    if limit is not None and (
+        isinstance(limit, bool) or not isinstance(limit, int) or limit < 1
+    ):
+        raise ValueError("max_holdings must be a positive integer or null")
     for key, default in (
         ("risk_rebalance_threshold", RISK_REBALANCE_THRESHOLD),
         ("min_weight_threshold", MIN_WEIGHT_THRESHOLD),
@@ -102,8 +107,13 @@ def get_rebalance_reasons(
     return reasons or ["hold"]
 
 
-def filter_target_weights(raw_weights, threshold=MIN_WEIGHT_THRESHOLD):
-    """Drop strictly sub-threshold targets, then normalize; stable argmax fallback."""
+def filter_target_weights(
+    raw_weights, threshold=MIN_WEIGHT_THRESHOLD, max_holdings=None
+):
+    """Threshold, keep largest K (ties use asset order), then normalize.
+
+    Missing limit preserves saved models trained before the holdings cap.
+    """
     raw = np.asarray(raw_weights, dtype=float)
     if (
         raw.ndim != 1
@@ -113,8 +123,15 @@ def filter_target_weights(raw_weights, threshold=MIN_WEIGHT_THRESHOLD):
         or not np.isclose(raw.sum(), 1)
     ):
         raise ValueError("Raw target weights must be nonnegative and sum to one")
-    validate_rebalancing({"min_weight_threshold": threshold})
+    validate_rebalancing(
+        {"min_weight_threshold": threshold, "max_holdings": max_holdings}
+    )
     filtered = np.where(raw >= threshold, raw, 0.0)
+    if max_holdings is not None and max_holdings < len(filtered):
+        keep = np.argsort(-filtered, kind="stable")[:max_holdings]
+        mask = np.zeros(len(filtered), dtype=bool)
+        mask[keep] = True
+        filtered = np.where(mask, filtered, 0.0)
     if filtered.sum() == 0:
         filtered[np.argmax(raw)] = 1.0
     else:

@@ -165,3 +165,66 @@ def test_distance_is_based_on_current_price_drifted_weights():
         portfolio_weight_distance(previous_actual, [0.5, 0.5])
     )
     assert row["portfolio_weight_distance"] > 0
+
+
+@pytest.mark.parametrize("limit", [1, 3, 7, 20])
+def test_top_k_normalizes_without_mutating(limit):
+    raw = np.arange(1, 16, dtype=float)
+    raw /= raw.sum()
+    original = raw.copy()
+    result = filter_target_weights(raw, 0.03, limit)
+    assert np.count_nonzero(result) == min(limit, np.count_nonzero(raw >= 0.03))
+    assert result.sum() == pytest.approx(1)
+    np.testing.assert_array_equal(raw, original)
+    expected = np.argsort(-raw)[: min(limit, np.count_nonzero(raw >= 0.03))]
+    assert set(np.flatnonzero(result)) == set(expected)
+
+
+def test_top_k_ties_fewer_candidates_fallback_and_legacy():
+    raw = np.full(15, 1 / 15)
+    result = filter_target_weights(raw, 0.03, 7)
+    np.testing.assert_allclose(result[:7], 1 / 7)
+    assert not result[7:].any()
+    assert np.count_nonzero(filter_target_weights(raw)) == 15
+    assert np.count_nonzero(filter_target_weights([0.01, 0.04, 0.95], 0.03, 7)) == 2
+    np.testing.assert_array_equal(filter_target_weights(raw, 0.9, 7), [1] + [0] * 14)
+
+
+@pytest.mark.parametrize("limit", [0, -1, True, 7.5, "7"])
+def test_invalid_holdings_limit(limit):
+    with pytest.raises(ValueError, match="max_holdings"):
+        filter_target_weights([0.5, 0.5], max_holdings=limit)
+
+
+def test_environment_and_shap_apply_same_cap():
+    d = panel(15)
+    c = {**config(), "assets": d.assets, "max_holdings": 7}
+    env = PortfolioEnv(d, c, start=1)
+    env.reset()
+    raw = np.full(15, 1 / 15)
+    row = env.step_weights(raw)[-1]
+    target = np.array(list(row["filtered_target_weights"].values()))
+    assert np.count_nonzero(target) == 7
+    assert np.count_nonzero(env.weights) <= 7
+
+    class Model:
+        def predict(self, rows, **kwargs):
+            return np.zeros((len(rows), 15)), None
+
+    predicted = policy_function(Model(), "ppo", env)(
+        np.zeros((1, env.observation_space.shape[0]))
+    )
+    np.testing.assert_allclose(predicted[0], target)
+
+
+def test_inference_applies_holdings_cap():
+    d, c = data(), {**config(), "max_holdings": 1}
+    s = state(d, mdd=0)
+    s.update(portfolio_value=1.0, weights={"SPY": 0.5, "QQQ": 0.5})
+
+    class Session:
+        def predict(self, obs, env):
+            return np.array([0.4, 0.6])
+
+    result = predict_weights(d, c, [], None, s, [Session()])
+    assert result["filtered_target_weights"] == {"SPY": 0.0, "QQQ": 1.0}

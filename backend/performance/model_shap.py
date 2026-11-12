@@ -44,6 +44,7 @@ def policy_function(model, kind, env, state=None, episode_start=True):
                 filter_target_weights(
                     env.action_weights(a),
                     env.config.get("min_weight_threshold", MIN_WEIGHT_THRESHOLD),
+                    env.config.get("max_holdings"),
                 )
                 for a in np.atleast_2d(actions)
             ]

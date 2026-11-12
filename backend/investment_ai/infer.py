@@ -103,7 +103,9 @@ def predict_weights(data, config, models, scaler, state=None, predictors=None):
         raw_target.copy()
         if stopped
         else filter_target_weights(
-            raw_target, config.get("min_weight_threshold", MIN_WEIGHT_THRESHOLD)
+            raw_target,
+            config.get("min_weight_threshold", MIN_WEIGHT_THRESHOLD),
+            config.get("max_holdings"),
         )
     )
     distance = portfolio_weight_distance(held, target)
