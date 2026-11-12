@@ -21,6 +21,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def config():
     c = json.loads((ROOT / "config/investment_ai.json").read_text())
+    c.pop("training_windows", None)  # Synthetic fixtures use their own dates.
     return {
         **c,
         "assets": ["SPY", "QQQ"],

@@ -78,11 +78,42 @@ def bundle_path(root, model_type, reward_type, seed, run_id, window_id="holdout"
     )
 
 
+def explicit_windows(dates, definitions):
+    """Exact trading-date boundaries; reject truncation, gaps and overlapping tests."""
+    dates = pd.DatetimeIndex(dates)
+    if not isinstance(definitions, list) or not definitions:
+        raise ValueError("training_windows must be a nonempty list")
+    windows = []
+    previous_test_end = None
+    for definition in definitions:
+        try:
+            points = [
+                pd.Timestamp(definition[k])
+                for k in ("train_start", "train_end", "test_start", "test_end")
+            ]
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ValueError("Invalid training_windows dates") from exc
+        if any(pd.isna(p) or p not in dates for p in points):
+            raise ValueError("training_windows boundaries must exist in input dates")
+        start, train_end, split, end = map(int, dates.get_indexer(points))
+        if not (start <= train_end < split <= end) or train_end + 1 != split:
+            raise ValueError("Training must precede test with no gap or overlap")
+        if previous_test_end is not None and split <= previous_test_end:
+            raise ValueError("Test windows must be ordered and non-overlapping")
+        windows.append({"start": start, "split": split, "stop": end + 1})
+        previous_test_end = end
+    return windows
+
+
 def plan_runs(config, data, seeds, walk_forward=False, train_years=4, test_years=1):
     if not seeds or len(seeds) != len(set(seeds)):
         raise ValueError("Provide unique seeds")
     validate_config({**config, "seeds": seeds})
-    if walk_forward:
+    if "training_windows" in config:
+        windows = explicit_windows(data.dates, config["training_windows"])
+        if not walk_forward and len(windows) != 1:
+            raise ValueError("Multiple training_windows require walk-forward mode")
+    elif walk_forward:
         windows = calendar_windows(data.dates, train_years, test_years)
     else:
         split = int(len(data.dates) * (1 - config["test_fraction"]))
