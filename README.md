@@ -5,7 +5,7 @@
 # First Class 로보어드바이저
 
 FastAPI 앱 생성 함수에서 투자 모델 생명주기를 관리하고 투자·리서치 API를 제공합니다.
-포트폴리오는 투자 HTTP API를 사용하며, SHAP은 **고정된 샘플 데이터**입니다.
+포트폴리오는 투자 HTTP API를 사용하며, SHAP은 저장된 실제 모델 설명을 조회합니다.
 리서치·ANOVA 화면은 HTTP API에 연결되어 있고 성과·리스크 화면은 준비 화면입니다.
 `/health`는 서버 연결 및 투자 모델 로드 상태를, `/ready`는 투자 모델 준비 상태를 반환합니다.
 모델이 없으면 포트폴리오는 준비 부족을 안내하며 샘플 성공으로 대체하지 않습니다.
@@ -35,7 +35,7 @@ docker compose ps
 `연결 상태 새로고침` 버튼으로 다시 조회합니다.
 컨테이너 내부에서는 dashboard가 `http://api:8000`으로 HTTP 요청합니다.
 
-화면의 메뉴로 6개 페이지를 이동합니다.
+화면의 메뉴로 7개 페이지를 이동합니다.
 포트폴리오의 분석 기간, SHAP의 자산·결정일을 선택할 수 있습니다.
 `비행 경로 재생`은 브라우저에서만 실행되며 OS의 동작 감소 설정을 따릅니다.
 
@@ -286,3 +286,16 @@ Train 2021-01-04~2024-12-30, Test 2024-12-31~2025-12-31로 약 4년+1년 단일 
 
 4개 모델과 필수 데이터 설치·실행은 [공유 모델 안내](shared/TRAINED_MODELS.md)를 따릅니다.
 기존 install_demo.py는 과거 PPO 데모입니다. 새 공유본은 scripts/install_trained_models.py로 설치합니다.
+
+
+## 새 clone의 학습 입력 준비
+
+학습 환경 의존성을 설치한 후 아래 순서로 실행합니다. 학습 입력은 이전 E 모델 설치 ZIP과 분리되어 있습니다.
+
+```powershell
+python scripts/install_training_inputs.py
+python local_run.py preflight --config config/multi_model.json
+python local_run.py train --config config/multi_model.json --model ppo --seed 22 --dry-run
+```
+
+기본 Docker 이미지도 같은 검증된 training_inputs ZIP을 설치하여 Correlation에 사용합니다. 사용자 지정 runtime을 마운트하면 `python scripts/install_training_inputs.py --destination <해당 경로>`로 먼저 설치하세요. 모델은 별도로 설치/선택해야 합니다. 거래 정책 버전이 없는 이전 공유 모델은 새 추론 코드에서 거부됩니다. 해당 모델의 새 정책 학습본으로 공유 패키지를 갱신해야 합니다.

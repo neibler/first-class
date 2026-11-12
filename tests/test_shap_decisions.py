@@ -6,15 +6,18 @@ import pytest
 from backend.performance.shap_decisions import attach_decisions
 
 
+@pytest.mark.parametrize("run_id", ["test", "001234"])
 @pytest.mark.parametrize(
     "previous,current,direction",
     [(0.1, 0.2, "확대"), (0.3, 0.2, "축소"), (0.2, 0.2, "유지")],
 )
-def test_trade_direction_independent_of_shap(tmp_path, previous, current, direction):
+def test_trade_direction_independent_of_shap(
+    tmp_path, previous, current, direction, run_id
+):
     payload = {
         "model_type": "td3",
         "data_hash": "same",
-        "run_id": "test",
+        "run_id": run_id,
         "assets": {
             "GLD": {
                 "decisions": [
@@ -40,7 +43,7 @@ def test_trade_direction_independent_of_shap(tmp_path, previous, current, direct
             {
                 "decision_date": "2025-01-02",
                 "execution_date": "2025-01-03",
-                "run_id": "test",
+                "run_id": run_id,
                 "target_weight_gld": 0.2,
                 "previous_weight_gld": previous,
                 "current_weight_gld": current,

@@ -18,7 +18,7 @@ def build_parser():
         type=Path,
         help="Existing training bundle; resume starts a fresh episode",
     )
-    parser.add_argument("--extra-steps", type=int, default=5000)
+    parser.add_argument("--extra-steps", type=int, default=None)
     parser.add_argument("--output", type=Path, help="New directory for resumed bundle")
     parser.add_argument("--model", choices=("ppo", "recurrent_ppo", "sac", "td3"))
     parser.add_argument("--reward", choices=("return", "sharpe", "return_mdd"))
@@ -54,12 +54,48 @@ def main(argv=None):
         if not args.output:
             parser.error("--resume requires --output (a new directory)")
         config = json.loads((args.resume / "config.json").read_text(encoding="utf-8"))
-        config["total_timesteps"] = args.extra_steps
+        from .model_factory import model_parameters
+        from .checkpoints import resolve_checkpoint
+        from .settings import bundle_input_root
+        from .model_runs import subset
+        import pandas as pd
+
+        kind = config.get("model_type", "ppo")
+        steps = args.extra_steps
+        if steps is None:
+            n = model_parameters(kind, config).get("n_steps", 1)
+            steps = ((5000 + n - 1) // n) * n
+        config["total_timesteps"] = steps
+        if args.device:
+            config["device"] = args.device
         validate_config(config)
-        manifest = json.loads(
-            (args.resume / "manifest.json").read_text(encoding="utf-8")
+        _, manifest = resolve_checkpoint(args.resume)
+        spec_path = args.resume / "run_spec.json"
+        spec = (
+            json.loads(spec_path.read_text(encoding="utf-8"))
+            if spec_path.exists()
+            else None
         )
-        data, _ = load_data(config, ROOT)
+        input_config = (
+            {**config, "seed": spec.get("data_seed", config["seed"])}
+            if spec
+            else config
+        )
+        data, _ = load_data(input_config, bundle_input_root(args.resume, ROOT))
+        if spec:
+            dates = pd.DatetimeIndex(data.dates)
+            if (
+                pd.Timestamp(spec["start_date"]) not in dates
+                or pd.Timestamp(spec["end_date"]) not in dates
+            ):
+                raise ValueError("Resume window boundaries are absent from inputs")
+            data = subset(
+                data,
+                int(dates.searchsorted(spec["start_date"])),
+                int(dates.searchsorted(spec["end_date"], side="right")),
+            )
+            if spec["test_start_index"] - 1 != manifest["train_end_index"]:
+                raise ValueError("Resume split mismatch")
         train_model(
             data,
             config,
@@ -67,6 +103,7 @@ def main(argv=None):
             manifest["seed"],
             args.output,
             args.resume,
+            run_spec=spec,
         )
         print(f"Resumed bundle saved: {args.output}")
     else:
@@ -79,15 +116,9 @@ def main(argv=None):
         ]:
             if argument is not None:
                 config[key] = argument
-        mode = (
-            args.mode
-            if args.mode is not None
-            else config.get("mode", "single" if "model_type" in config else "legacy")
-        )
-        if mode not in ("single", "walk-forward", "legacy"):
-            raise ValueError(
-                f"Unsupported mode {mode!r}; choose single, walk-forward or legacy"
-            )
+        from .settings import effective_mode
+
+        mode = effective_mode(config, args.mode)
         if mode == "legacy" and (
             args.model
             or args.reward

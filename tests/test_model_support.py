@@ -319,9 +319,10 @@ def test_training_dispatch_preserves_windows_and_seed_without_learning(
     d = data(np.zeros((20, 2)))
     calls = []
 
-    def training_stub(local, config, end, seed, output):
+    def training_stub(local, config, end, seed, output, run_spec=None):
         calls.append((local, config, end, seed))
         output.mkdir(parents=True)
+        write_json(output / "run_spec.json", run_spec)
 
     monkeypatch.setattr(model_runs, "ROOT", tmp_path)
     monkeypatch.setattr(model_runs, "load_data", lambda *args: (d, None))

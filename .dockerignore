@@ -102,3 +102,7 @@ backend/performance/**
 !frontend/shap_state.py
 !frontend/correlation_client.py
 !config/multi_model.json
+
+!shared/training_inputs.zip
+!shared/training_inputs_manifest.json
+!scripts/install_training_inputs.py

@@ -1,6 +1,7 @@
 """Check the model-free Compose deployment over real HTTP, without fake results."""
 
 import os
+import json
 from urllib.error import HTTPError
 from urllib.request import urlopen
 
@@ -16,7 +17,7 @@ assert health.model_loaded is False
 with urlopen("http://127.0.0.1:8501/_stcore/health", timeout=3) as response:
     assert response.status == 200
 
-# CI does not ship private datasets or trained models. Liveness remains healthy,
+# CI ships verified inputs but no active trained model. Liveness remains healthy,
 # while readiness and portfolio data must explicitly report unavailable.
 for endpoint in ("/ready", "/backtest"):
     try:
@@ -60,3 +61,12 @@ page.button(key="refresh_statistics").click().run()
 assert not page.exception, page.exception
 assert any("통계 분석 결과가 아직 준비되지" in w.value for w in page.warning)
 print("PASS: statistics HTTP 503 guidance, navigation and refresh")
+
+
+with urlopen(
+    "http://api:8000/performance/correlation/SPY?window=60", timeout=30
+) as response:
+    correlation = json.load(response)
+    assert response.status == 200 and correlation["status"] == "ok"
+    assert correlation["ticker"] == "SPY" and correlation["relationships"]
+print("PASS: correlation reads installed training inputs")

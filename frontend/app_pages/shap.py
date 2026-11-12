@@ -71,27 +71,18 @@ else:
         "거래 기록을 확인하지 못했습니다. 증가·감소를 추정하지 않고 주요 정보만 표시합니다."
     )
 
-titles = {
-    "increase": f"{ticker} 비중을 높이는 데 크게 작용한 요인",
-    "decrease": f"{ticker} 비중을 낮추는 데 크게 작용한 요인",
-    "hold": f"현재 {ticker} 비중 결정에 크게 반영된 요인",
-    "unknown": f"{ticker} 목표 비중 결정에 크게 반영된 요인",
-}
-st.subheader(titles[direction])
+st.subheader(f"{ticker} 목표 비중 결정에 크게 반영된 요인")
 st.caption(
-    "목표 변화와 같은 방향의 모델 기여를 보여줍니다. 실제 거래 원인을 증명하는 설명은 아닙니다."
+    "영향력이 큰 순서입니다. 각 기여 방향은 이전 보유 비중이 아닌 모델 설명의 기준 비중 대비입니다."
 )
-if not selected:
-    st.caption(
-        "목표 변화와 같은 방향의 요인이 없습니다. 상세 분석에서 전체 기여를 확인하세요."
-    )
 for factor in selected:
     label, indicator = st.columns([3, 1.4])
     with label:
         st.markdown(f"**{factor['label']}**", help=factor["explanation"])
         st.caption(compact_state(factor))
-        if direction in {"increase", "decrease"}:
-            st.caption(f"→ {ticker} 비중 {labels[direction]} 방향의 기여")
+        st.caption(
+            f"→ SHAP 기준 비중 대비 {labels.get(factor['direction'], '중립')} 기여"
+        )
     with indicator:
         st.caption(
             "▰" * factor["level"]
@@ -119,17 +110,15 @@ if st.session_state.get("shap_details", False):
     st.caption(
         "SHAP 기준 비중은 이전 보유 비중이 아닙니다. 기여의 부호만으로 실제 매매 방향을 판단하지 않습니다."
     )
-    with st.expander("반대 방향으로 작용한 요인 보기"):
+    with st.expander("나머지 요인 보기"):
         if opposite:
-            st.caption(
-                "목표 변화와 반대 방향으로 기여한 정보도 있습니다. 반대 기여가 더 작았다고 단정할 수는 없습니다."
-            )
+            st.caption("기여 방향과 관계없이 요약에 포함되지 않은 나머지 요인입니다.")
             for factor in opposite:
                 st.markdown(f"**{factor['label']}**")
                 st.caption(factor["explanation"])
         else:
             st.caption(
-                "반대 방향 요인이 없거나, 유지·방향 미확인 상태입니다. 전체 요인은 아래 표에 보존됩니다."
+                "추가 요인이 없습니다. 상쇄·중립을 포함한 전체 요인은 아래 표에 보존됩니다."
             )
 
     st.caption(

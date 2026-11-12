@@ -71,7 +71,9 @@ def preparation(tmp_path, monkeypatch):
     (project / "config").mkdir(parents=True)
     config = json.loads(Path("config/multi_model.json").read_text(encoding="utf-8"))
     config["assets"] = ["SPY", "QQQ"]
-    for name in ("investment_ai", "multi_model"):
+    config.pop("training_windows", None)
+    config["mode"] = "legacy"
+    for name in ("investment_ai", "multi_model", "multi_model_no_risk"):
         (project / "config" / f"{name}.json").write_text(json.dumps(config))
     market, news = inputs()
     market = pd.concat([market, market.assign(ticker="QQQ")], ignore_index=True)
@@ -135,3 +137,39 @@ def test_preparation_updates_both_configs_and_validates_panel(preparation):
     assert panel.macros == ["vix"]
     assert (panel.risk == 0.4).all()
     assert (runtime / first["data_path"]).with_name("provenance.json").exists()
+
+
+def test_windows_fail_before_publishing(preparation):
+    module, project, runtime, args = preparation
+    p = project / "config/multi_model.json"
+    c = json.loads(p.read_text())
+    c.update(
+        mode="walk-forward",
+        training_windows=[
+            dict(
+                train_start="2019-02-05",
+                train_end="2020-12-31",
+                test_start="2021-01-04",
+                test_end="2021-01-06",
+            )
+        ],
+    )
+    p.write_text(json.dumps(c))
+    before = snapshot(project.parent)
+    with pytest.raises(ValueError, match="boundaries"):
+        module.main(args)
+    assert snapshot(project.parent) == before
+
+
+def test_no_risk_config_synced_without_changing_flag(preparation):
+    module, project, runtime, args = preparation
+    p = project / "config/multi_model_no_risk.json"
+    c = json.loads(p.read_text())
+    c["include_risk_score"] = False
+    p.write_text(json.dumps(c))
+    module.main(args)
+    updated = json.loads(p.read_text())
+    normal = json.loads((project / "config/multi_model.json").read_text())
+    assert updated["include_risk_score"] is False
+    assert updated["data_path"] == normal["data_path"]
+    assert updated["news_path"] == normal["news_path"]

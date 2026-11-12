@@ -23,7 +23,9 @@ def attach_decisions(payload, bundle):
             return result
         if evaluation["model_type"] != payload["model_type"]:
             return result
-        history = pd.read_csv(bundle / "evaluation/ppo_history.csv")
+        history = pd.read_csv(
+            bundle / "evaluation/ppo_history.csv", dtype={"run_id": str}
+        )
         result["min_weight_threshold"] = config.get("min_weight_threshold")
         result["weight_stage"] = (
             "최소 비중 필터 설정이 없는 이전 학습본"

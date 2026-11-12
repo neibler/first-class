@@ -16,6 +16,7 @@ def write(path, value):
 
 @pytest.fixture
 def packages(tmp_path, monkeypatch):
+    monkeypatch.setattr(builder, "verify_inputs", lambda *args: None)
     root = tmp_path / "source"
     runtime = root / "runtime"
     monkeypatch.setattr(builder, "PROJECT", root)

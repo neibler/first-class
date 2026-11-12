@@ -93,7 +93,9 @@ def attach_market_context(payload, bundle):
                     )
                 context = deepcopy(contexts[row["date"]])
                 # Portfolio state belongs to this precise observation.
-                for f, v in zip(payload["features"], row["feature_values_raw"]):
+                for f, v in zip(
+                    payload["features"], row["feature_values_raw"], strict=True
+                ):
                     if f.startswith("current_weight_") or f in {
                         "drawdown",
                         "mdd",

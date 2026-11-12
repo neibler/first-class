@@ -12,6 +12,30 @@ RUNTIME = PROJECT / "runtime"
 KINDS = ("ppo", "recurrent_ppo", "sac", "td3")
 
 
+def verify_inputs(config, spec, expected):
+    import sys
+
+    if str(PROJECT) not in sys.path:
+        sys.path.insert(0, str(PROJECT))
+    import pandas as pd
+    from backend.investment_ai.data_loader import load_data, fingerprint
+    from backend.investment_ai.model_runs import subset
+
+    data, _ = load_data(
+        {**config, "seed": spec.get("data_seed", config.get("seed", 42))}, RUNTIME
+    )
+    dates = pd.DatetimeIndex(data.dates)
+    if any(pd.Timestamp(spec[k]) not in dates for k in ("start_date", "end_date")):
+        raise ValueError("Bundle input window is missing")
+    data = subset(
+        data,
+        int(dates.searchsorted(spec["start_date"])),
+        int(dates.searchsorted(spec["end_date"], side="right")),
+    )
+    if fingerprint(data) != expected:
+        raise ValueError("Bundle input fingerprint mismatch")
+
+
 def build(seed=None, selections=None):
     selections = selections or {}
     if set(selections) - set(KINDS):
@@ -90,6 +114,7 @@ def build(seed=None, selections=None):
                 evaluation["comparison_group"],
             )
         )
+        verify_inputs(config, spec, meta["data_hash"])
         for name in (
             "model.zip",
             "config.json",

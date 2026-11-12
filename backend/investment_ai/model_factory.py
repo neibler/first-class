@@ -59,6 +59,9 @@ def validate_model_config(config):
         if config["total_timesteps"] % n or config["checkpoint_steps"] % n:
             raise ValueError("Steps/checkpoints must be multiples of effective n_steps")
     else:
+        for name, minimum in (("learning_starts", 0), ("gradient_steps", 1)):
+            if type(params[name]) is not int or params[name] < minimum:
+                raise ValueError(f"{name} must be an integer >= {minimum}")
         if params["learning_starts"] < 0 or params["gradient_steps"] < 1:
             raise ValueError("Invalid off-policy warmup/gradient_steps")
         if params["batch_size"] > params["buffer_size"]:

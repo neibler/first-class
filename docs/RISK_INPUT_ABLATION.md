@@ -21,7 +21,7 @@
 
 ```powershell
 .\.venv312\Scripts\python.exe local_run.py preflight --config config/multi_model_no_risk.json
-.\.venv312\Scripts\python.exe local_run.py train --config config/multi_model_no_risk.json --mode single --model ppo --reward return_mdd --timesteps 100000 --seed 42 --run-id without_risk_01 --dry-run
+.\.venv312\Scripts\python.exe local_run.py train --config config/multi_model_no_risk.json --mode walk-forward --model ppo --reward return_mdd --timesteps 100000 --seed 42 --run-id without_risk_01 --dry-run
 ```
 
 실제로 학습하려면 `--dry-run`을 제거합니다. 다른 모델은 `--model`에
@@ -43,3 +43,6 @@ seed 반복 실험은 양쪽에 같은 `--seeds 42 123 2026`을 지정합니다.
 
 평가 기간은 동일하게 유지하고 비용 차감 수익률, Sharpe, MDD, 비용을 비교합니다.
 이 실험은 모델 입력의 추가 효과를 보는 것이며 뉴스 기능 전체 제거 실험이 아닙니다.
+
+
+세 window_0/1/2를 모두 평가하여 비교합니다. 포함/제외 설정은 동일한 prepared 입력을 사용합니다. 새 clone은 먼저 `python scripts/install_training_inputs.py`를 실행하세요.

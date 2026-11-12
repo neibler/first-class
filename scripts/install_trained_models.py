@@ -36,6 +36,8 @@ def install(destination, shared=None):
             if hashlib.sha256(content).hexdigest() != digest:
                 raise ValueError(f"Checksum mismatch: {name}")
             if target.exists():
+                if not target.is_file():
+                    raise ValueError(f"Installation target is not a file: {name}")
                 if target.read_bytes() != content:
                     raise ValueError(
                         f"Existing file differs: {name}; use a fresh destination"
@@ -65,7 +67,7 @@ def install(destination, shared=None):
                     or ".." in path.parts
                     or "\\" in value
                     or ":" in value
-                    or value not in manifest["files"]
+                    or path.as_posix() not in manifest["files"]
                 ):
                     raise ValueError(f"Missing or unsafe bundled input: {key}")
             marker = bundle / "installed_inputs.json"
@@ -82,6 +84,14 @@ def install(destination, shared=None):
             if not marker.exists():
                 pending.append((marker, content))
         # Validate the whole archive and all conflicts before writing any files.
+        for target, _ in pending:
+            if target.exists() and not target.is_file():
+                raise ValueError(f"Installation target is not a file: {target}")
+            for parent in target.parents:
+                if parent.exists() and not parent.is_dir():
+                    raise ValueError(
+                        f"Installation parent is not a directory: {parent}"
+                    )
         for target, content in pending:
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(content)
@@ -91,7 +101,11 @@ def install(destination, shared=None):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--destination", type=Path, default=PROJECT / "runtime")
+    parser.add_argument(
+        "--destination",
+        type=Path,
+        default=Path(os.environ.get("INVESTMENT_AI_HOME", PROJECT / "runtime")),
+    )
     parser.add_argument("--activate", choices=("ppo", "recurrent_ppo", "sac", "td3"))
     args = parser.parse_args()
     manifest = install(args.destination)

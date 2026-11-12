@@ -14,6 +14,9 @@ from .data_loader import fingerprint
 from .portfolio_env import PortfolioEnv
 from .preprocessing import FeatureScaler
 from .records import asset_rows
+from .rebalancing import REBALANCE_POLICY
+from .checkpoints import publish_checkpoint, resolve_checkpoint
+from .settings import validate_config
 
 
 def source_hash():
@@ -85,6 +88,7 @@ def feature_names(data, config):
 def schema_for(data, config):
     return {
         "version": SCHEMA_VERSION,
+        "execution_policy": REBALANCE_POLICY,
         "feature_names": feature_names(data, config),
         "execution_delay": 1,
         "timing": "observe_close_t_execute_close_t_plus_1",
@@ -116,20 +120,37 @@ def schema_for(data, config):
     }
 
 
-def train_model(data, config, train_end, seed, output, resume=None):
+def train_model(data, config, train_end, seed, output, resume=None, run_spec=None):
     output = Path(output)
-    output.mkdir(parents=True, exist_ok=False)
+    validate_config(config)
     torch.set_num_threads(1)
     scaler = FeatureScaler.fit(data, train_end)
     data_hash = fingerprint(data)
     if resume:
-        old = json.loads((Path(resume) / "manifest.json").read_text(encoding="utf-8"))
+        checkpoint_path, old = resolve_checkpoint(resume)
+        saved_schema = json.loads(
+            (Path(resume) / "schema.json").read_text(encoding="utf-8")
+        )
+        if saved_schema.get("execution_policy") != REBALANCE_POLICY:
+            raise ValueError("Incompatible execution policy; retrain the model")
         old_config = json.loads(
             (Path(resume) / "config.json").read_text(encoding="utf-8")
         )
-        old_config.setdefault("include_risk_score", True)
-        ignored = {"total_timesteps", "checkpoint_steps"}
-        if any(old_config.get(k) != config[k] for k in config if k not in ignored):
+        effective = dict(config)
+        for key, default in {
+            "model_type": "ppo",
+            "include_risk_score": True,
+            "device": "cpu",
+            "max_holdings": None,
+        }.items():
+            old_config.setdefault(key, default)
+            effective.setdefault(key, default)
+        ignored = {"total_timesteps", "checkpoint_steps", "device"}
+        if any(
+            old_config.get(k) != effective.get(k)
+            for k in old_config.keys() | effective.keys()
+            if k not in ignored
+        ):
             raise ValueError(
                 "Resume requires unchanged configuration except "
                 "steps/checkpoint interval"
@@ -142,6 +163,9 @@ def train_model(data, config, train_end, seed, output, resume=None):
         ):
             raise ValueError("Resume data, source, seed or split mismatch")
         scaler = FeatureScaler.load(Path(resume) / "scaler.json")
+    output.mkdir(parents=True, exist_ok=False)
+    if run_spec is not None:
+        write_json(output / "run_spec.json", run_spec)
     env = Monitor(
         PortfolioEnv(
             data,
@@ -154,13 +178,13 @@ def train_model(data, config, train_end, seed, output, resume=None):
     )
     if resume:
         model = load_model(
-            Path(resume) / "model.zip",
+            checkpoint_path / "model.zip",
             config.get("model_type", "ppo"),
             env=env,
             device=config.get("device", "cpu"),
         )
         if config.get("model_type") in {"sac", "td3"}:
-            model.load_replay_buffer(Path(resume) / "replay_buffer.pkl")
+            model.load_replay_buffer(checkpoint_path / "replay_buffer.pkl")
     else:
         model = create_model(config.get("model_type", "ppo"), env, config, seed)
     model.set_logger(configure(str(output), ["csv"]))
@@ -173,18 +197,13 @@ def train_model(data, config, train_end, seed, output, resume=None):
     while model.num_timesteps < target:
         steps = min(config["checkpoint_steps"], target - model.num_timesteps)
         model.learn(total_timesteps=steps, callback=callback, reset_num_timesteps=False)
-        # Save after complete algorithm updates, not during rollout collection.
-        model.save(output / "model_pending.zip")
-        (output / "model_pending.zip").replace(output / "model.zip")
-        if config.get("model_type") in {"sac", "td3"}:
-            model.save_replay_buffer(output / "replay_buffer.pkl")
-        checkpoint = output / "checkpoints"
-        checkpoint.mkdir(exist_ok=True)
-        model.save(checkpoint / f"step_{model.num_timesteps}.zip")
-        write_json(
-            output / "manifest.json",
+        # Commit only a complete model + buffer generation.
+        publish_checkpoint(
+            model,
+            output,
             {
                 "schema_version": SCHEMA_VERSION,
+                "execution_policy": REBALANCE_POLICY,
                 "model_type": config.get("model_type", "ppo"),
                 "reward_type": config["reward"],
                 "timesteps": config["total_timesteps"],
@@ -211,6 +230,8 @@ def load_bundle(path, data=None, exact_data=False):
     path = Path(path)
     config = json.loads((path / "config.json").read_text(encoding="utf-8"))
     schema = json.loads((path / "schema.json").read_text(encoding="utf-8"))
+    if schema.get("execution_policy") != REBALANCE_POLICY:
+        raise ValueError("Incompatible execution policy; retrain the model")
     if schema["version"] != SCHEMA_VERSION:
         raise ValueError("Incompatible model schema version")
     if data is not None and schema != schema_for(data, config):

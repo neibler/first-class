@@ -89,7 +89,10 @@ def explain_bundle(bundle, sample=10, permutations=8):
         raise ValueError("Model training is incomplete")
     spec = json.loads((bundle / "run_spec.json").read_text(encoding="utf-8"))
     config = json.loads((bundle / "config.json").read_text(encoding="utf-8"))
-    data, _ = load_data(config, bundle_input_root(bundle, ROOT))
+    data, _ = load_data(
+        {**config, "seed": spec.get("data_seed", config["seed"])},
+        bundle_input_root(bundle, ROOT),
+    )
     dates = pd.DatetimeIndex(data.dates)
     data = subset(
         data,

@@ -88,3 +88,29 @@ def test_attach_checks_hash_features_and_preserves_saved_payload(
         result = attach_market_context(broken, tmp_path)
         assert result["market_context_status"] == "unavailable"
         assert "market_context" not in result["assets"]["GLD"]["decisions"][0]
+
+
+def test_cached_context_rejects_short_second_asset(tmp_path, monkeypatch, market):
+    from backend.investment_ai import data_loader, model_runs, training
+
+    (tmp_path / "config.json").write_text(json.dumps({"seed": 42}))
+    (tmp_path / "run_spec.json").write_text(
+        json.dumps({"start_date": "2025-01-01", "end_date": "2025-01-10"})
+    )
+    monkeypatch.setattr(data_loader, "load_data", lambda *a: (market, None))
+    monkeypatch.setattr(data_loader, "fingerprint", lambda *a: "same")
+    monkeypatch.setattr(model_runs, "subset", lambda data, start, end: data)
+    monkeypatch.setattr(training, "feature_names", lambda *a: ["macro_vix"])
+    payload = {
+        "features": ["macro_vix"],
+        "data_hash": "same",
+        "assets": {
+            "GLD": {"decisions": [{"date": "2025-01-09", "feature_values_raw": [1]}]},
+            "SPY": {"decisions": [{"date": "2025-01-09", "feature_values_raw": []}]},
+        },
+    }
+    result = attach_market_context(payload, tmp_path)
+    assert result["market_context_status"] == "unavailable"
+    assert all(
+        "market_context" not in a["decisions"][0] for a in result["assets"].values()
+    )

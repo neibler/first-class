@@ -25,14 +25,12 @@ def decision_direction(execution):
 
 
 def select_factors(factors, direction):
-    ordered = sorted(factors, key=lambda f: (-f["absolute_sum"], f["key"]))
-    if direction in {"hold", "unknown"}:
-        return ordered[:3], []
-    opposite = "decrease" if direction == "increase" else "increase"
-    return (
-        [f for f in ordered if f["direction"] == direction][:3],
-        [f for f in ordered if f["direction"] == opposite],
+    ordered = sorted(
+        [f for f in factors if f["direction"] != "balanced"],
+        key=lambda f: (-f["absolute_sum"], f["key"]),
     )
+    # SHAP signs are relative to its baseline, never previous holdings.
+    return ordered[:3], ordered[3:]
 
 
 def compact_state(factor):

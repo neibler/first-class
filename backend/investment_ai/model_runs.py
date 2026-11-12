@@ -177,21 +177,21 @@ def run_seed_experiments(
             "window_id": plan["window_id"],
             "seed": plan["seed"],
         }
-        train_model(local, run_config, split - 1, plan["seed"], plan["path"])
-        write_json(
-            plan["path"] / "run_spec.json",
-            {
-                "start_date": str(local.dates[0])[:10],
-                "end_date": str(local.dates[-1])[:10],
-                "test_start_index": split,
-                "model_type": kind,
-                "reward_type": reward,
-                "seed": plan["seed"],
-                "window_id": plan["window_id"],
-                "data_hash": fingerprint(local),
-                "data_seed": config["seed"],
-                "synthetic": not config["data_path"],
-            },
+
+        run_spec = {
+            "start_date": str(local.dates[0])[:10],
+            "end_date": str(local.dates[-1])[:10],
+            "test_start_index": split,
+            "model_type": kind,
+            "reward_type": reward,
+            "seed": plan["seed"],
+            "window_id": plan["window_id"],
+            "data_hash": fingerprint(local),
+            "data_seed": config["seed"],
+            "synthetic": not config["data_path"],
+        }
+        train_model(
+            local, run_config, split - 1, plan["seed"], plan["path"], run_spec=run_spec
         )
         if not config["data_path"]:
             local.news_metadata.to_parquet(

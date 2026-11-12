@@ -25,11 +25,11 @@ def test_filter_preserves_values_ranking_and_opposite():
     )
     original = deepcopy(groups)
     positive, negative = select_factors(groups, "increase")
-    assert [g["absolute_sum"] for g in positive] == [0.4, 0.3, 0.2]
-    assert all(g["direction"] == "increase" for g in positive)
-    assert len(negative) == 1
+    assert [g["absolute_sum"] for g in positive] == [0.5, 0.4, 0.3]
+    assert [g["direction"] for g in positive] == ["decrease", "increase", "increase"]
+    assert len(negative) == 2
     negative, positive = select_factors(groups, "decrease")
-    assert len(negative) == 1 and len(positive) == 4
+    assert len(negative) == 3 and len(positive) == 2
     neutral, _ = select_factors(groups, "hold")
     assert [g["absolute_sum"] for g in neutral] == [0.5, 0.4, 0.3]
     assert groups == original

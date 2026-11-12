@@ -14,13 +14,25 @@ from .model_runs import plan_runs
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", type=Path, required=True)
+    parser.add_argument("--mode", choices=("single", "walk-forward", "legacy"))
+    parser.add_argument("--train-years", type=int, default=4)
+    parser.add_argument("--test-years", type=int, default=1)
     args = parser.parse_args()
     config = read_config(args.config)
     data, _ = load_data(config, ROOT)
-    mode = config.get("mode", "legacy")
+    from .settings import effective_mode
+
+    mode = effective_mode(config, args.mode)
     windows = None
     if mode in ("single", "walk-forward"):
-        windows = plan_runs(config, data, config["seeds"], mode == "walk-forward")
+        windows = plan_runs(
+            config,
+            data,
+            config["seeds"],
+            mode == "walk-forward",
+            args.train_years,
+            args.test_years,
+        )
         folds, test_start = windows, windows[-1]["split"]
     else:
         folds, test_start = walk_forward_splits(len(data.dates), config)

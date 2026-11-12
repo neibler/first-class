@@ -191,6 +191,16 @@ class InvestmentService:
                         "Episode is safeguarded; supply state or explicitly reset"
                     )
                 state["safeguard_triggered"] = True
+            from .accounting import safeguard_breached
+
+            if state and not reset:
+                state["safeguard_triggered"] = bool(
+                    state.get("safeguard_triggered", False)
+                    or state.get("stopped", False)
+                    or safeguard_breached(
+                        state["max_drawdown"], self.config["max_drawdown"]
+                    )
+                )
             recurrent = self.config.get("model_type") == "recurrent_ppo"
             if recurrent:
                 prediction = self._recurrent_prediction(data, state, episode_id, reset)
@@ -238,6 +248,10 @@ class InvestmentService:
         }
 
     def _recurrent_prediction(self, data, state, episode_id, reset):
+        if state and state.get("safeguard_triggered", False):
+            return predict_weights(
+                data, self.config, self.models, self.scaler, state, []
+            )
         date = str(data.dates[-1])[:10]
         # Include the full supplied panel: changing a repeated observation is an error.
         from .data_loader import fingerprint

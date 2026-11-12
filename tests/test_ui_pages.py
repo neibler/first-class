@@ -170,7 +170,7 @@ def test_shap_contributions_are_not_trade_directions(page):
 
 @pytest.mark.parametrize(
     "before,target,direction",
-    [(0.3, 0.14, "낮추는"), (0.1, 0.14, "높이는"), (0.14, 0.14, "현재 SPY")],
+    [(0.3, 0.14, "감소"), (0.1, 0.14, "증가"), (0.14, 0.14, "유지")],
 )
 def test_decision_focused_shap_ui(page, monkeypatch, before, target, direction):
     from frontend import shap_client
@@ -190,21 +190,16 @@ def test_decision_focused_shap_ui(page, monkeypatch, before, target, direction):
     monkeypatch.setattr(shap_client, "load_model_shap", lambda model: data)
     page.switch_page("app_pages/shap.py").run()
     assert not page.exception
-    assert direction in " ".join(x.value for x in page.subheader)
+    assert f"SPY 비중 {direction} 목표" in " ".join(x.value for x in page.markdown)
     assert [m.value for m in page.metric] == [f"{before:.2%}", "14.00%", "14.00%"]
     assert not any(m.label == "SHAP 기준 비중" for m in page.metric)
     displayed = " ".join(x.value for x in page.markdown)
-    if before > target:
-        assert "시장 변동성" in displayed and "금(GLD) 관련 신호" not in displayed
-    elif before < target:
-        assert "금(GLD) 관련 신호" in displayed and "시장 변동성" not in displayed
+    assert "시장 변동성" in displayed and "금(GLD) 관련 신호" in displayed
+    assert "SHAP 기준 비중 대비" in " ".join(x.value for x in page.caption)
     page.button(key="shap_details_button").click().run()
     assert not page.exception
     assert any(m.label == "SHAP 기준 비중" for m in page.metric)
     assert "macd_gld" in page.dataframe[2].value["raw feature"].tolist()
     assert page.dataframe[2].value["shap value"].tolist() == [0.06, -0.02]
     assert len(page.dataframe[0].value) == 2
-    assert any(
-        e.label == "反" or e.label == "반대 방향으로 작용한 요인 보기"
-        for e in page.expander
-    )
+    assert any(e.label == "나머지 요인 보기" for e in page.expander)

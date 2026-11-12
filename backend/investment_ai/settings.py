@@ -135,3 +135,14 @@ def bundle_input_root(bundle, default=ROOT):
     if root not in bundle.parents:
         raise ValueError("Installed input root must contain the model bundle")
     return root
+
+
+def effective_mode(config, override=None):
+    mode = (
+        override
+        if override is not None
+        else config.get("mode", "single" if "model_type" in config else "legacy")
+    )
+    if mode not in ("single", "walk-forward", "legacy"):
+        raise ValueError(f"Unsupported mode {mode!r}")
+    return mode

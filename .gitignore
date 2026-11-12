@@ -286,3 +286,5 @@ secrets*.json
 !/shared/trained_models.zip
 /config/serving.before_shared_install.json
 .DS_Store
+
+!/shared/training_inputs.zip

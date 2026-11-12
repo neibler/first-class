@@ -58,6 +58,10 @@ def predict_weights(data, config, models, scaler, state=None, predictors=None):
         or not (np.isclose(held.sum(), 1) or np.isclose(held.sum(), 0))
     ):
         raise ValueError("Holdings must be fully invested or entirely cash")
+    if held.sum() > 0 and np.isclose(held.sum(), 1):
+        held /= held.sum()
+    else:
+        held[:] = 0
     value, peak, mdd = (
         state["portfolio_value"],
         state["peak_value"],
@@ -82,16 +86,21 @@ def predict_weights(data, config, models, scaler, state=None, predictors=None):
     phase = elapsed % config["rebalance_days"] / config["rebalance_days"]
     obs = env.observation_at(len(data.dates) - 1, held, dd, mdd, phase)
     recurrent = config.get("model_type", "ppo") == "recurrent_ppo"
-    if recurrent and predictors is None:
-        raise ValueError(
-            "Recurrent inference requires explicit PredictionSession state"
-        )
-    predictors = predictors or [PredictionSession(m) for m in models]
     stopped = (
         state.get("stopped", False)
         or state.get("safeguard_triggered", False)
         or safeguard_breached(mdd, config["max_drawdown"])
     )
+    if recurrent and not stopped and not predictors:
+        raise ValueError(
+            "Recurrent inference requires explicit PredictionSession state"
+        )
+    if predictors is None:
+        predictors = [
+            PredictionSession(m, config.get("model_type", "ppo")) for m in models
+        ]
+    if not stopped and not predictors:
+        raise ValueError("At least one prediction session is required")
     # All policies compute a fresh target every day, even when no trade is due.
     # A latched safety stop needs no further model calls until explicit reset.
     raw_target = (
@@ -198,6 +207,15 @@ def main(argv=None):
         if args.data or args.news:
             parser.error("Use API market/news inputs for an explicit single bundle")
         result = service.optimize(state=state)
+        if args.output:
+            save_prediction(
+                {
+                    **result,
+                    "as_of_date": result["as_of"],
+                    "weights": result["target_weights"],
+                },
+                args.output,
+            )
         print(json.dumps(result, indent=2))
         return
     run = resolve_run(args.run)

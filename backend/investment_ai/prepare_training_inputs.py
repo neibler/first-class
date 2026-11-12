@@ -76,6 +76,7 @@ def main(argv=None):
     configs = [
         PROJECT / "config/investment_ai.json",
         PROJECT / "config/multi_model.json",
+        PROJECT / "config/multi_model_no_risk.json",
     ]
     # Read and validate every target before generating or publishing any output.
     targets = [(path, json.loads(path.read_text(encoding="utf-8"))) for path in configs]
@@ -144,6 +145,12 @@ def main(argv=None):
             synthetic_news=False,
         )
         validate_config(cfg)
+        from .model_runs import plan_runs
+        from .settings import effective_mode
+
+        mode = effective_mode(cfg)
+        if mode != "legacy":
+            plan_runs(cfg, data, cfg["seeds"], mode == "walk-forward")
         pending_configs.append(
             (path, json.dumps(cfg, indent=2, allow_nan=False) + "\n")
         )

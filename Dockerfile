@@ -23,6 +23,11 @@ COPY backend/news_research/ /app/backend/news_research/
 COPY backend/performance/ /app/backend/performance/
 COPY shared/trained_models_manifest.json /app/shared/trained_models_manifest.json
 COPY config/agent.yaml config/etf_news_map.yaml config/serving.json config/investment_ai.json config/multi_model.json /app/config/
+COPY shared/training_inputs.zip shared/training_inputs_manifest.json /app/shared/
+COPY scripts/install_training_inputs.py /app/scripts/install_training_inputs.py
+RUN python scripts/install_training_inputs.py --destination /app/runtime \
+    && chown -R appuser:appuser /app/runtime
+ENV INVESTMENT_AI_HOME=/app/runtime
 ENV RESULTS_DIR=/results
 USER appuser
 EXPOSE 8000
