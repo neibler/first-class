@@ -48,8 +48,8 @@ flowchart LR
 
 - `POST /explain`은 미구현이다. 투자 `/optimize`·`/backtest`는 main 구현을 유지한다.
   저장된 성과·SHAP 결과를 조회하는 `/performance/*`는 별도로 제공한다.
-- 6개 페이지 내비게이션은 유지한다. 포트폴리오·리서치·성과·ANOVA는 HTTP로 연결하고
-  (성과·ANOVA는 저장 결과 조회), SHAP은 샘플이며 리스크는 준비 화면이다.
+- 6개 페이지 내비게이션은 유지한다. 포트폴리오·리서치·성과·SHAP·ANOVA는 HTTP로 연결하고
+  (성과·SHAP·ANOVA는 저장 결과 조회), 리스크는 준비 화면이다.
 - main의 데이터 처리·Gymnasium·PPO·Safe-Guard·실험·백테스트 코드는 유지했다.
   이번 충돌 통합에서는 실제 학습·사용자 모델/데이터의 학교 성능 요건을 다시 검증하지 않는다.
 - SHAP, 리서치 결과의 투자 모델·리스크 모니터링 연동.
@@ -60,6 +60,24 @@ flowchart LR
 학교 최종 제출물 전체가 완성된 상태가 아니다. 스펙의 구현 순서는 권장사항이며,
 MLflow, 주기적 수집·재학습, 이상거래 탐지,
 멀티모달, 공정성 분석은 학교의 선택 과제다.
+
+## SHAP 화면 API 연동
+
+- `frontend/explain_client.py`는 기존 `API_BASE_URL`로 `GET /performance/explain`을 호출한다.
+  자산 목록(파라미터 없음) 1회와 선택 자산(`ticker`)의 결정 전체 1회를 조회하고, 날짜는 화면에서 고른다.
+  connect 3초/read 10초 timeout, 자동 재시도·프론트 캐시·샘플 대체 없음. 투자 모델 상태로 차단하지 않는다.
+- 응답 계약: `output_unit=target_weight`, 피처 수와 SHAP·정규화 값·모델 입력 값 길이 일치,
+  정규화 값 0–1, 날짜 형식·중복 없음, 기준값+SHAP 합=최종값(허용 오차 1e-6), 요청한 자산·피처 순서 일치.
+  위반은 잘못된 응답으로 처리하며 오류 문구에 응답 본문을 넣지 않는다.
+- 503은 결과 미준비, 자산 조회의 404는 "선택한 자산 결과 없음"으로 구분한다.
+  새로고침 뒤 이전 선택이 사라지면 자산은 첫 항목, 결정일은 마지막 날짜로 자동 변경하고,
+  "기존 선택 항목이 없어 최신 데이터로 변경되었습니다" 토스트 알림을 띄운다(첫 방문에는 알림 없음).
+- `explain_view.py`는 기존 차트 함수에 맞게 값을 배치만 한다. Summary Plot은 자산의 저장 결정일 전체,
+  Force Plot·상세 표는 선택 결정의 서버 값이다. 전체 피처 중요도는 제공될 때만 표시한다.
+- 화면이 쓰던 UI 개발용 샘플 상태(`FIRST_CLASS_UI_DEV`, `load_sample`)는 SHAP 전용이었으므로 제거했다.
+  SHAP 샘플 파일 `frontend/fixtures/shap.json`과 `sample_data.load_shap`·`summary_records`도 삭제했다.
+- `tests/test_explain_frontend.py`는 HTTP 오류·계약 위반·표시 값·선택·새로고침·빈 결과와
+  서버의 `report.explain_payload`로 만든 파일을 읽는 실제 라우터를 검사한다.
 
 ## ANOVA 화면 API 연동
 

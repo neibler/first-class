@@ -1,18 +1,14 @@
-"""Shared cabin styling, native navigation, and explicit sample states."""
+"""Shared cabin styling, native navigation, and API status notes."""
 
 import base64
-import logging
-import os
 from functools import lru_cache
 from pathlib import Path
 
 import streamlit as st
 
 from frontend import api_client
-from frontend.sample_data import SampleDataError
 
 ASSETS = Path(__file__).parent / "assets"
-LOGGER = logging.getLogger(__name__)
 COCKPIT_ASSETS = {
     "ceiling": "trimmed/ceiling.webp",
     "pillar-left": "trimmed/pillar-left-upright.webp",
@@ -91,49 +87,9 @@ def page_heading(title, eyebrow, description):
             st.caption(description)
 
 
-def sample_badge():
-    st.badge("샘플 데이터", icon=":material/science:", color="blue")
-
-
-def load_sample(loader, key):
-    """API replacement seam: replace loader, never silently fall back on errors."""
-    mode = "ready"
-    if os.getenv("FIRST_CLASS_UI_DEV") == "1":
-        mode = st.query_params.get("ui_state", "ready")
-        if st.session_state.get(f"recovered_{key}") == mode:
-            mode = "ready"
-    if mode == "loading":
-        st.info("샘플 데이터를 불러오는 중입니다…")
-        st.skeleton(height=280)
-        if st.button("불러오기 완료", key=f"finish_{key}"):
-            st.session_state[f"recovered_{key}"] = mode
-            st.rerun()
-        return None
-    try:
-        with st.spinner("샘플 데이터를 불러오는 중입니다…"):
-            if mode == "error":
-                raise SampleDataError("샘플 데이터 로드에 실패했습니다.")
-            data = None if mode == "empty" else loader()
-        if not data:
-            st.info("표시할 샘플 결과가 없습니다.")
-        else:
-            return data
-    except (SampleDataError, OSError, ValueError, KeyError) as exc:
-        # Never log exception text/tracebacks: they can contain paths or data.
-        LOGGER.warning("SAMPLE_LOAD_FAILED: %s", type(exc).__name__)
-        st.error(
-            "샘플 데이터 오류: 데이터를 불러오지 못했습니다. 다시 시도해 주세요. "
-            "계속되면 관리자에게 샘플 파일 확인을 요청해 주세요."
-        )
-    if st.button("다시 시도", key=f"retry_{key}"):
-        st.session_state[f"recovered_{key}"] = mode
-        st.rerun()
-    return None
-
-
 @st.fragment
 def health_panel(
-    sample=True, investment=False, research=False, performance=False, statistics=False
+    investment=False, research=False, performance=False, statistics=False, explain=False
 ):
     with st.expander("API 연결 및 모델 준비 상태"):
         st.button("연결 상태 새로고침", key="refresh_health")
@@ -170,9 +126,10 @@ def health_panel(
                 "이 화면은 저장된 통계 결과를 조회합니다. /health의 투자 모델 상태와 "
                 "SHAP 준비 여부는 통계 결과 조회 가능 여부와 별개입니다."
             )
-        elif sample:
+        elif explain:
             st.caption(
-                "/health 실시간 조회 · 위 분석은 UI 개발용 샘플이며 실제 모델 결과가 아닙니다."
+                "이 화면은 저장된 SHAP 결과를 조회합니다. /health의 투자 모델 상태와 "
+                "SHAP 결과의 준비 상태는 별개입니다."
             )
         else:
             st.caption(

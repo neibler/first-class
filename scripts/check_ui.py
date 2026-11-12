@@ -1,7 +1,7 @@
 """Optional real-browser UI check (pip install playwright; installed Edge).
 
-Run against normal :8501 plus FIRST_CLASS_UI_DEV=1 on :8502:
-python scripts/check_ui.py --base http://localhost:8501 --dev http://localhost:8502
+Run against the normal dashboard (SHAP shows charts or its not-ready notice):
+python scripts/check_ui.py --base http://localhost:8501
 Not a runtime dependency or a replacement for the existing CI smoke check.
 """
 
@@ -11,7 +11,7 @@ from pathlib import Path
 from playwright.sync_api import expect, sync_playwright
 
 
-def run(base, dev, output):
+def run(base, output):
     # Large local image assets may still be streaming after a page link click.
     expect.set_options(timeout=30000)
     output.mkdir(parents=True, exist_ok=True)
@@ -47,17 +47,25 @@ def run(base, dev, output):
         expect(
             page.get_by_role("heading", name="SHAP 해석", exact=True)
         ).to_be_visible()
-        expect(page.get_by_role("combobox")).to_have_count(2)
-        asset, date = page.get_by_role("combobox").all()
-        asset.click()
-        page.get_by_role("option", name="QQQ", exact=True).click()
-        date.click()
-        page.get_by_role("option", name="2026-04-30", exact=True).click()
-        expect(page.get_by_text("QQQ · 미국 기술주", exact=False)).to_be_visible()
-        expect(page.locator('[data-testid="stVegaLiteChart"]').first).to_be_visible()
-        force = page.frame_locator("iframe").locator('svg[role="img"]')
-        expect(force).to_be_visible()
-        assert force.locator("polygon").count() == 6
+        expect(
+            page.get_by_role("button", name="SHAP 결과 새로고침", exact=True)
+        ).to_be_visible()
+        expect(page.locator('[data-testid="stApp"]')).to_have_attribute(
+            "data-test-script-state", "notRunning", timeout=30000
+        )
+        if page.get_by_role("combobox").count() == 2:
+            # Saved results differ per run; pick whatever the server returned.
+            date = page.get_by_role("combobox").all()[1]
+            date.click()
+            page.get_by_role("option").first.click()
+            expect(
+                page.locator('[data-testid="stVegaLiteChart"]').first
+            ).to_be_visible()
+            force = page.frame_locator("iframe").locator('svg[role="img"]')
+            expect(force).to_be_visible()
+            assert force.locator("polygon").count() == 6
+        else:
+            expect(page.locator('[data-testid="stAlert"]').first).to_be_visible()
         border = page.locator(".st-key-nav-shap a").evaluate(
             "e => getComputedStyle(e).borderColor"
         )
@@ -123,27 +131,11 @@ def run(base, dev, output):
                 name = "shap" if route else "portfolio"
                 page.screenshot(path=str(output / f"{name}-{label}.png"))
                 target = page.locator(".st-key-force" if route else ".st-key-doors")
+                if not target.count():
+                    target = page.locator("h1")
                 target.evaluate("e => e.scrollIntoView({block:'center'})")
                 page.wait_for_timeout(300)
                 page.screenshot(path=str(output / f"{name}-{label}-lower.png"))
-        if dev:
-            # Portfolio now uses the investment API, not sample-state controls.
-            for route in ["/shap"]:
-                for state in ["loading", "empty", "error"]:
-                    context = browser.new_context()
-                    test = context.new_page()
-                    test.goto(f"{dev}{route}?ui_state={state}")
-                    label = "불러오기 완료" if state == "loading" else "다시 시도"
-                    button = test.get_by_role("button", name=label, exact=True)
-                    expect(button).to_be_visible(timeout=30000)
-                    assert test.get_by_role("link").count() >= 5
-                    button.click()
-                    expect(button).not_to_be_visible()
-                    expect(
-                        test.locator('[data-testid="stVegaLiteChart"]').first
-                    ).to_be_visible()
-                    assert test.locator('[data-testid="stException"]').count() == 0
-                    context.close()
         assert not errors, errors
         browser.close()
     print(
@@ -155,7 +147,6 @@ def run(base, dev, output):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--base", default="http://localhost:8501")
-    parser.add_argument("--dev", default=None)
     parser.add_argument("--output", type=Path, default=Path("artifacts/ui"))
     args = parser.parse_args()
-    run(args.base.rstrip("/"), args.dev, args.output)
+    run(args.base.rstrip("/"), args.output)

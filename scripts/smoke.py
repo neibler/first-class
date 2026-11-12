@@ -60,3 +60,10 @@ page.button(key="refresh_statistics").click().run()
 assert not page.exception, page.exception
 assert any("통계 분석 결과가 아직 준비되지" in w.value for w in page.warning)
 print("PASS: statistics HTTP 503 guidance, navigation and refresh")
+
+page.switch_page("app_pages/shap.py").run()
+assert not page.exception, page.exception
+assert any("SHAP 해석 결과가 아직 준비되지" in w.value for w in page.warning)
+assert not page.selectbox
+assert len(page.get("page_link")) == 6
+print("PASS: SHAP HTTP 503 guidance without sample fallback")

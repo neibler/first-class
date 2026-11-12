@@ -1,7 +1,7 @@
 """UI-only fixtures: no model files, training or network are used by these tests."""
 
 import pytest
-from frontend import investment_client
+from frontend import explain_client, investment_client
 from frontend.sample_data import load_portfolio, performance
 
 
@@ -12,6 +12,7 @@ def investment_ui_fixture(request, monkeypatch):
         "test_ui_pages",
         "test_research_frontend",
         "test_statistics_frontend",
+        "test_explain_frontend",
     }:
         return
 
@@ -26,3 +27,10 @@ def investment_ui_fixture(request, monkeypatch):
         return data
 
     monkeypatch.setattr(investment_client, "load_portfolio", payload)
+
+    def explain_not_ready():
+        raise explain_client.ExplainAPIError(
+            "SHAP 해석 결과가 아직 준비되지 않았습니다."
+        )
+
+    monkeypatch.setattr(explain_client, "get_overview", explain_not_ready)

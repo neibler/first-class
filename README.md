@@ -5,8 +5,8 @@
 # First Class 로보어드바이저
 
 FastAPI 앱 생성 함수에서 투자 모델 생명주기를 관리하고 투자·리서치 API를 제공합니다.
-포트폴리오는 투자 HTTP API를 사용하며, SHAP은 **고정된 샘플 데이터**입니다.
-리서치·강화학습 성과·ANOVA 화면은 HTTP API에 연결되어 있고 리스크 화면은 준비 화면입니다.
+포트폴리오는 투자 HTTP API를 사용합니다.
+리서치·강화학습 성과·SHAP·ANOVA 화면은 HTTP API에 연결되어 있고 리스크 화면은 준비 화면입니다.
 `/health`는 서버 연결 및 투자 모델 로드 상태를, `/ready`는 투자 모델 준비 상태를 반환합니다.
 모델이 없으면 포트폴리오는 준비 부족을 안내하며 샘플 성공으로 대체하지 않습니다.
 `POST /research`는 기존 뉴스 에이전트와 연결되며 서버의 Claude 키, 기존 DB,
@@ -97,6 +97,18 @@ HTTP 200을 확인한 뒤 `/anova` 화면을 엽니다. 파일이 없으면 503 
 One-way 2종·Two-way의 F값, p값, η²와 그룹 요약, 요인별 Tukey 결과를 표시합니다.
 계산 불가는 `—`, 미제공 검증은 별도 안내하며 새로고침으로 최신 파일을 다시 조회합니다.
 평가 기간은 통계 응답에 없으므로 표시하지 않습니다. 표본 출처와 가정 점검은 상세 영역에서 확인합니다.
+
+### SHAP 결과 연결
+
+SHAP 화면은 `GET /performance/explain`으로 저장된 해석 결과를 조회합니다.
+서버에 `<결과 폴더>/api/explain.json`이 필요하며, 결과 폴더 연결 방법은 위 ANOVA와 같습니다.
+조회에는 모델·API 키가 필요하지 않고, 화면은 SHAP을 계산하거나 샘플로 대체하지 않습니다.
+파일이 없으면 503 안내가 표시됩니다. 결과 생성은 [성능 분석 안내](backend/performance/README.md)를 따릅니다.
+
+자산 목록을 먼저 조회한 뒤 선택한 자산의 저장된 결정 전체를 한 번 조회하고,
+결정일은 화면에서 고릅니다. Summary Plot은 그 자산의 저장된 결정일 전체,
+Force Plot과 상세 표는 선택한 결정일의 서버 값을 표시합니다.
+SHAP 값은 자산 목표 비중에 대한 기여도(+0.02 = +2%p)이며 인과관계나 투자 권고가 아닙니다.
 
 ### 실행 명령
 
@@ -193,16 +205,7 @@ python scripts/check_shared_cabin.py
 ANOVA의 실제 저장 결과가 연결된 서버에서는 `python scripts/check_anova.py`로
 데스크톱·모바일 차트, 표, 새로고침과 메뉴 이동을 검사할 수 있습니다.
 
-샘플 로딩·빈 상태·오류의 재시도 검사까지 수행하려면 별도 터미널에서 개발 UI를 실행합니다.
-다른 터미널에서 `python scripts/check_ui.py --dev http://localhost:8502`를 실행합니다.
-개발 상태는 실제 API 응답이 아닌 UI 시연이며 일반 실행에서는 활성화되지 않습니다.
-
-```powershell
-$env:FIRST_CLASS_UI_DEV = "1"
-python -m streamlit run frontend/app.py --server.port 8502
-# 개발 서버 종료 후
-Remove-Item Env:FIRST_CLASS_UI_DEV
-```
+`check_ui.py`의 SHAP 단계는 결과가 연결되어 있으면 차트를, 없으면 준비 안내를 확인합니다.
 
 검사 결과는 실행 시 생성되는 Git 제외 경로 `artifacts/ui/`에 저장됩니다.
 해당 경로의 기존 파일이나 별도 디자인 문서는 앱 실행에 필요하지 않습니다.

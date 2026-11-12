@@ -62,7 +62,6 @@ frontend/assets/cockpit/trimmed/**
 !frontend/fixtures/
 frontend/fixtures/**
 !frontend/fixtures/portfolio.json
-!frontend/fixtures/shap.json
 !.streamlit/
 .streamlit/**
 !.streamlit/config.toml
@@ -86,6 +85,8 @@ backend/performance/**
 !backend/performance/requirements.txt
 !frontend/statistics_client.py
 !frontend/statistics_view.py
+!frontend/explain_client.py
+!frontend/explain_view.py
 
 !config/
 !config/agent.yaml

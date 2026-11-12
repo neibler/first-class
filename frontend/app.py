@@ -1,4 +1,4 @@
-"""First Class UI shell. Analysis samples and the real API are independent."""
+"""First Class UI shell. Every analysis page reads the FastAPI server over HTTP."""
 
 import streamlit as st
 
@@ -36,9 +36,9 @@ st.caption(
     "백테스팅 성과는 미래 수익을 보장하지 않습니다."
 )
 health_panel(
-    sample=page.url_path == "shap",
     investment=cockpit,
     research=page.url_path == "research",
     performance=page.url_path == "performance",
     statistics=page.url_path == "anova",
+    explain=page.url_path == "shap",
 )
