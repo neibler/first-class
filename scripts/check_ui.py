@@ -63,7 +63,8 @@ def run(base, output):
             ).to_be_visible()
             force = page.frame_locator("iframe").locator('svg[role="img"]')
             expect(force).to_be_visible()
-            assert force.locator("polygon").count() == 6
+            # A zero SHAP value draws no ribbon; require the plot and its f(x) label.
+            expect(force.get_by_text("결정 비중 f(x)", exact=False)).to_be_visible()
         else:
             expect(page.locator('[data-testid="stAlert"]').first).to_be_visible()
         border = page.locator(".st-key-nav-shap a").evaluate(

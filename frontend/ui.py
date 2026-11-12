@@ -105,6 +105,10 @@ def health_panel(
                 st.caption(
                     "투자 모델 미로드 · 저장된 성과 결과 조회에는 필요하지 않습니다."
                 )
+            elif statistics or explain:
+                st.caption(
+                    "투자 모델 미로드 · 저장된 분석 결과 조회에는 필요하지 않습니다."
+                )
             else:
                 st.warning("모델이 로드되지 않았습니다.")
         if investment:

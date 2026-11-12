@@ -427,3 +427,50 @@ def test_real_router_and_report_payload_match_the_client(tmp_path, monkeypatch, 
             api.get("/performance/explain", params={"ticker": "NONE"}).status_code
             == 404
         )
+
+
+def test_failed_refresh_keeps_both_selections(monkeypatch, page, server, get):
+    page.selectbox(key="shap_asset").set_value("QQQ").run()
+    chosen = server["assets"]["QQQ"]["decisions"][0]["date"]
+    page.selectbox(key="shap_date").set_value(chosen).run()
+    working = client.httpx.get
+
+    monkeypatch.setattr(client.httpx, "get", lambda *a, **k: response(503, {}))
+    page.button(key="refresh_explain").click().run()
+    assert "아직 준비되지" in page.warning[0].value
+    assert not page.selectbox
+
+    monkeypatch.setattr(client.httpx, "get", working)
+    page.button(key="refresh_explain").click().run()
+    assert not page.exception
+    assert page.selectbox(key="shap_asset").value == "QQQ"
+    assert page.selectbox(key="shap_date").value == chosen
+    assert not page.toast
+
+
+def test_failed_asset_fetch_keeps_the_date(monkeypatch, page, server, get):
+    chosen = server["assets"]["SPY"]["decisions"][0]["date"]
+    page.selectbox(key="shap_date").set_value(chosen).run()
+    working = client.httpx.get
+
+    def asset_fails(url, params=None, **kwargs):
+        if params:
+            return response(500, {})
+        return working(url, params=params, **kwargs)
+
+    monkeypatch.setattr(client.httpx, "get", asset_fails)
+    page.button(key="refresh_explain").click().run()
+    assert "불러오지 못했습니다" in page.warning[0].value
+
+    monkeypatch.setattr(client.httpx, "get", working)
+    page.button(key="refresh_explain").click().run()
+    assert page.selectbox(key="shap_date").value == chosen
+    assert not page.toast
+
+
+def test_saved_results_do_not_warn_about_the_model(page):
+    warnings = " ".join(w.value for w in page.warning)
+    assert "모델이 로드되지 않았습니다" not in warnings
+    captions = " ".join(c.value for c in page.caption)
+    assert "저장된 분석 결과 조회에는 필요하지 않습니다" in captions
+    assert "결정일마다 기준값이 다를 수 있습니다" in captions

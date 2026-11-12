@@ -9,12 +9,15 @@ from frontend.ui import page_heading
 
 
 def keep_choice(key, label, options, default):
-    """A refreshed result may drop the previous choice: switch, then say so.
+    """Restore the last choice, or switch to a default and say so.
 
+    A failed fetch skips the selectbox, and Streamlit then drops its value, so the
+    last successful choice is also kept under a plain (non-widget) key.
     First visits have no previous choice and stay silent.
     """
-    previous = st.session_state.get(key)
+    previous = st.session_state.get(key, st.session_state.get(f"{key}_last"))
     if previous in options:
+        st.session_state[key] = previous
         return
     st.session_state[key] = default
     if previous is not None:
@@ -23,6 +26,10 @@ def keep_choice(key, label, options, default):
             f"최신 데이터({default})로 변경되었습니다.",
             icon=":material/info:",
         )
+
+
+def remember_choice(key, value):
+    st.session_state[f"{key}_last"] = value
 
 
 page_heading(
@@ -54,6 +61,7 @@ def show():
     with asset_col:
         keep_choice("shap_asset", "자산", overview.assets, overview.assets[0])
         ticker = st.selectbox("자산", overview.assets, key="shap_asset")
+        remember_choice("shap_asset", ticker)
     try:
         with st.spinner("선택한 자산의 SHAP 결과를 불러오는 중입니다…"):
             asset = client.get_asset(ticker, overview.features)
@@ -65,6 +73,7 @@ def show():
     with date_col:
         keep_choice("shap_date", "결정일", dates, dates[-1])
         date = st.selectbox("결정일", dates, key="shap_date")
+        remember_choice("shap_date", date)
     decision = next(d for d in asset.decisions if d.date == date)
     features = asset.features
     records = view.summary_records(asset)
@@ -126,7 +135,9 @@ def show():
         st.caption(
             "금색 →: 비중 증가 (+) · 파랑 ←: 비중 감소 (−). 각 띠의 폭은 |SHAP|이며 "
             "두 방향의 기여도가 최종 비중 f(x)에서 만납니다. 점선은 기준값으로, "
-            "이 자산의 저장된 결정일 평균 입력에서 모델이 낼 비중입니다. "
+            "6개 피처만 이 자산의 저장된 결정일 평균으로 바꾸고 나머지 입력은 "
+            "이 결정일의 값을 유지했을 때 모델이 낼 비중입니다. 그래서 결정일마다 "
+            "기준값이 다를 수 있습니다. "
             "기준값 + 모든 기여도 = 최종 비중입니다. "
             "띠 위 숫자는 %p이며, 마우스를 올리면 피처와 기여도를 볼 수 있습니다."
             " 좁은 화면에서는 차트를 가로로 밀어 확인하세요."
