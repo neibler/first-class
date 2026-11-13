@@ -133,7 +133,9 @@ def load_sample(loader, key):
 
 
 @st.fragment
-def health_panel(sample=True, investment=False, research=False, statistics=False):
+def health_panel(
+    sample=True, investment=False, research=False, performance=False, statistics=False
+):
     with st.expander("API 연결 및 모델 준비 상태"):
         st.button("연결 상태 새로고침", key="refresh_health")
         try:
@@ -149,6 +151,11 @@ def health_panel(sample=True, investment=False, research=False, statistics=False
         if investment:
             st.caption(
                 "포트폴리오 화면은 저장 모델의 백테스트와 추론 API를 사용합니다."
+            )
+        elif performance:
+            st.caption(
+                "이 화면은 활성 투자 모델의 백테스트 API를 사용합니다. "
+                "모델이 로드되지 않으면 성과를 표시할 수 없습니다."
             )
         elif research:
             st.caption(

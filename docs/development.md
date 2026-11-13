@@ -1,11 +1,24 @@
 # 개발 상태와 CI/CD
 
+## 강화학습 성과 HTTP 연동 (#22)
+
+- 활성 모델이 FINAL2026 단일 PPO로 바뀐 뒤(#24, #31), 저장된 분석 결과(`/performance/backtest`) 대신
+  투자 API `GET /backtest`를 사용한다. 분석 결과 생성기는 이전 실행 형식만 읽어 활성 모델 결과가 없기 때문이다.
+- `frontend/performance_client.py`는 `benchmark=spy_buy_hold·equal_rebalanced·equal_buy_hold`로 한 번씩 조회하고
+  3.0 계약, 같은 모델·기준일·날짜·PPO 지표·PPO 경로인지 검사한 뒤 PPO+벤치마크 비교로 합친다.
+  저장되지 않은 벤치마크(422)는 제외하고 안내하며, 모두 없으면 잘못된 응답으로 처리한다.
+  connect 3초/read 20초, 자동 재시도·캐시·샘플 대체 없음.
+- `performance_view.py`는 서버 지표 9개(누적·연환산 수익률, 변동성, Sharpe, MDD, 회전율, 거래비용, 현금 보유일,
+  평가 거래일)를 형식만 바꿔 표시하고 경로를 기존 비교 차트 입력으로 배치한다. None은 `—`.
+- 성과 화면은 투자 모델이 필요하므로 상태 안내에서 "모델 미로드" 경고를 그대로 보여 준다.
+- MVO 비교, 12개 지표, Walk-Forward 구간별 결과, 학습 곡선은 이 API에 없어 화면에 표시하지 않는다.
+
 ## 현재 범위
 
 ```mermaid
 flowchart LR
     Browser[브라우저 :8501] --> Dashboard[Streamlit dashboard]
-    Dashboard -->|HTTP health, investment, research, statistics| API[FastAPI api]
+    Dashboard -->|HTTP health, investment, research, performance, statistics| API[FastAPI api]
 ```
 
 - Python 3.12를 사용한다. 학교의 필수 기준은 Python 3.10 이상이며,
@@ -28,8 +41,8 @@ flowchart LR
 
 - `POST /explain`은 미구현이다. 투자 `/optimize`·`/backtest`는 main 구현을 유지한다.
   저장된 성과·SHAP 결과를 조회하는 `/performance/*`는 별도로 제공한다.
-- 6개 페이지 내비게이션은 유지한다. 포트폴리오·리서치·ANOVA는 HTTP로 연결하고,
-  SHAP은 샘플이며 성과·리스크는 준비 화면이다.
+- 6개 페이지 내비게이션은 유지한다. 포트폴리오·리서치·성과·ANOVA는 HTTP로 연결하고
+  (성과·ANOVA는 저장 결과 조회), SHAP은 샘플이며 리스크는 준비 화면이다.
 - main의 데이터 처리·Gymnasium·PPO·Safe-Guard·실험·백테스트 코드는 유지했다.
   이번 충돌 통합에서는 실제 학습·사용자 모델/데이터의 학교 성능 요건을 다시 검증하지 않는다.
 - SHAP, 리서치 결과의 투자 모델·리스크 모니터링 연동.

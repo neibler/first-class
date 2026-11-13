@@ -79,6 +79,15 @@ def run(base, dev, output):
                 expect(
                     page.get_by_role("button", name="분석 실행", exact=True)
                 ).to_be_visible()
+            elif title == "강화학습 성과":
+                expect(
+                    page.get_by_role("heading", name="전략 성과 비교", exact=True)
+                ).to_be_visible()
+                expect(
+                    page.get_by_role(
+                        "button", name="백테스트 결과 새로고침", exact=True
+                    )
+                ).to_be_visible()
             elif title == "ANOVA 검증":
                 expect(
                     page.get_by_role("button", name="통계 결과 새로고침", exact=True)
