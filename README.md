@@ -281,7 +281,7 @@ seed 반복·평가·비교·서비스 변경과 향후 Walk-Forward의 조건�
 
 ## 최신 학습 완료 모델 공유
 
-4개 모델과 필수 데이터 설치·실행은 [공유 모델 안내](shared/TRAINED_MODELS.md)를 따릅니다.
+최신 PPO 모델·평가·SHAP과 필수 데이터 설치·실행은 [공유 모델 안내](shared/TRAINED_MODELS.md)를 따릅니다.
 기존 install_demo.py는 과거 PPO 데모입니다. 새 공유본은 scripts/install_trained_models.py로 설치합니다.
 
 

@@ -99,6 +99,10 @@ def test_api_refuses_missing_or_stale_result(tmp_path, monkeypatch):
     from backend.performance.api import model_shap
     from backend.investment_ai import settings
 
+    monkeypatch.setattr(
+        "backend.performance.api.SERVING_CONFIG", tmp_path / "serving.json"
+    )
+    monkeypatch.delenv("INVESTMENT_AI_RUN", raising=False)
     monkeypatch.setattr(settings, "ROOT", tmp_path)
     registry = json.loads(Path("shared/trained_models_manifest.json").read_text())
     bundle = tmp_path / registry["models"]["ppo"]["path"]
@@ -115,3 +119,48 @@ def test_api_refuses_missing_or_stale_result(tmp_path, monkeypatch):
     with pytest.raises(HTTPException) as error:
         model_shap("ppo")
     assert error.value.status_code == 409
+
+
+def test_active_model_shap_overrides_shared_registry(tmp_path, monkeypatch):
+    import json
+    import hashlib
+    from backend.performance import api
+    from backend.investment_ai import settings
+    from fastapi import HTTPException
+
+    monkeypatch.setattr(settings, "ROOT", tmp_path)
+    monkeypatch.delenv("INVESTMENT_AI_RUN", raising=False)
+    selected = tmp_path / "models/ppo/new"
+    selected.mkdir(parents=True)
+    (selected / "config.json").write_text(json.dumps({"model_type": "ppo"}))
+    (selected / "model.zip").write_bytes(b"new-model")
+    record = payload()
+    record["run_id"] = "new-run"
+    record["model_sha256"] = hashlib.sha256(b"new-model").hexdigest()
+    (selected / "shap.json").write_text(json.dumps(record), encoding="utf-8")
+    config = tmp_path / "serving.json"
+    config.write_text(json.dumps({"model_path": "models/ppo/new"}))
+    monkeypatch.setattr(api, "SERVING_CONFIG", config)
+    assert api.model_shap(None)["run_id"] == "new-run"
+    with pytest.raises(HTTPException) as error:
+        api.model_shap("td3")
+    assert error.value.status_code == 404
+    (selected / "shap.json").unlink()
+    with pytest.raises(HTTPException) as error:
+        api.model_shap(None)
+    assert error.value.status_code == 503  # Never silently fall back to old SHAP.
+    config.write_text(json.dumps({"model_path": "missing"}))
+    (selected / "shap.json").write_text(json.dumps(record), encoding="utf-8")
+    monkeypatch.setenv("INVESTMENT_AI_RUN", str(selected))
+    assert api.model_shap(None)["run_id"] == "new-run"
+
+
+def test_client_requests_active_shap_without_model_filter(monkeypatch):
+    def get(*args, **kwargs):
+        assert kwargs["params"] == {}
+        return httpx.Response(
+            200, json=payload(), request=httpx.Request("GET", "http://test")
+        )
+
+    monkeypatch.setattr(httpx, "get", get)
+    assert shap_client.load_model_shap()["model_type"] == "ppo"

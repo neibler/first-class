@@ -116,7 +116,11 @@ def install(destination, shared=None):
         finally:
             for temporary, _ in staged:
                 temporary.unlink(missing_ok=True)
-    print(f"Installed four trained models at {destination}; no training performed.")
+    model_count = len(manifest.get("models", {}))
+    print(
+        f"Installed {model_count} trained model(s) at {destination}; "
+        "no training performed."
+    )
     return manifest
 
 
@@ -130,6 +134,8 @@ def main():
     parser.add_argument("--activate", choices=("ppo", "recurrent_ppo", "sac", "td3"))
     args = parser.parse_args()
     manifest = install(args.destination)
+    if args.activate and args.activate not in manifest["models"]:
+        parser.error(f"Model {args.activate} is not included in this shared package")
     if args.activate:
         bundle = args.destination.resolve() / manifest["models"][args.activate]["path"]
         default = (

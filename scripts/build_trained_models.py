@@ -60,7 +60,8 @@ def build(seed=None, selections=None):
         name = path.relative_to(RUNTIME).as_posix()
         payload[name] = path.read_bytes()
 
-    for kind in KINDS:
+    # Explicit selections define the entire package; never add unselected models.
+    for kind in selections or dict.fromkeys(KINDS):
         candidates = [
             p.parent
             for p in (RUNTIME / "models" / kind).rglob("manifest.json")
