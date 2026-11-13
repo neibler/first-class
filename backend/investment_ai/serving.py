@@ -171,6 +171,10 @@ class InvestmentService:
             raise ValueError("news requires market in the same request")
         with self.lock:
             state = dict(state) if state is not None else None
+            if state is not None:
+                for flag in ("safeguard_triggered", "stopped", "reset_episode"):
+                    if flag in state and type(state[flag]) is not bool:
+                        raise ValueError(f"{flag} must be a boolean")
             episode_id = state.get("episode_id", "default") if state else "default"
             if state and state.get("reset_episode", False):
                 if (

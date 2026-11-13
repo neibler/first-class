@@ -75,6 +75,10 @@ st.subheader(f"{ticker} 목표 비중 결정에 크게 반영된 요인")
 st.caption(
     "영향력이 큰 순서입니다. 각 기여 방향은 이전 보유 비중이 아닌 모델 설명의 기준 비중 대비입니다."
 )
+if not selected:
+    st.info(
+        "요약할 주요 요인이 없습니다. 상세 분석 보기에서 전체 요인과 원본 값을 확인하세요."
+    )
 for factor in selected:
     label, indicator = st.columns([3, 1.4])
     with label:
@@ -121,8 +125,10 @@ if st.session_state.get("shap_details", False):
                 "추가 요인이 없습니다. 상쇄·중립을 포함한 전체 요인은 아래 표에 보존됩니다."
             )
 
+    date_kind = "평가 기록 시점" if execution else "Replay 기준 날짜 (평가 기록 미매칭)"
     st.caption(
-        f"{date} 관측·결정 → {row['execution_date']} 평가 기록 시점. SHAP 출력과 실제 보유 비중은 구분합니다."
+        f"{date} 관측·결정 → {row['execution_date']} {date_kind}. "
+        "SHAP 출력과 실제 보유 비중은 구분합니다."
     )
     st.caption(
         "방향은 signed sum, 순위는 absolute sum 기준입니다. 중립·상쇄 요인은 요약에서 제외하지만 이 표에는 보존합니다."

@@ -238,32 +238,22 @@ PPO / RecurrentPPO / SAC / TD3는 동일한 PortfolioEnv를 사용합니다.
 python --version
 python -m venv .venv312
 .\.venv312\Scripts\python.exe -m pip install -r backend/investment_ai/requirements.txt
-.\.venv312\Scripts\python.exe scripts/install_trained_models.py
+$env:INVESTMENT_AI_HOME = "$PWD/runtime"
+.\.venv312\Scripts\python.exe scripts/install_training_inputs.py
 .\.venv312\Scripts\python.exe local_run.py preflight --config config/multi_model.json
 ```
 
-`install_trained_models.py`는 저장소의 `shared/trained_models.zip`과 manifest를 검사한 뒤
-모델과 **준비된 시장·뉴스 Parquet**를 `runtime/`에 설치합니다. 학습이나 활성 모델 변경은 하지 않습니다.
-현재 config가 가리키는 `runtime/data/prepared/59f95dac2a33/market.parquet` 및
-`news.parquet`를 설치하므로 원본 뉴스 CSV나 유료 뉴스 API 없이 아래 Dry Run이 가능합니다.
-기존 파일 내용이 다르면 덮어쓰지 않고 오류로 알립니다. `shared/investment_demo.zip`은
-과거 데모이므로 이번 입력 설치를 대신하지 않습니다.
-preflight에서 실제 입력 기간 2021-01-04~2025-12-31, 매크로 13개, observation 376을 확인하세요.
+`install_training_inputs.py`는 검증된 학습 입력 ZIP을 설치합니다. 현재 config의
+`data/prepared/d1e0a7c0b46d/market.parquet`, `news.parquet`와 일치하는 파일입니다.
+기존 파일이 다르면 덮어쓰지 않고 오류를 냅니다. preflight에서 기간
+2019-02-05~2026-09-30, 매크로 13개, observation 376과 세 평가 구간을 확인하세요.
+모델 설치는 별도입니다. 과거 E 모델 ZIP의 2021~2025 입력은 최신 학습 입력을 대신하지 않습니다.
 
-원본 데이터가 갱신되어 **입력을 재생성할 때만**, 별도 전달받은 뉴스 CSV를
-`runtime/data/news/raw/news_risk_nyt_2021_2025.csv`에 준비한 뒤 실행합니다.
-시장 원본 `data_process/processed/features_unscaled.parquet`도 필요합니다.
-공유 모델 설치는 이 원본 CSV를 설치하지 않습니다. 원본이 없다면 위의 준비된 Parquet를 사용하세요.
-
-```powershell
-$env:INVESTMENT_AI_HOME = (Resolve-Path runtime).Path
-.\.venv312\Scripts\python.exe -m backend.investment_ai.prepare_training_inputs
-.\.venv312\Scripts\python.exe local_run.py preflight --config config/multi_model.json
-```
-
-재생성 명령은 `config/investment_ai.json`, `config/multi_model.json`의 입력 경로와 macro 목록을
-갱신합니다. 검증 실패 시 Parquet·provenance·config는 변경하지 않습니다.
-기존 모델은 새 입력으로 재학습되지 않으며 저장된 데이터 hash와 다르면 재평가를 거부할 수 있습니다.
+원본으로 입력을 다시 만들 때만 `prepare_training_inputs`를 실행합니다.
+시장 원본과 `runtime/data/news/raw/news_risk_nyt_2019_2026.csv`가 필요합니다.
+자세한 준비 절차는 [입력 기간 안내](docs/TRAINING_2019_2026.md)를 따르세요.
+재생성은 일반·다중 모델·risk_score 제외 설정의 데이터 경로를 함께 갱신합니다.
+기존 학습 모델은 변경하지 않으며 저장된 hash와 다른 데이터로의 재평가는 거부될 수 있습니다.
 
 ### 학습 없이 계획 확인
 
@@ -277,10 +267,17 @@ $env:INVESTMENT_AI_HOME = (Resolve-Path runtime).Path
 `--model`을 `recurrent_ppo`, `sac`, `td3`로 바꾸면 같은 환경의 다른 모델을 학습합니다.
 seed 반복·평가·비교·서비스 변경과 향후 Walk-Forward의 조건은
 [MULTI_MODEL_TRAINING.md](MULTI_MODEL_TRAINING.md)를 참고하세요.
-현재 중간 점검은 시장·뉴스 공통 기간 2021-01-04~2025-12-31의 앞 80% 학습, 뒤 20% 평가입니다.
-Train 2021-01-04~2024-12-30, Test 2024-12-31~2025-12-31로 약 4년+1년 단일 구간입니다.
-이 설정은 유지하며 Walk-Forward 반복 검증은 추가 데이터 확보 후 수행합니다.
-현재 날짜 범위로 달력 기준 4년/1년 Walk-Forward는 완전한 첫 윈도우를 만들 수 없습니다.
+현재 기본 설정은 명시적인 Walk-Forward 세 구간입니다.
+
+| 구간 | 학습 | 평가 |
+|---|---|---|
+| window_0 | 2019-02-05~2022-12-30 | 2023-01-03~2023-12-29 |
+| window_1 | 2020-01-02~2023-12-29 | 2024-01-02~2024-12-31 |
+| window_2 | 2021-01-04~2024-12-31 | 2025-01-02~2025-12-31 |
+
+과거 80/20 단일 분할은 이전 E 모델의 실험 설정입니다. 현재 기본 설정과 구분하세요.
+종류·설정 선정 후 `config/final_2026.json`으로 2022~2025 학습,
+2026-01-02~2026-09-30 독립 최종 평가를 수행합니다.
 
 ## 최신 학습 완료 모델 공유
 

@@ -38,6 +38,7 @@ ENV STREAMLIT_BROWSER_GATHER_USAGE_STATS=false
 COPY frontend/requirements.txt /app/requirements.txt
 RUN python -m pip install -r requirements.txt
 COPY frontend/ /app/frontend/
+RUN python -c "from frontend.charts import allocation; from frontend.weight_format import format_weight; assert format_weight(0.105) == '11%'; allocation([{'ticker': 'SPY', 'weight': 1.0}]).to_dict()"
 COPY .streamlit/config.toml /app/.streamlit/config.toml
 USER appuser
 EXPOSE 8501

@@ -19,10 +19,14 @@ def main():
     parser.add_argument("--test-years", type=int, default=1)
     args = parser.parse_args()
     config = read_config(args.config)
-    data, _ = load_data(config, ROOT)
     from .settings import effective_mode
 
     mode = effective_mode(config, args.mode)
+    if mode == "legacy":
+        from .experiment import validate_legacy_config
+
+        validate_legacy_config(config)
+    data, _ = load_data(config, ROOT)
     windows = None
     if mode in ("single", "walk-forward"):
         windows = plan_runs(

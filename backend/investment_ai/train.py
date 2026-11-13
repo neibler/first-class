@@ -27,8 +27,8 @@ def build_parser():
     parser.add_argument("--seeds", nargs="+", type=int)
     parser.add_argument("--device")
     parser.add_argument("--mode", choices=("single", "walk-forward", "legacy"))
-    parser.add_argument("--train-years", type=int, default=4)
-    parser.add_argument("--test-years", type=int, default=1)
+    parser.add_argument("--train-years", type=int, default=None)
+    parser.add_argument("--test-years", type=int, default=None)
     parser.add_argument("--dry-run", action="store_true")
     return parser
 
@@ -47,6 +47,8 @@ def main(argv=None):
             or args.seed is not None
             or args.seeds
             or args.mode
+            or args.train_years is not None
+            or args.test_years is not None
         ):
             parser.error(
                 "Resume uses saved settings; use only --extra-steps and --output"
@@ -141,8 +143,8 @@ def main(argv=None):
                 seeds=seeds,
                 run_id=args.run_id,
                 walk_forward=mode == "walk-forward",
-                train_years=args.train_years,
-                test_years=args.test_years,
+                train_years=4 if args.train_years is None else args.train_years,
+                test_years=1 if args.test_years is None else args.test_years,
                 dry_run=args.dry_run,
             )
             if not args.dry_run:

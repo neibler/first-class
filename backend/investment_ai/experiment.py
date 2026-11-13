@@ -22,7 +22,7 @@ from .rewards import canonical_reward
 from .prediction import PredictionSession
 
 
-def run_experiment(config, run_id=None):
+def validate_legacy_config(config):
     validate_config(config)
     recurrent = config.get("model_type", "ppo") == "recurrent_ppo"
     if recurrent and len(config["seeds"]) != 1:
@@ -31,6 +31,11 @@ def run_experiment(config, run_id=None):
             "use mode=single or mode=walk-forward for separate seed bundles. "
             "No training started."
         )
+
+
+def run_experiment(config, run_id=None):
+    validate_legacy_config(config)
+    recurrent = config.get("model_type", "ppo") == "recurrent_ppo"
     run_id = run_id or datetime.now(ZoneInfo("Asia/Seoul")).strftime("%Y%m%d_%H%M%S")
     if not run_id or any(
         x not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-"

@@ -8,6 +8,12 @@ from urllib.request import urlopen
 from streamlit.testing.v1 import AppTest
 
 from frontend.api_client import get_health
+from frontend.charts import allocation
+from frontend.weight_format import format_weight
+
+assert format_weight(0.105) == "11%"
+assert allocation([{"ticker": "SPY", "weight": 1.0}]).to_dict()
+print("PASS: allocation and weight_format imports inside dashboard image")
 
 assert os.environ["API_BASE_URL"] == "http://api:8000"
 health = get_health()

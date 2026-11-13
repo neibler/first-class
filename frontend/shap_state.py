@@ -55,6 +55,8 @@ def observed_values(features, decision):
 def rsi_summary(value):
     if not 0 <= value <= 100:
         return None
+    # Classify the same rounded number the user sees. Raw model inputs stay intact.
+    value = float(f"{value:.1f}")
     if value < 30:
         text = "낮아 과매도 구간에 가까운 상태입니다"
     elif value < 45:

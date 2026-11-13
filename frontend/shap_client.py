@@ -1,5 +1,7 @@
 """Read saved real model explanations over HTTP; never use fixtures."""
 
+from collections.abc import Mapping
+
 import httpx
 import numpy as np
 from frontend.api_client import get_api_base_url, APIError
@@ -14,7 +16,13 @@ def load_model_shap(model):
         )
         response.raise_for_status()
         data = response.json()
-        if data["model_type"] != model or not data["assets"] or not data["features"]:
+        if (
+            not isinstance(data, Mapping)
+            or data["model_type"] != model
+            or not isinstance(data["assets"], Mapping)
+            or not data["assets"]
+            or not data["features"]
+        ):
             raise ValueError("Invalid explanation")
         for asset in data["assets"].values():
             if not asset["decisions"]:

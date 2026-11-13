@@ -55,7 +55,10 @@ def build(seed=None, selections=None):
         candidates = [
             p.parent
             for p in (RUNTIME / "models" / kind).rglob("manifest.json")
-            if json.loads(p.read_text(encoding="utf-8")).get("completed")
+            if not {"checkpoint_generations", "checkpoints"}.intersection(
+                p.relative_to(RUNTIME / "models" / kind).parts
+            )
+            and json.loads(p.read_text(encoding="utf-8")).get("completed")
         ]
         if kind in selections:
             selected = (RUNTIME / selections[kind]).resolve()

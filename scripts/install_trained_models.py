@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import json
 import os
+import tempfile
 from pathlib import Path, PurePosixPath
 import zipfile
 
@@ -92,9 +93,29 @@ def install(destination, shared=None):
                     raise ValueError(
                         f"Installation parent is not a directory: {parent}"
                     )
-        for target, content in pending:
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_bytes(content)
+        staged = []
+        installed = []
+        try:
+            for target, content in pending:
+                target.parent.mkdir(parents=True, exist_ok=True)
+                with tempfile.NamedTemporaryFile(
+                    dir=target.parent, delete=False
+                ) as stream:
+                    temporary = Path(stream.name)
+                    staged.append((temporary, target))
+                    stream.write(content)
+                    stream.flush()
+                    os.fsync(stream.fileno())
+            for temporary, target in staged:
+                temporary.replace(target)
+                installed.append(target)
+        except BaseException:
+            for target in installed:
+                target.unlink(missing_ok=True)
+            raise
+        finally:
+            for temporary, _ in staged:
+                temporary.unlink(missing_ok=True)
     print(f"Installed four trained models at {destination}; no training performed.")
     return manifest
 

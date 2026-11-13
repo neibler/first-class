@@ -96,6 +96,7 @@ backend/performance/**
 !config/investment_ai.json
 
 # Portfolio X-Ray read-only clients and explanation helpers.
+!frontend/weight_format.py
 !frontend/shap_client.py
 !frontend/shap_explanations.py
 !frontend/shap_presentation.py
