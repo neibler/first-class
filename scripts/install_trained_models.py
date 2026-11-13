@@ -116,8 +116,9 @@ def install(destination, shared=None):
         finally:
             for temporary, _ in staged:
                 temporary.unlink(missing_ok=True)
+    model_count = len(manifest.get("models", {}))
     print(
-        f"Installed {len(manifest['models'])} trained model(s) at {destination}; "
+        f"Installed {model_count} trained model(s) at {destination}; "
         "no training performed."
     )
     return manifest

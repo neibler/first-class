@@ -22,12 +22,13 @@ def package(tmp_path, files):
     return shared
 
 
-def test_repeat_install_preserves_identical_files(tmp_path):
+def test_repeat_install_preserves_identical_files(tmp_path, capsys):
     shared = package(tmp_path, {"models/model.zip": b"fixture"})
     target = tmp_path / "runtime"
     install(target, shared)
     install(target, shared)
     assert (target / "models/model.zip").read_bytes() == b"fixture"
+    assert "Installed 0 trained model(s)" in capsys.readouterr().out
 
 
 def test_conflict_rejected_before_any_writes(tmp_path):
