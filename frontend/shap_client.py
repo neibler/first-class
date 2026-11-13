@@ -7,18 +7,19 @@ import numpy as np
 from frontend.api_client import get_api_base_url, APIError
 
 
-def load_model_shap(model):
+def load_model_shap(model=None):
     try:
         response = httpx.get(
             get_api_base_url() + "/performance/model-shap",
-            params={"model": model},
+            params={"model": model} if model is not None else {},
             timeout=15,
         )
         response.raise_for_status()
         data = response.json()
         if (
             not isinstance(data, Mapping)
-            or data["model_type"] != model
+            or data["model_type"] not in {"ppo", "recurrent_ppo", "sac", "td3"}
+            or (model is not None and data["model_type"] != model)
             or not isinstance(data["assets"], Mapping)
             or not data["assets"]
             or not data["features"]

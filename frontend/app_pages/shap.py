@@ -16,13 +16,8 @@ page_heading(
     "DECISION INSIGHTS / 03",
     "Portfolio X-Ray · AI의 자산 배분 결정을 쉬운 요인으로 살펴보세요.",
 )
-model = st.selectbox(
-    "해석 모델 (투자 화면의 활성 모델과 별도 선택)",
-    ["ppo", "recurrent_ppo", "sac", "td3"],
-    key="shap_model",
-)
 try:
-    data = load_model_shap(model)
+    data = load_model_shap(None)
 except APIError as exc:
     st.error(str(exc))
     if st.button("다시 시도", key="retry_shap"):
@@ -38,7 +33,7 @@ factors = group_shap_features(data["features"], row["shap_values"], ticker, row)
 
 st.subheader(f"{ticker} 비중 결정과 모델 설명")
 st.caption(f"해석 모델: {data['model_type']} · 실행: {data['run_id']} · 결정일: {date}")
-st.caption("공유 목록의 저장된 SHAP입니다. 투자 화면의 활성 모델과 다를 수 있습니다.")
+st.caption("현재 활성 투자 모델에 저장된 SHAP 결과입니다.")
 st.caption(
     data.get(
         "weight_stage", "이 SHAP의 최소 비중 필터 적용 여부는 확인되지 않았습니다."

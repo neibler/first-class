@@ -138,22 +138,53 @@ def summary() -> dict:
     return _read(str(path), path.stat().st_mtime)
 
 
+SERVING_CONFIG = Path(__file__).resolve().parents[2] / "config/serving.json"
+
+
 @router.get("/model-shap")
-def model_shap(model: str = Query(pattern="^(ppo|recurrent_ppo|sac|td3)$")):
+def model_shap(
+    model: str | None = Query(default=None, pattern="^(ppo|recurrent_ppo|sac|td3)$")
+):
     from backend.investment_ai.settings import ROOT
     import hashlib
 
-    registry = (
-        Path(__file__).resolve().parents[2] / "shared/trained_models_manifest.json"
+    config = (
+        json.loads(SERVING_CONFIG.read_text(encoding="utf-8"))
+        if SERVING_CONFIG.exists()
+        else {}
     )
-    if not registry.exists():
-        raise HTTPException(503, "공유 모델 목록이 없습니다.")
-    item = json.loads(registry.read_text(encoding="utf-8"))["models"].get(model)
-    if not item:
-        raise HTTPException(404, "모델이 없습니다.")
-    bundle = (ROOT / item["path"]).resolve()
-    if not bundle.is_relative_to(ROOT.resolve()):
-        raise HTTPException(503, "모델 경로 설정 오류")
+    selected = os.environ.get("INVESTMENT_AI_RUN") or config.get("model_path")
+    if selected:
+        # Same precedence and path semantics as InvestmentService.
+        configured = Path(selected)
+        if not os.environ.get("INVESTMENT_AI_RUN") and not configured.is_absolute():
+            configured = ROOT / configured
+        if configured.name == "model.zip":
+            configured = configured.parent
+        bundle = configured.resolve()
+        try:
+            kind = json.loads((bundle / "config.json").read_text(encoding="utf-8")).get(
+                "model_type", "ppo"
+            )
+        except (OSError, ValueError):
+            raise HTTPException(503, "활성 모델 폴더를 확인하세요.") from None
+        if model is not None and model != kind:
+            raise HTTPException(404, "현재 활성 투자 모델의 SHAP만 제공합니다.")
+        model = kind
+    else:
+        # Backward-compatible shared registry only when no active model is set.
+        model = model or "ppo"
+        registry = (
+            Path(__file__).resolve().parents[2] / "shared/trained_models_manifest.json"
+        )
+        if not registry.exists():
+            raise HTTPException(503, "활성 모델 또는 공유 모델 목록이 없습니다.")
+        item = json.loads(registry.read_text(encoding="utf-8"))["models"].get(model)
+        if not item:
+            raise HTTPException(404, "모델이 없습니다.")
+        bundle = (ROOT / item["path"]).resolve()
+        if not bundle.is_relative_to(ROOT.resolve()):
+            raise HTTPException(503, "모델 경로 설정 오류")
     path = bundle / "shap.json"
     if not path.exists() or not (bundle / "model.zip").exists():
         raise HTTPException(

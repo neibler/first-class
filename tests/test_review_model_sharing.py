@@ -215,3 +215,14 @@ def test_installer_checks_model_input_paths_before_writes(
     with pytest.raises(ValueError, match="Missing or unsafe bundled input"):
         install(target, packages / "shared")
     assert not target.exists()
+
+
+def test_explicit_single_model_excludes_other_models(packages, tmp_path):
+    builder.build(selections={"ppo": "models/ppo/seed73"})
+    manifest = install(tmp_path / "ppo_only", packages / "shared")
+    assert set(manifest["models"]) == {"ppo"}
+    assert manifest["models"]["ppo"]["path"] == "models/ppo/seed73"
+    assert all(
+        not name.startswith(("models/td3/", "models/sac/", "models/recurrent_ppo/"))
+        for name in manifest["files"]
+    )
