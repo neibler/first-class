@@ -1,0 +1,7 @@
+{
+  "sha256": "fe1a55fdfbea8b2502eea0adc57f1b59c4dffe77aae20c71e1e1a3b9f60fe1fa",
+  "files": {
+    "data/prepared/d1e0a7c0b46d/market.parquet": "ef419978cbe80a4e7e75dc1341aab23b66e58f323b5470977014c0bce298f222",
+    "data/prepared/d1e0a7c0b46d/news.parquet": "7e0273fb31f063e2c854cde7e79c60773680ff3695fa133a692fcd9bf589f9d8"
+  }
+}

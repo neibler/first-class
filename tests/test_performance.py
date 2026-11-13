@@ -969,7 +969,7 @@ print(len(router.routes))
         [sys.executable, "-c", script], capture_output=True, text=True
     )
     assert result.returncode == 0, result.stderr
-    assert int(result.stdout.strip()) == 5
+    assert int(result.stdout.strip()) == 7
 
 
 def test_reward_samples_fall_back_to_validation_csv(tmp_path):

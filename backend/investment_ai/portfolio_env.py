@@ -5,6 +5,15 @@ from gymnasium import spaces
 import numpy as np
 from .rewards import calculate_reward, canonical_reward
 from .accounting import safeguard_breached
+from .settings import risk_score_enabled
+from .episode_clock import rebalance_phase
+from .rebalancing import (
+    get_rebalance_reasons,
+    validate_rebalancing,
+    filter_target_weights,
+    portfolio_weight_distance,
+    MIN_WEIGHT_THRESHOLD,
+)
 
 
 class PortfolioEnv(gym.Env):
@@ -14,6 +23,7 @@ class PortfolioEnv(gym.Env):
         super().__init__()
         self.data, self.config, self.scaler = data, config, scaler
         self.training = training
+        self.include_risk_score = risk_score_enabled(config)
         self.lookback = int(config["lookback"])
         self.lag = 0
         if (
@@ -30,6 +40,8 @@ class PortfolioEnv(gym.Env):
             or not self.minimum_start <= self.start < self.end < len(data.dates)
         ):
             raise ValueError("Invalid lookback/start/end")
+        validate_rebalancing(config)
+        # Preserve the trained observation feature; it no longer gates trading.
         self.period = int(config.get("rebalance_days", 1))
         self.rate = (config["transaction_cost_bps"] + config["slippage_bps"]) / 10000
         if (
@@ -41,7 +53,11 @@ class PortfolioEnv(gym.Env):
         self.n_assets = len(data.assets)
         self.action_space = spaces.Box(-1, 1, (self.n_assets,), dtype=np.float32)
         # Three state features: current drawdown, running MDD, rebalance phase.
-        size = self.lookback * self.n_assets + 4 * self.n_assets + len(data.macros) + 3
+        size = (
+            (self.lookback + 3 + int(self.include_risk_score)) * self.n_assets
+            + len(data.macros)
+            + 3
+        )
         self.observation_space = spaces.Box(-np.inf, np.inf, (size,), dtype=np.float32)
         self.done = True
 
@@ -84,7 +100,7 @@ class PortfolioEnv(gym.Env):
                 macd,
                 weights,
                 macro,
-                d.risk[t],
+                *([d.risk[t]] if self.include_risk_score else []),
                 [drawdown, mdd, phase],
             ]
         ).astype(np.float32)
@@ -93,12 +109,13 @@ class PortfolioEnv(gym.Env):
         return result
 
     def _get_observation(self):
-        phase = ((self.t - self.episode_start) % self.period) / self.period
+        phase = rebalance_phase(self.t - self.episode_start, self.period)
         return self.observation_at(
             self.t - self.lag, self.weights, self.drawdown, self.mdd, phase
         )
 
     def action_weights(self, action):
+        """Raw softmax weights; filter only after any ensemble averaging."""
         action = np.asarray(action, dtype=float)
         if action.shape != (self.n_assets,) or not np.isfinite(action).all():
             raise ValueError("Invalid action")
@@ -109,7 +126,7 @@ class PortfolioEnv(gym.Env):
     def step(self, action):
         return self.step_weights(self.action_weights(action))
 
-    def step_weights(self, target, force=False, execute=True):
+    def step_weights(self, target, force=False, execute=True, apply_filter=True):
         """Observe at t, accrue existing holdings to t+1, then execute at t+1 close."""
         if self.done:
             raise RuntimeError("Call reset before stepping")
@@ -123,9 +140,32 @@ class PortfolioEnv(gym.Env):
             raise ValueError(
                 "Target weights must be finite, nonnegative and sum to one"
             )
-        due = bool(
-            execute and ((self.t - self.episode_start) % self.period == 0 or force)
+        raw_target = target.copy()
+        if apply_filter:
+            target = filter_target_weights(
+                target,
+                self.config.get("min_weight_threshold", MIN_WEIGHT_THRESHOLD),
+                self.config.get("max_holdings"),
+            )
+        decision_weights = self.weights.copy()
+        distance = portfolio_weight_distance(decision_weights, target)
+        max_risk_score = float(self.data.risk[self.t].max())
+        reasons = get_rebalance_reasons(
+            self.data.dates[self.t],
+            self.data.dates[self.t - 1] if self.t else None,
+            self.weights,
+            target,
+            self.data.risk[self.t],
+            self.mdd,
+            self.config,
+            stopped=self.safeguard_triggered,
         )
+        if reasons != ["mdd_stop"]:
+            if not execute:
+                reasons = ["hold"]  # Explicit buy-and-hold benchmark override.
+            elif force:
+                reasons = ([] if reasons == ["hold"] else reasons) + ["forced"]
+        due = reasons not in (["hold"], ["mdd_stop"])
         decision_date = str(self.data.dates[self.t])[:10]
         start_value = self.value
         self.t += 1
@@ -153,6 +193,7 @@ class PortfolioEnv(gym.Env):
                 self.mdd, self.config["max_drawdown"]
             )
         if self.safeguard_triggered:
+            reasons = ["mdd_stop"]
             # Risk liquidation is immediate at the breach close.
             # Cancel queued buys.
             exit_turnover = float(self.weights.sum())
@@ -169,6 +210,13 @@ class PortfolioEnv(gym.Env):
         self.done = terminated or truncated
         execution_date = str(self.data.dates[self.t])[:10]
         info = {
+            "raw_target_weights": dict(zip(self.data.assets, map(float, raw_target))),
+            "filtered_target_weights": dict(zip(self.data.assets, map(float, target))),
+            "current_weights": dict(
+                zip(self.data.assets, map(float, decision_weights))
+            ),
+            "portfolio_weight_distance": distance,
+            "max_risk_score": max_risk_score,
             "observation_date": decision_date,
             "decision_date": decision_date,
             "execution_date": execution_date,
@@ -190,7 +238,10 @@ class PortfolioEnv(gym.Env):
             "cost": cost,
             "exit_cost": exit_cost,
             "cost_amount": cost_amount,
-            "rebalanced": bool(due and turnover > 0),
+            "rebalanced": bool(turnover > 0 or exit_turnover > 0),
+            "should_rebalance": bool(due or exit_turnover > 0),
+            "rebalance_reasons": reasons,
+            "rebalance_reason": "|".join(reasons),
             "cash_weight": float(np.clip(1 - self.weights.sum(), 0, 1)),
             "safeguard_triggered": terminated,
             "stop_reason": (
@@ -205,6 +256,10 @@ class PortfolioEnv(gym.Env):
             info[f"previous_weight_{a}"] = float(previous[i])
             info[f"current_weight_{a}"] = float(self.weights[i])
             info[f"target_weight_{a}"] = float(final_target[i])
+            info[f"model_target_weight_{a}"] = float(raw_target[i])
+            info[f"raw_target_weight_{a}"] = float(raw_target[i])
+            info[f"filtered_target_weight_{a}"] = float(target[i])
+            info[f"decision_current_weight_{a}"] = float(decision_weights[i])
             info[f"weight_change_{a}"] = float(self.weights[i] - previous[i])
             info[f"weight_{a}"] = float(final_target[i])
             info[f"held_{a}"] = float(self.weights[i])

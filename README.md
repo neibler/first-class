@@ -5,7 +5,7 @@
 # First Class 로보어드바이저
 
 FastAPI 앱 생성 함수에서 투자 모델 생명주기를 관리하고 투자·리서치 API를 제공합니다.
-포트폴리오는 투자 HTTP API를 사용하며, SHAP은 **고정된 샘플 데이터**입니다.
+포트폴리오와 강화학습 성과는 투자 HTTP API(활성 모델)를 사용하며, SHAP은 저장된 실제 모델 설명을 조회합니다.
 리서치·강화학습 성과·ANOVA 화면은 HTTP API에 연결되어 있고 리스크 화면은 준비 화면입니다.
 `/health`는 서버 연결 및 투자 모델 로드 상태를, `/ready`는 투자 모델 준비 상태를 반환합니다.
 모델이 없으면 포트폴리오는 준비 부족을 안내하며 샘플 성공으로 대체하지 않습니다.
@@ -35,34 +35,16 @@ docker compose ps
 `연결 상태 새로고침` 버튼으로 다시 조회합니다.
 컨테이너 내부에서는 dashboard가 `http://api:8000`으로 HTTP 요청합니다.
 
-### 강화학습 성과 결과 준비
+### 강화학습 성과
 
-`http://localhost:8501/performance`는 저장된 실제 백테스트의 전략별 누적수익률과
-12개 지표, 평가 기간·방식을 표시합니다. 투자 모델 로드 여부와 별개입니다.
-공용 Compose의 기본 경로는 유지합니다. 결과를 조회할 개발자는
-[로컬 결과 연결 설정](backend/performance/README.md#공유-모델로-성과-화면-준비)에 따라
-Git에서 제외되는 `docker-compose.override.yml`을 만들어 결과 폴더를 연결합니다.
-이 파일은 일반 `docker compose up`에서도 자동 적용되므로 재실행 시 연결이 유지됩니다.
+`http://localhost:8501/performance`는 활성 투자 모델의 `GET /backtest`를 비교 전략마다 한 번씩 조회해
+PPO와 S&P500(SPY 매수 후 보유)·동일가중(리밸런싱)·동일가중(매수 후 보유)의 누적수익률과 성과지표를 비교합니다.
+활성 모델은 `config/serving.json`이 정하며, 설치는 [공유 모델 안내](shared/TRAINED_MODELS.md)를 따릅니다.
+투자 모델이 로드되어 있어야 하며, 모델이 없으면 준비 안내가 표시됩니다.
+값은 서버 계산값이며 화면에서 다시 계산하지 않습니다. 저장되지 않은 비교 전략은 안내 후 제외합니다.
+MVO 비교, 12개 지표, Walk-Forward 구간별 결과와 학습 곡선은 이 API가 제공하지 않아 표시하지 않습니다.
 
-팀원이 만든 결과가 있으면 **`runtime/results/api/backtest.json`**에 넣습니다.
-보기만 할 때는 모델·시장 데이터가 필요하지 않습니다. 파일이 없다면
-[성과 결과 생성 안내](backend/performance/README.md#공유-모델로-성과-화면-준비)를 따라
-공유 모델과 실제 데이터로 평가 결과만 생성합니다. 실행 전에 기존 결과를 보존하세요.
-
-```bash
-docker compose up --build -d --wait --wait-timeout 120
-curl http://localhost:8000/performance/health
-curl http://localhost:8000/performance/backtest
-```
-
-`available.backtest=true`, 백테스트 HTTP `200`을 확인합니다. `503`이면 파일 위치와
-`docker inspect first-class-api-1`의 Mounts를 확인하세요. 다른 결과 폴더를 쓰려면
-`.env`에 `PERFORMANCE_RESULTS_DIR`를 지정하고 컨테이너를 재생성합니다.
-경로는 `api`의 부모 폴더입니다. SHAP 결과가 없어 전체 `ready=false`여도 백테스트를 볼 수 있습니다.
-Python 실행은 서버를 시작하기 전에 `RESULTS_DIR`를 실제 결과 폴더로 지정합니다.
-로컬 설정·결과·백업은 커밋하지 않습니다.
-
-화면의 메뉴로 6개 페이지를 이동합니다.
+화면의 메뉴로 7개 페이지를 이동합니다.
 포트폴리오의 분석 기간, SHAP의 자산·결정일을 선택할 수 있습니다.
 `비행 경로 재생`은 브라우저에서만 실행되며 OS의 동작 감소 설정을 따릅니다.
 
@@ -108,6 +90,14 @@ Pillow와 개발 검사 도구가 포함됩니다. 화면 실행만 필요하면
 python -m pip install -r requirements-dev.txt
 python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000
 ```
+
+직접 Uvicorn으로 실행해도 `INVESTMENT_AI_HOME`이 없으면 저장소의 `runtime/`을
+사용합니다. 공유 모델 설치·활성화, `--all-shared` SHAP 계산 및
+`/performance/model-shap`은 같은 기본 경로를 사용합니다. 별도 배포 경로를
+사용하면 서버 시작 전에 `INVESTMENT_AI_HOME`을 지정하세요. 명시한 절대·상대
+경로는 유지되며, 상대 경로는 실행 작업 폴더 기준입니다. 다른 폴더에 모델을
+설치했다면 그 경로를 지정하고 `--destination`도 동일하게 설정하세요.
+
 
 ```powershell
 python -m streamlit run frontend/app.py --server.port 8501
@@ -240,3 +230,78 @@ docker compose down
 질문·기준일·ETF로 뉴스 근거를 검색하고 답변과 출처를 표시합니다.
 [RESEARCH_INTEGRATION.md](RESEARCH_INTEGRATION.md)에서 DB·API 키 설정을 확인하세요.
 기존 투자 모델 재학습은 필요하지 않습니다.
+
+
+## 투자 강화학습 모델 4종 (학습은 수동 실행)
+
+PPO / RecurrentPPO / SAC / TD3는 동일한 PortfolioEnv를 사용합니다.
+기존 PPO 데모는 유지하며 새 실험은 모델·seed별 개별 bundle로 저장합니다.
+설정은 `config/multi_model.json`, 서비스 선택은 `config/serving.json`입니다.
+
+### 새 clone의 환경 및 입력 데이터 준비
+
+아래는 clone한 저장소 루트에서 실행합니다. `python --version`으로 Python 3.12를 확인하고,
+가상환경이 이미 준비되어 있다면 생성·설치 단계는 생략합니다.
+
+```powershell
+python --version
+python -m venv .venv312
+.\.venv312\Scripts\python.exe -m pip install -r backend/investment_ai/requirements.txt
+$env:INVESTMENT_AI_HOME = "$PWD/runtime"
+.\.venv312\Scripts\python.exe scripts/install_training_inputs.py
+.\.venv312\Scripts\python.exe local_run.py preflight --config config/multi_model.json
+```
+
+`install_training_inputs.py`는 검증된 학습 입력 ZIP을 설치합니다. 현재 config의
+`data/prepared/d1e0a7c0b46d/market.parquet`, `news.parquet`와 일치하는 파일입니다.
+기존 파일이 다르면 덮어쓰지 않고 오류를 냅니다. preflight에서 기간
+2019-02-05~2026-09-30, 매크로 13개, observation 376과 세 평가 구간을 확인하세요.
+모델 설치는 별도입니다. 과거 E 모델 ZIP의 2021~2025 입력은 최신 학습 입력을 대신하지 않습니다.
+
+원본으로 입력을 다시 만들 때만 `prepare_training_inputs`를 실행합니다.
+시장 원본과 `runtime/data/news/raw/news_risk_nyt_2019_2026.csv`가 필요합니다.
+자세한 준비 절차는 [입력 기간 안내](docs/TRAINING_2019_2026.md)를 따르세요.
+재생성은 일반·다중 모델·risk_score 제외 설정의 데이터 경로를 함께 갱신합니다.
+기존 학습 모델은 변경하지 않으며 저장된 hash와 다른 데이터로의 재평가는 거부될 수 있습니다.
+
+### 학습 없이 계획 확인
+
+입력 설치와 preflight가 성공한 뒤 실행하세요:
+
+```powershell
+.\.venv312\Scripts\python.exe local_run.py train --config config/multi_model.json --model ppo --reward return_mdd --timesteps 100000 --seed 42 --dry-run
+```
+
+나중에 직접 학습할 때는 위 명령에서 `--dry-run`을 제거합니다.
+`--model`을 `recurrent_ppo`, `sac`, `td3`로 바꾸면 같은 환경의 다른 모델을 학습합니다.
+seed 반복·평가·비교·서비스 변경과 향후 Walk-Forward의 조건은
+[MULTI_MODEL_TRAINING.md](MULTI_MODEL_TRAINING.md)를 참고하세요.
+현재 기본 설정은 명시적인 Walk-Forward 세 구간입니다.
+
+| 구간 | 학습 | 평가 |
+|---|---|---|
+| window_0 | 2019-02-05~2022-12-30 | 2023-01-03~2023-12-29 |
+| window_1 | 2020-01-02~2023-12-29 | 2024-01-02~2024-12-31 |
+| window_2 | 2021-01-04~2024-12-31 | 2025-01-02~2025-12-31 |
+
+과거 80/20 단일 분할은 이전 E 모델의 실험 설정입니다. 현재 기본 설정과 구분하세요.
+종류·설정 선정 후 `config/final_2026.json`으로 2022~2025 학습,
+2026-01-02~2026-09-30 독립 최종 평가를 수행합니다.
+
+## 최신 학습 완료 모델 공유
+
+최신 PPO 모델·평가·SHAP과 필수 데이터 설치·실행은 [공유 모델 안내](shared/TRAINED_MODELS.md)를 따릅니다.
+기존 install_demo.py는 과거 PPO 데모입니다. 새 공유본은 scripts/install_trained_models.py로 설치합니다.
+
+
+## 새 clone의 학습 입력 준비
+
+학습 환경 의존성을 설치한 후 아래 순서로 실행합니다. 학습 입력은 이전 E 모델 설치 ZIP과 분리되어 있습니다.
+
+```powershell
+python scripts/install_training_inputs.py
+python local_run.py preflight --config config/multi_model.json
+python local_run.py train --config config/multi_model.json --model ppo --seed 22 --dry-run
+```
+
+기본 Docker 이미지도 같은 검증된 training_inputs ZIP을 설치하여 Correlation에 사용합니다. 사용자 지정 runtime을 마운트하면 `python scripts/install_training_inputs.py --destination <해당 경로>`로 먼저 설치하세요. 모델은 별도로 설치/선택해야 합니다. 거래 정책 버전이 없는 이전 공유 모델은 새 추론 코드에서 거부됩니다. 해당 모델의 새 정책 학습본으로 공유 패키지를 갱신해야 합니다.

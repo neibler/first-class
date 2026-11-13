@@ -208,7 +208,7 @@ def test_no_post_before_submit_or_on_rerun_and_navigation(page, post):
     page.switch_page("app_pages/research.py").run()
     assert not page.exception
     assert page.text_area(key="research_question").value == "아직 제출하지 않은 질문"
-    assert len(page.get("page_link")) == 6
+    assert len(page.get("page_link")) == 7
     post.assert_not_called()
 
 

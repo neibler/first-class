@@ -219,7 +219,7 @@ def table_text(page):
 
 def test_page_renders_results_and_refreshes_without_model(page, get, payload):
     assert not page.exception
-    assert len(page.get("page_link")) == 6
+    assert len(page.get("page_link")) == 7
     assert len(page.get("vega_lite_chart")) == 2
     text = table_text(page)
     for value in ("0.3289", "0.7096", "0.0494", "0.1978", "-1.16", "0.0344"):
@@ -235,7 +235,7 @@ def test_page_renders_results_and_refreshes_without_model(page, get, payload):
     page.switch_page("app_pages/risk.py").run()
     page.switch_page("app_pages/anova.py").run()
     assert not page.exception
-    assert len(page.get("page_link")) == 6
+    assert len(page.get("page_link")) == 7
     assert get.call_count == 3
 
 
@@ -270,7 +270,7 @@ def test_page_failures_keep_refresh_and_navigation(page, get, data, status, mess
     assert not page.exception
     assert not page.dataframe
     assert message in " ".join(i.value for i in [*page.info, *page.warning])
-    assert len(page.get("page_link")) == 6
+    assert len(page.get("page_link")) == 7
     assert page.button(key="refresh_statistics")
 
 

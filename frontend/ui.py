@@ -35,6 +35,7 @@ PAGE_INFO = [
     ("portfolio", "포트폴리오 현황", "dashboard"),
     ("performance", "강화학습 성과", "trending_up"),
     ("shap", "SHAP 해석", "hub"),
+    ("correlation", "자산 관계 분석", "compare_arrows"),
     ("research", "에이전트 리서치", "travel_explore"),
     ("anova", "ANOVA 검증", "analytics"),
     ("risk", "리스크 모니터링", "shield"),
@@ -145,10 +146,6 @@ def health_panel(
             st.success("API 연결 정상")
             if health.model_loaded:
                 st.info("모델 로드됨")
-            elif performance:
-                st.caption(
-                    "투자 모델 미로드 · 저장된 성과 결과 조회에는 필요하지 않습니다."
-                )
             else:
                 st.warning("모델이 로드되지 않았습니다.")
         if investment:
@@ -157,8 +154,8 @@ def health_panel(
             )
         elif performance:
             st.caption(
-                "이 화면은 저장된 백테스트 결과를 조회합니다. /health의 투자 모델 상태와 "
-                "성과 결과의 준비 상태는 별개입니다."
+                "이 화면은 활성 투자 모델의 백테스트 API를 사용합니다. "
+                "모델이 로드되지 않으면 성과를 표시할 수 없습니다."
             )
         elif research:
             st.caption(
