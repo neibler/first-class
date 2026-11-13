@@ -1,13 +1,16 @@
 """Validated configuration and versioned experiment paths."""
 
 import json
+import hashlib
 import os
 from pathlib import Path
 import numpy as np
 
 SOURCE_DIR = Path(__file__).resolve().parent
 ROOT = (
-    Path(os.environ.get("INVESTMENT_AI_HOME", SOURCE_DIR.parent)).expanduser().resolve()
+    Path(os.environ.get("INVESTMENT_AI_HOME", SOURCE_DIR.parent.parent / "runtime"))
+    .expanduser()
+    .resolve()
 )
 SCHEMA_VERSION = 3
 REWARDS = ("return", "sharpe", "return_mdd", "portfolio_return", "rolling_sharpe")
@@ -21,7 +24,18 @@ def read_config(path=None):
     return config
 
 
-def validate_config(c):
+def risk_score_enabled(config):
+    value = config.get("include_risk_score", True)
+    if not isinstance(value, bool):
+        raise ValueError("include_risk_score must be boolean")
+    return value
+
+
+def validate_config(c, *, completed_steps=0):
+    risk_score_enabled(c)
+    from .rebalancing import validate_rebalancing
+
+    validate_rebalancing(c)
     if c.get("observation_lag", 0) != 0 or c.get("execution_delay", 1) != 1:
         raise ValueError("Schema v3 requires observation_lag=0 and execution_delay=1")
     if c.get("news_mode") not in {"required", "development"}:
@@ -45,10 +59,9 @@ def validate_config(c):
         raise ValueError("observation_lag must be a nonnegative integer")
     if c["batch_size"] < 2 or c["n_steps"] < 2 or c["reward_window"] < 2:
         raise ValueError("batch_size, n_steps, reward_window must be >= 2")
-    if c["total_timesteps"] % c["n_steps"] or c["n_steps"] % c["batch_size"]:
-        raise ValueError("Invalid PPO rollout/batch divisibility")
-    if c["checkpoint_steps"] % c["n_steps"]:
-        raise ValueError("checkpoint_steps must be a multiple of n_steps")
+    from .model_factory import validate_model_config
+
+    validate_model_config(c, completed_steps=completed_steps)
     for key in (
         "max_drawdown",
         "transaction_cost_bps",
@@ -108,3 +121,54 @@ def write_json(path, value):
         json.dumps(value, indent=2, ensure_ascii=False, allow_nan=False),
         encoding="utf-8",
     )
+
+
+def bundle_input_root(bundle, default=ROOT):
+    """Resolve portable installed inputs without rewriting signed bundle files."""
+    bundle = Path(bundle).resolve()
+    marker = bundle / "installed_inputs.json"
+    if not marker.exists():
+        return default
+    binding = json.loads(marker.read_text(encoding="utf-8"))
+    hashes = binding.get("sha256")
+    if "absolute_root" in binding:
+        value = binding["absolute_root"]
+        if (
+            "relative_root" in binding
+            or not isinstance(value, str)
+            or not Path(value).is_absolute()
+            or not hashes
+        ):
+            raise ValueError("Invalid absolute input binding")
+        root = Path(value).resolve()
+    else:
+        relative = binding["relative_root"]
+        if not isinstance(relative, str) or Path(relative).is_absolute():
+            raise ValueError("Invalid installed input root")
+        root = (bundle / relative).resolve()
+    if hashes is not None:
+        config = json.loads((bundle / "config.json").read_text(encoding="utf-8"))
+        expected = {config[k] for k in ("data_path", "news_path") if config.get(k)}
+        if not isinstance(hashes, dict) or set(hashes) != expected or not hashes:
+            raise ValueError("Invalid bound input checksums")
+        for name, digest in hashes.items():
+            path = (root / name).resolve()
+            if (
+                not path.is_relative_to(root)
+                or hashlib.sha256(path.read_bytes()).hexdigest() != digest
+            ):
+                raise ValueError("Bound input checksum/path mismatch")
+    elif root not in bundle.parents:
+        raise ValueError("Installed input root must contain the model bundle")
+    return root
+
+
+def effective_mode(config, override=None):
+    mode = (
+        override
+        if override is not None
+        else config.get("mode", "single" if "model_type" in config else "legacy")
+    )
+    if mode not in ("single", "walk-forward", "legacy"):
+        raise ValueError(f"Unsupported mode {mode!r}")
+    return mode

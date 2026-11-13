@@ -1,12 +1,19 @@
 """Check the model-free Compose deployment over real HTTP, without fake results."""
 
 import os
+import json
 from urllib.error import HTTPError
 from urllib.request import urlopen
 
 from streamlit.testing.v1 import AppTest
 
 from frontend.api_client import get_health
+from frontend.charts import allocation
+from frontend.weight_format import format_weight
+
+assert format_weight(0.105) == "11%"
+assert allocation([{"ticker": "SPY", "weight": 1.0}]).to_dict()
+print("PASS: allocation and weight_format imports inside dashboard image")
 
 assert os.environ["API_BASE_URL"] == "http://api:8000"
 health = get_health()
@@ -16,7 +23,7 @@ assert health.model_loaded is False
 with urlopen("http://127.0.0.1:8501/_stcore/health", timeout=3) as response:
     assert response.status == 200
 
-# CI does not ship private datasets or trained models. Liveness remains healthy,
+# CI ships verified inputs but no active trained model. Liveness remains healthy,
 # while readiness and portfolio data must explicitly report unavailable.
 for endpoint in ("/ready", "/backtest"):
     try:
@@ -47,7 +54,7 @@ page.switch_page("app_pages/research.py").run()
 assert not page.exception, page.exception
 assert page.text_area(key="research_question").value == ""
 assert str(page.date_input(key="research_date").value) == "2025-04-10"
-assert len(page.get("page_link")) == 6
+assert len(page.get("page_link")) == 7
 assert not page.button(key="research_submit").disabled
 print("PASS: research form, demo date, six links; no research submitted")
 
@@ -55,8 +62,17 @@ page.switch_page("app_pages/anova.py").run()
 assert not page.exception, page.exception
 assert any("통계 분석 결과가 아직 준비되지" in w.value for w in page.warning)
 assert not page.dataframe
-assert len(page.get("page_link")) == 6
+assert len(page.get("page_link")) == 7
 page.button(key="refresh_statistics").click().run()
 assert not page.exception, page.exception
 assert any("통계 분석 결과가 아직 준비되지" in w.value for w in page.warning)
 print("PASS: statistics HTTP 503 guidance, navigation and refresh")
+
+
+with urlopen(
+    "http://api:8000/performance/correlation/SPY?window=60", timeout=30
+) as response:
+    correlation = json.load(response)
+    assert response.status == 200 and correlation["status"] == "ok"
+    assert correlation["ticker"] == "SPY" and correlation["relationships"]
+print("PASS: correlation reads installed training inputs")

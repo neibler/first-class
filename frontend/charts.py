@@ -25,15 +25,18 @@ def chart_style(chart):
 
 
 def allocation(assets):
+    from frontend.weight_format import format_weight
+
+    displayed = [{**a, "weight_label": format_weight(a["weight"])} for a in assets]
     chart = (
-        alt.Chart(alt.Data(values=assets))
+        alt.Chart(alt.Data(values=displayed))
         .mark_arc(innerRadius=65, outerRadius=100, stroke="#061326", strokeWidth=3)
         .encode(
             theta=alt.Theta("weight:Q", stack=True),
             color=alt.Color("ticker:N", scale=alt.Scale(range=COLORS), legend=None),
             tooltip=[
                 alt.Tooltip("ticker:N", title="자산"),
-                alt.Tooltip("weight:Q", title="비중", format=".1%"),
+                alt.Tooltip("weight_label:N", title="비중"),
             ],
         )
     )

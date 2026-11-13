@@ -6,6 +6,7 @@ from .portfolio_env import PortfolioEnv
 from .accounting import equity_curve, sharpe_ratio
 from .records import save_asset_history
 from .rewards import calculate_reward
+from .prediction import PredictionSession
 
 
 def performance(frame, annual_rf=0.0):
@@ -36,22 +37,25 @@ def run_backtest(data, config, start, end, models=None, scaler=None, strategy="p
             raise ValueError("SPY benchmark requires SPY in universe")
         initial_target[:] = 0
         initial_target[data.assets.index("SPY")] = 1
+    predictors = [
+        PredictionSession(m, config.get("model_type", "ppo")) for m in (models or [])
+    ]
     while True:
-        if strategy == "ppo":
+        if strategy in ("ppo", "model", "recurrent_ppo", "sac", "td3"):
             if not models:
                 raise ValueError("PPO models required")
             weights = np.mean(
-                [
-                    env.action_weights(model.predict(obs, deterministic=True)[0])
-                    for model in models
-                ],
+                [predictor.predict(obs, env) for predictor in predictors],
                 axis=0,
             )
             obs, _, terminated, truncated, _ = env.step_weights(weights)
         elif strategy in ("equal_rebalanced", "equal_buy_hold", "spy_buy_hold"):
             weights = initial_target
             obs, _, terminated, truncated, _ = env.step_weights(
-                weights, execute=not (strategy.endswith("buy_hold") and env.history)
+                weights,
+                execute=not (strategy.endswith("buy_hold") and env.history),
+                force=not env.history,
+                apply_filter=False,
             )
         else:
             raise ValueError(f"Unknown strategy: {strategy}")
@@ -80,6 +84,14 @@ def run_backtest(data, config, start, end, models=None, scaler=None, strategy="p
             exit_cost=0.0,
             cost_amount=0.0,
             rebalanced=False,
+            should_rebalance=False,
+            raw_target_weights={a: 0.0 for a in data.assets},
+            filtered_target_weights={a: 0.0 for a in data.assets},
+            current_weights={a: 0.0 for a in data.assets},
+            portfolio_weight_distance=0.0,
+            max_risk_score=float(data.risk[t - 1].max()),
+            rebalance_reasons=["mdd_stop"],
+            rebalance_reason="mdd_stop",
             cash_weight=1.0,
             stop_reason="cash_after_stop",
             reward=0.0,
@@ -91,6 +103,10 @@ def run_backtest(data, config, start, end, models=None, scaler=None, strategy="p
                 "previous_weight",
                 "current_weight",
                 "target_weight",
+                "model_target_weight",
+                "raw_target_weight",
+                "filtered_target_weight",
+                "decision_current_weight",
                 "weight_change",
             ]:
                 row[f"{prefix}_{asset.lower()}"] = 0.0

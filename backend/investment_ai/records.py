@@ -14,7 +14,22 @@ def asset_rows(row, assets):
             "weight_change",
         ]:
             item[key] = row[f"{key}_{asset.lower()}"]
-        for key in ["training_step", "episode"]:
+        if f"model_target_weight_{asset.lower()}" in row:
+            item["model_target_weight"] = row[f"model_target_weight_{asset.lower()}"]
+        for key in [
+            "raw_target_weight",
+            "filtered_target_weight",
+            "decision_current_weight",
+        ]:
+            if f"{key}_{asset.lower()}" in row:
+                item[key] = row[f"{key}_{asset.lower()}"]
+        for key in [
+            "training_step",
+            "episode",
+            "rebalance_reason",
+            "portfolio_weight_distance",
+            "max_risk_score",
+        ]:
             if key in row:
                 item[key] = row[key]
         yield item

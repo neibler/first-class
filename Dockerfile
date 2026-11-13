@@ -21,7 +21,13 @@ COPY backend/news_research/ /app/backend/news_research/
 # (scipy/statsmodels/shap/matplotlib)은 설치하지 않는다 — 분석은 컨테이너 밖에서
 # 돌리고 results/ 를 RESULTS_DIR 로 마운트한다.
 COPY backend/performance/ /app/backend/performance/
-COPY config/agent.yaml config/etf_news_map.yaml config/investment_ai.json /app/config/
+COPY shared/trained_models_manifest.json /app/shared/trained_models_manifest.json
+COPY config/agent.yaml config/etf_news_map.yaml config/serving.json config/investment_ai.json config/multi_model.json /app/config/
+COPY shared/training_inputs.zip shared/training_inputs_manifest.json /app/shared/
+COPY scripts/install_training_inputs.py /app/scripts/install_training_inputs.py
+RUN python scripts/install_training_inputs.py --destination /app/runtime \
+    && chown -R appuser:appuser /app/runtime
+ENV INVESTMENT_AI_HOME=/app/runtime
 ENV RESULTS_DIR=/results
 USER appuser
 EXPOSE 8000
@@ -32,6 +38,7 @@ ENV STREAMLIT_BROWSER_GATHER_USAGE_STATS=false
 COPY frontend/requirements.txt /app/requirements.txt
 RUN python -m pip install -r requirements.txt
 COPY frontend/ /app/frontend/
+RUN python -c "from frontend.charts import allocation; from frontend.weight_format import format_weight; assert format_weight(0.105) == '11%'; allocation([{'ticker': 'SPY', 'weight': 1.0}]).to_dict()"
 COPY .streamlit/config.toml /app/.streamlit/config.toml
 USER appuser
 EXPOSE 8501

@@ -5,15 +5,19 @@ import json
 import hashlib
 from pathlib import Path
 import torch
-from stable_baselines3 import PPO
+from .model_factory import create_model, load_model
 from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common.logger import configure
 from stable_baselines3.common.monitor import Monitor
-from .settings import SCHEMA_VERSION, SOURCE_DIR, write_json
+from .settings import SCHEMA_VERSION, SOURCE_DIR, write_json, risk_score_enabled
 from .data_loader import fingerprint
 from .portfolio_env import PortfolioEnv
 from .preprocessing import FeatureScaler
 from .records import asset_rows
+from .rebalancing import REBALANCE_POLICY
+from .checkpoints import publish_checkpoint, resolve_checkpoint
+from .settings import validate_config
+from .episode_clock import PHASE_DEFINITION
 
 
 def source_hash():
@@ -77,13 +81,16 @@ def feature_names(data, config):
     for kind in ["rsi_div_100", "macd", "current_weight"]:
         names.extend(f"{kind}_{a.lower()}" for a in data.assets)
     names.extend(f"macro_{name}" for name in data.macros)
-    names.extend(f"risk_score_{a.lower()}" for a in data.assets)
+    if risk_score_enabled(config):
+        names.extend(f"risk_score_{a.lower()}" for a in data.assets)
     return names + ["drawdown", "mdd", "rebalance_phase"]
 
 
 def schema_for(data, config):
     return {
         "version": SCHEMA_VERSION,
+        "phase_definition": PHASE_DEFINITION,
+        "execution_policy": REBALANCE_POLICY,
         "feature_names": feature_names(data, config),
         "execution_delay": 1,
         "timing": "observe_close_t_execute_close_t_plus_1",
@@ -100,17 +107,14 @@ def schema_for(data, config):
         "macros": data.macros,
         "lookback": config["lookback"],
         "observation_lag": config["observation_lag"],
-        "observation_size": config["lookback"] * len(data.assets)
-        + 4 * len(data.assets)
-        + len(data.macros)
-        + 3,
+        "observation_size": len(feature_names(data, config)),
         "order": [
             "log_return_history",
             "rsi_div_100",
             "macd",
             "weights",
             "macro",
-            "risk_score",
+            *(["risk_score"] if risk_score_enabled(config) else []),
             "drawdown",
             "mdd",
             "rebalance_phase",
@@ -118,17 +122,43 @@ def schema_for(data, config):
     }
 
 
-def train_model(data, config, train_end, seed, output, resume=None):
+def train_model(data, config, train_end, seed, output, resume=None, run_spec=None):
     output = Path(output)
-    output.mkdir(parents=True, exist_ok=False)
+    if resume:
+        checkpoint_path, old = resolve_checkpoint(resume)
+    validate_config(
+        config, completed_steps=old.get("actual_timesteps", 0) if resume else 0
+    )
     torch.set_num_threads(1)
     scaler = FeatureScaler.fit(data, train_end)
     data_hash = fingerprint(data)
     if resume:
-        old = json.loads((Path(resume) / "manifest.json").read_text())
-        old_config = json.loads((Path(resume) / "config.json").read_text())
-        ignored = {"total_timesteps", "checkpoint_steps"}
-        if any(old_config[k] != config[k] for k in config if k not in ignored):
+        checkpoint_path, old = resolve_checkpoint(resume)
+        saved_schema = json.loads(
+            (Path(resume) / "schema.json").read_text(encoding="utf-8")
+        )
+        if saved_schema.get("execution_policy") != REBALANCE_POLICY:
+            raise ValueError("Incompatible execution policy; retrain the model")
+        if saved_schema.get("phase_definition") != PHASE_DEFINITION:
+            raise ValueError("Unverified phase definition; retrain the model")
+        old_config = json.loads(
+            (Path(resume) / "config.json").read_text(encoding="utf-8")
+        )
+        effective = dict(config)
+        for key, default in {
+            "model_type": "ppo",
+            "include_risk_score": True,
+            "device": "cpu",
+            "max_holdings": None,
+        }.items():
+            old_config.setdefault(key, default)
+            effective.setdefault(key, default)
+        ignored = {"total_timesteps", "checkpoint_steps", "device"}
+        if any(
+            old_config.get(k) != effective.get(k)
+            for k in old_config.keys() | effective.keys()
+            if k not in ignored
+        ):
             raise ValueError(
                 "Resume requires unchanged configuration except "
                 "steps/checkpoint interval"
@@ -141,6 +171,13 @@ def train_model(data, config, train_end, seed, output, resume=None):
         ):
             raise ValueError("Resume data, source, seed or split mismatch")
         scaler = FeatureScaler.load(Path(resume) / "scaler.json")
+    output.mkdir(parents=True, exist_ok=False)
+    write_json(output / "config.json", config)
+    if run_spec is not None:
+        write_json(output / "run_spec.json", run_spec)
+    from .bundle_inputs import preserve_inputs
+
+    preserve_inputs(output, data, config, run_spec, resume)
     env = Monitor(
         PortfolioEnv(
             data,
@@ -152,17 +189,16 @@ def train_model(data, config, train_end, seed, output, resume=None):
         str(output / "monitor.csv"),
     )
     if resume:
-        model = PPO.load(Path(resume) / "model.zip", env=env, device="cpu")
-    else:
-        model = PPO(
-            "MlpPolicy",
-            env,
-            n_steps=config["n_steps"],
-            batch_size=config["batch_size"],
-            seed=seed,
-            device="cpu",
-            verbose=0,
+        model = load_model(
+            checkpoint_path / "model.zip",
+            config.get("model_type", "ppo"),
+            env=env,
+            device=config.get("device", "cpu"),
         )
+        if config.get("model_type") in {"sac", "td3"}:
+            model.load_replay_buffer(checkpoint_path / "replay_buffer.pkl")
+    else:
+        model = create_model(config.get("model_type", "ppo"), env, config, seed)
     model.set_logger(configure(str(output), ["csv"]))
     scaler.save(output / "scaler.json")
     write_json(output / "config.json", config)
@@ -173,16 +209,18 @@ def train_model(data, config, train_end, seed, output, resume=None):
     while model.num_timesteps < target:
         steps = min(config["checkpoint_steps"], target - model.num_timesteps)
         model.learn(total_timesteps=steps, callback=callback, reset_num_timesteps=False)
-        # Save after complete PPO updates, not during rollout collection.
-        model.save(output / "model_pending.zip")
-        (output / "model_pending.zip").replace(output / "model.zip")
-        checkpoint = output / "checkpoints"
-        checkpoint.mkdir(exist_ok=True)
-        model.save(checkpoint / f"step_{model.num_timesteps}.zip")
-        write_json(
-            output / "manifest.json",
+        # Commit only a complete model + buffer generation.
+        publish_checkpoint(
+            model,
+            output,
             {
                 "schema_version": SCHEMA_VERSION,
+                "execution_policy": REBALANCE_POLICY,
+                "model_type": config.get("model_type", "ppo"),
+                "reward_type": config["reward"],
+                "timesteps": config["total_timesteps"],
+                "train_start": str(data.dates[0])[:10],
+                "train_end": str(data.dates[train_end])[:10],
                 "seed": seed,
                 "data_hash": data_hash,
                 "source_hash": source_hash(),
@@ -190,7 +228,7 @@ def train_model(data, config, train_end, seed, output, resume=None):
                 "train_end_date": str(data.dates[train_end])[:10],
                 "actual_timesteps": model.num_timesteps,
                 "initial_timesteps": initial_steps,
-                "completed": model.num_timesteps == target,
+                "completed": model.num_timesteps >= target,
                 "resume_source": str(resume) if resume else None,
             },
         )
@@ -204,13 +242,21 @@ def load_bundle(path, data=None, exact_data=False):
     path = Path(path)
     config = json.loads((path / "config.json").read_text(encoding="utf-8"))
     schema = json.loads((path / "schema.json").read_text(encoding="utf-8"))
+    if schema.get("execution_policy") != REBALANCE_POLICY:
+        raise ValueError("Incompatible execution policy; retrain the model")
+    if schema.get("phase_definition") != PHASE_DEFINITION:
+        raise ValueError("Unverified phase definition; retrain the model")
     if schema["version"] != SCHEMA_VERSION:
         raise ValueError("Incompatible model schema version")
     if data is not None and schema != schema_for(data, config):
         raise ValueError("Model assets/features/order do not match input")
     if exact_data and data is not None:
-        manifest = json.loads((path / "manifest.json").read_text())
+        manifest = json.loads((path / "manifest.json").read_text(encoding="utf-8"))
         if manifest["data_hash"] != fingerprint(data):
             raise ValueError("Evaluation dataset changed since training")
     scaler = FeatureScaler.load(path / "scaler.json")
-    return PPO.load(path / "model.zip", device="cpu"), scaler, config
+    return (
+        load_model(path / "model.zip", config.get("model_type", "ppo")),
+        scaler,
+        config,
+    )

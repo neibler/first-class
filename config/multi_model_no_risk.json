@@ -1,0 +1,135 @@
+{
+  "assets": [
+    "SPY",
+    "QQQ",
+    "SMH",
+    "SCHD",
+    "XLE",
+    "EFA",
+    "SHY",
+    "IEF",
+    "TLT",
+    "TIP",
+    "LQD",
+    "GLD",
+    "DBB",
+    "DBA",
+    "VNQ"
+  ],
+  "lookback": 20,
+  "seed": 17,
+  "data_path": "data/prepared/d1e0a7c0b46d/market.parquet",
+  "news_path": "data/prepared/d1e0a7c0b46d/news.parquet",
+  "macro_columns": [
+    "core_pce_yoy",
+    "real_pce_mom",
+    "unemp",
+    "ism_pmi",
+    "effr",
+    "ust_2y",
+    "ust_10y",
+    "ust_30y",
+    "tips_10y",
+    "vix",
+    "usd_ret_20d",
+    "wti",
+    "yield_spread"
+  ],
+  "dummy_macro_columns": [
+    "pmi",
+    "core_pce",
+    "treasury_10y",
+    "vix",
+    "wti"
+  ],
+  "dummy_start": "2023-01-02",
+  "dummy_end": "2025-12-31",
+  "test_fraction": 0.2,
+  "initial_train_days": 252,
+  "validation_days": 84,
+  "folds": 3,
+  "seeds": [
+    17,
+    22,
+    43
+  ],
+  "reward_candidates": [
+    "return_mdd"
+  ],
+  "selection_mdd_penalty": 1.0,
+  "scenario": "mixed",
+  "synthetic_news": false,
+  "observation_lag": 0,
+  "rebalance_days": 5,
+  "logit_scale": 5.0,
+  "random_start": true,
+  "min_episode_days": 60,
+  "reward_window": 20,
+  "mdd_lambda": 0.1,
+  "risk_free_annual": 0.0,
+  "checkpoint_steps": 2500,
+  "total_timesteps": 100000,
+  "n_steps": 250,
+  "batch_size": 50,
+  "transaction_cost_bps": 5.0,
+  "slippage_bps": 2.0,
+  "max_drawdown": 0.15,
+  "reward": "return_mdd",
+  "execution_delay": 1,
+  "news_mode": "required",
+  "model_type": "ppo",
+  "mode": "walk-forward",
+  "device": "cpu",
+  "models": {
+    "ppo": {
+      "learning_rate": 0.0003
+    },
+    "recurrent_ppo": {
+      "learning_rate": 0.0003,
+      "lstm_hidden_size": 128,
+      "n_lstm_layers": 1
+    },
+    "sac": {
+      "learning_rate": 0.0003,
+      "buffer_size": 10000,
+      "learning_starts": 1000,
+      "batch_size": 256,
+      "train_freq": 1,
+      "gradient_steps": 1
+    },
+    "td3": {
+      "learning_rate": 0.001,
+      "buffer_size": 10000,
+      "learning_starts": 1000,
+      "batch_size": 256,
+      "train_freq": 1,
+      "gradient_steps": 1,
+      "action_noise_std": 0.1
+    }
+  },
+  "risk_rebalance_threshold": 0.7,
+  "include_risk_score": false,
+  "min_weight_threshold": 0.03,
+  "portfolio_weight_distance_threshold": 0.1,
+  "max_holdings": 7,
+  "training_windows": [
+    {
+      "train_start": "2019-02-05",
+      "train_end": "2022-12-30",
+      "test_start": "2023-01-03",
+      "test_end": "2023-12-29"
+    },
+    {
+      "train_start": "2020-01-02",
+      "train_end": "2023-12-29",
+      "test_start": "2024-01-02",
+      "test_end": "2024-12-31"
+    },
+    {
+      "train_start": "2021-01-04",
+      "train_end": "2024-12-31",
+      "test_start": "2025-01-02",
+      "test_end": "2025-12-31"
+    }
+  ]
+}

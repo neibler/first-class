@@ -1,3 +1,5 @@
+from frontend.weight_format import format_weight
+
 """Cockpit: one return series drives the route and the instruments."""
 
 import streamlit as st
@@ -91,15 +93,14 @@ with st.container(key="cockpit-shell", gap=None):
                         with table:
                             st.dataframe(
                                 [
-                                    dict(자산=a["ticker"], 비중=a["weight"])
+                                    dict(
+                                        자산=a["ticker"],
+                                        비중=format_weight(a["weight"]),
+                                    )
                                     for a in data["assets"]
                                 ],
                                 hide_index=True,
-                                column_config={
-                                    "비중": st.column_config.NumberColumn(
-                                        format="percent"
-                                    )
-                                },
+                                column_config={"비중": st.column_config.TextColumn()},
                                 height="content",
                             )
                 with metrics:
@@ -175,12 +176,12 @@ if data:
                 )
                 st.dataframe(
                     [
-                        {"자산": ticker, "목표 비중": weight}
+                        {"자산": ticker, "목표 비중": format_weight(weight)}
                         for ticker, weight in proposal["target_weights"].items()
                     ],
                     hide_index=True,
                 )
                 if proposal["cash_weight"]:
-                    st.write(f"현금 비중: {proposal['cash_weight']:.1%}")
+                    st.write(f"현금 비중: {format_weight(proposal['cash_weight'])}")
             except InvestmentAPIError as exc:
                 st.error(str(exc))

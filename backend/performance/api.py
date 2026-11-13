@@ -136,3 +136,65 @@ def summary() -> dict:
     if not path.exists():
         raise HTTPException(503, f"요약 파일이 없습니다: {path}")
     return _read(str(path), path.stat().st_mtime)
+
+
+@router.get("/model-shap")
+def model_shap(model: str = Query(pattern="^(ppo|recurrent_ppo|sac|td3)$")):
+    from backend.investment_ai.settings import ROOT
+    import hashlib
+
+    registry = (
+        Path(__file__).resolve().parents[2] / "shared/trained_models_manifest.json"
+    )
+    if not registry.exists():
+        raise HTTPException(503, "공유 모델 목록이 없습니다.")
+    item = json.loads(registry.read_text(encoding="utf-8"))["models"].get(model)
+    if not item:
+        raise HTTPException(404, "모델이 없습니다.")
+    bundle = (ROOT / item["path"]).resolve()
+    if not bundle.is_relative_to(ROOT.resolve()):
+        raise HTTPException(503, "모델 경로 설정 오류")
+    path = bundle / "shap.json"
+    if not path.exists() or not (bundle / "model.zip").exists():
+        raise HTTPException(
+            503,
+            "이 모델의 실제 SHAP 결과가 없습니다. 해석 계산 또는 공유본 설치가 필요합니다.",
+        )
+    payload = _read(str(path), path.stat().st_mtime_ns)
+    digest = hashlib.sha256((bundle / "model.zip").read_bytes()).hexdigest()
+    if payload["model_sha256"] != digest or payload["model_type"] != model:
+        raise HTTPException(409, "모델과 SHAP 결과가 다릅니다. 다시 계산하세요.")
+    from .shap_context import attach_market_context
+
+    from .shap_decisions import attach_decisions
+
+    return attach_decisions(attach_market_context(payload, bundle), bundle)
+
+
+@router.get("/correlation/{ticker}")
+def correlation(
+    ticker: str,
+    window: int = Query(60),
+    top_k: int = Query(5, ge=1, le=30),
+    as_of: str | None = None,
+):
+    from datetime import date
+    from .correlation import CONFIG, load_correlation_data, analyze_correlations
+
+    if window not in CONFIG.windows:
+        raise HTTPException(422, "window는 20, 60, 120, 252 중 하나여야 합니다.")
+    if as_of is not None:
+        try:
+            if date.fromisoformat(as_of).isoformat() != as_of:
+                raise ValueError("Invalid date")
+        except ValueError:
+            raise HTTPException(422, "as_of는 YYYY-MM-DD 형식이어야 합니다.") from None
+    try:
+        data = load_correlation_data()
+    except (OSError, ValueError, KeyError):
+        raise HTTPException(
+            503, "실제 시장 입력을 읽지 못했습니다. 입력 데이터와 설정을 확인하세요."
+        ) from None
+    if ticker.upper() not in data.assets:
+        raise HTTPException(404, "분석 대상 ETF가 아닙니다.")
+    return analyze_correlations(data, ticker.upper(), window, top_k, as_of)

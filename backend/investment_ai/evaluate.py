@@ -14,7 +14,19 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--run", type=Path)
     parser.add_argument("--output", type=Path)
+    parser.add_argument(
+        "--bundle",
+        type=Path,
+        help="Single-model bundle from --mode single/walk-forward",
+    )
     args = parser.parse_args()
+    if args.bundle:
+        if args.run or args.output:
+            parser.error("--bundle uses its own evaluation directory")
+        from .model_runs import evaluate_bundle
+
+        print(json.dumps(evaluate_bundle(args.bundle), indent=2))
+        return
     run = resolve_run(args.run)
     selection = json.loads((run / "selection.json").read_text())
     paths = [run / "final" / f"seed_{seed}" for seed in selection["seeds"]]

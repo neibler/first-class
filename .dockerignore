@@ -88,4 +88,22 @@ backend/performance/**
 !config/
 !config/agent.yaml
 !config/etf_news_map.yaml
+
+!config/serving.json
+
+!shared/
+!shared/trained_models_manifest.json
 !config/investment_ai.json
+
+# Portfolio X-Ray read-only clients and explanation helpers.
+!frontend/weight_format.py
+!frontend/shap_client.py
+!frontend/shap_explanations.py
+!frontend/shap_presentation.py
+!frontend/shap_state.py
+!frontend/correlation_client.py
+!config/multi_model.json
+
+!shared/training_inputs.zip
+!shared/training_inputs_manifest.json
+!scripts/install_training_inputs.py

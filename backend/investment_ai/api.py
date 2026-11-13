@@ -19,6 +19,8 @@ class PortfolioState(Contract):
     peak_value: float = Field(gt=0)
     max_drawdown: float = Field(ge=0, le=1)
     days_since_rebalance: int = Field(ge=0, strict=True)
+    episode_start_date: str | None = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
+    episode_elapsed_bars: int | None = Field(default=None, ge=0, strict=True)
     stopped: StrictBool = False
     safeguard_triggered: StrictBool = False
     episode_id: str = Field(default="default", min_length=1, max_length=128)
@@ -48,11 +50,21 @@ class OptimizeResponse(Contract):
     mode: str
     safeguard_triggered: bool
     episode_id: str
+    episode_start_date: str
+    episode_elapsed_bars: int
+    rebalance_phase: float
     observation_date: str
     decision_date: str
     execution_date: str | None
     first_return_end_date: str | None
     first_return_end_delay_trading_bars: int
+    raw_target_weights: dict[str, float] = Field(default_factory=dict)
+    filtered_target_weights: dict[str, float] = Field(default_factory=dict)
+    portfolio_weight_distance: float = Field(default=0.0, ge=0, le=1)
+    max_risk_score: float = Field(default=0.0, ge=0, le=1)
+    model_target_weights: dict[str, float] = Field(default_factory=dict)
+    rebalance_reasons: list[str] = Field(default_factory=list)
+    should_rebalance: bool = False
     target_weights: dict[str, float]
     current_weights: dict[str, float]
     cash_weight: float
