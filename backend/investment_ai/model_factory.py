@@ -41,7 +41,9 @@ def model_parameters(model_type, config):
     return params
 
 
-def validate_model_config(config):
+def validate_model_config(config, *, completed_steps=0):
+    if type(completed_steps) is not int or completed_steps < 0:
+        raise ValueError("completed_steps must be a nonnegative integer")
     kind = config.get("model_type", "ppo")
     params = model_parameters(kind, config)
     reserved = {"policy", "env", "seed", "device", "verbose"}
@@ -66,7 +68,7 @@ def validate_model_config(config):
             raise ValueError("Invalid off-policy warmup/gradient_steps")
         if params["batch_size"] > params["buffer_size"]:
             raise ValueError("batch_size exceeds replay buffer")
-        if config["total_timesteps"] <= params["learning_starts"]:
+        if completed_steps + config["total_timesteps"] <= params["learning_starts"]:
             raise ValueError("total_timesteps must exceed learning_starts")
     if (
         not np.isfinite(params.get("action_noise_std", 0.1))

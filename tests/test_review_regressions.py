@@ -123,7 +123,13 @@ def test_resume_missing_effective_key_rejected_before_mkdir(tmp_path, missing):
     b = tmp_path / "old"
     b.mkdir()
     write_json(b / "config.json", c)
-    write_json(b / "schema.json", {"execution_policy": REBALANCE_POLICY})
+    write_json(
+        b / "schema.json",
+        {
+            "execution_policy": REBALANCE_POLICY,
+            "phase_definition": "episode_elapsed_bars_v1",
+        },
+    )
     m = SavingModel()
     publish_checkpoint(m, b, {"model_type": "sac"})
     changed = dict(c)
@@ -203,7 +209,7 @@ def test_shared_mode_resolution():
 
 @pytest.mark.parametrize("kind", ["ppo", "recurrent_ppo", "sac", "td3"])
 def test_short_training_and_resume_roundtrip(tmp_path, kind):
-    c = small_config(kind)
+    c = {**small_config(kind), "data_path": None, "news_path": None}
     d = data(np.zeros((20, 2)))
     first = tmp_path / "first"
     training.train_model(d, c, 15, 42, first)
@@ -226,10 +232,14 @@ def test_package_fingerprint_detects_changed_data(tmp_path, monkeypatch):
     monkeypatch.setattr(data_loader, "load_data", lambda *a: (d, None))
     spec = {"start_date": str(d.dates[0])[:10], "end_date": str(d.dates[-1])[:10]}
     expected = fingerprint(d)
-    builder.verify_inputs({"seed": 42}, spec, expected)
+    builder.verify_inputs(
+        {"seed": 42, "data_path": "market", "news_path": "news"}, spec, expected
+    )
     d.risk[0, 0] += 0.01
     with pytest.raises(ValueError, match="fingerprint"):
-        builder.verify_inputs({"seed": 42}, spec, expected)
+        builder.verify_inputs(
+            {"seed": 42, "data_path": "market", "news_path": "news"}, spec, expected
+        )
 
 
 def test_normalized_input_path_and_custom_destination(tmp_path):

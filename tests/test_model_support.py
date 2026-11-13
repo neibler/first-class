@@ -271,6 +271,7 @@ def test_single_bundle_service_uses_factory_metadata(tmp_path, monkeypatch):
     monkeypatch.setattr(serving, "load_data", lambda *args: (d, None))
     model = create_model("td3", PortfolioEnv(d, c), c, 42)
     monkeypatch.setattr(serving, "load_bundle", lambda *args: (model, None, c))
+    model.save(tmp_path / "model.zip")
     obj = serving.InvestmentService(tmp_path)
     result = obj.optimize()
     assert len(obj.models) == 1
@@ -365,6 +366,7 @@ def test_serving_config_selects_bundle_and_rejects_type_mismatch(tmp_path, monke
     monkeypatch.setattr(serving, "load_data", lambda *args: (d, None))
     model = create_model("sac", PortfolioEnv(d, c), c, 42)
     monkeypatch.setattr(serving, "load_bundle", lambda *args: (model, None, c))
+    model.save(bundle / "model.zip")
     obj = serving.InvestmentService()
     assert obj.run == bundle and obj.config["model_type"] == "sac"
     write_json(

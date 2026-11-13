@@ -154,6 +154,8 @@ def state(d, mdd=0.2):
         "peak_value": 1.0,
         "max_drawdown": mdd,
         "days_since_rebalance": 0,
+        "episode_start_date": str(d.dates[-1])[:10],
+        "episode_elapsed_bars": 0,
         "episode_id": "test",
     }
 
@@ -275,7 +277,7 @@ def test_api_latches_recovered_episode_and_validates_news(monkeypatch, tmp_path)
     payload.update(portfolio_value=1.0, max_drawdown=0.0)
     result = client.post("/optimize", json={"state": payload})
     assert result.status_code == 200 and result.json()["cash_weight"] == 1
-    assert json.loads(obj.latch_path.read_text())["test"]
+    assert json.loads(obj.latch_path.read_text())["latches"]["test"]
     frame, news = inputs()
     bad = client.post(
         "/optimize",

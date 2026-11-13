@@ -1,6 +1,7 @@
 """Validated configuration and versioned experiment paths."""
 
 import json
+import hashlib
 import os
 from pathlib import Path
 import numpy as np
@@ -30,7 +31,7 @@ def risk_score_enabled(config):
     return value
 
 
-def validate_config(c):
+def validate_config(c, *, completed_steps=0):
     risk_score_enabled(c)
     from .rebalancing import validate_rebalancing
 
@@ -60,7 +61,7 @@ def validate_config(c):
         raise ValueError("batch_size, n_steps, reward_window must be >= 2")
     from .model_factory import validate_model_config
 
-    validate_model_config(c)
+    validate_model_config(c, completed_steps=completed_steps)
     for key in (
         "max_drawdown",
         "transaction_cost_bps",
@@ -128,11 +129,36 @@ def bundle_input_root(bundle, default=ROOT):
     marker = bundle / "installed_inputs.json"
     if not marker.exists():
         return default
-    relative = json.loads(marker.read_text(encoding="utf-8"))["relative_root"]
-    if not isinstance(relative, str) or Path(relative).is_absolute():
-        raise ValueError("Invalid installed input root")
-    root = (bundle / relative).resolve()
-    if root not in bundle.parents:
+    binding = json.loads(marker.read_text(encoding="utf-8"))
+    hashes = binding.get("sha256")
+    if "absolute_root" in binding:
+        value = binding["absolute_root"]
+        if (
+            "relative_root" in binding
+            or not isinstance(value, str)
+            or not Path(value).is_absolute()
+            or not hashes
+        ):
+            raise ValueError("Invalid absolute input binding")
+        root = Path(value).resolve()
+    else:
+        relative = binding["relative_root"]
+        if not isinstance(relative, str) or Path(relative).is_absolute():
+            raise ValueError("Invalid installed input root")
+        root = (bundle / relative).resolve()
+    if hashes is not None:
+        config = json.loads((bundle / "config.json").read_text(encoding="utf-8"))
+        expected = {config[k] for k in ("data_path", "news_path") if config.get(k)}
+        if not isinstance(hashes, dict) or set(hashes) != expected or not hashes:
+            raise ValueError("Invalid bound input checksums")
+        for name, digest in hashes.items():
+            path = (root / name).resolve()
+            if (
+                not path.is_relative_to(root)
+                or hashlib.sha256(path.read_bytes()).hexdigest() != digest
+            ):
+                raise ValueError("Bound input checksum/path mismatch")
+    elif root not in bundle.parents:
         raise ValueError("Installed input root must contain the model bundle")
     return root
 

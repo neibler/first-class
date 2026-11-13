@@ -70,8 +70,8 @@ def main(argv=None):
         config["total_timesteps"] = steps
         if args.device:
             config["device"] = args.device
-        validate_config(config)
         _, manifest = resolve_checkpoint(args.resume)
+        validate_config(config, completed_steps=manifest.get("actual_timesteps", 0))
         spec_path = args.resume / "run_spec.json"
         spec = (
             json.loads(spec_path.read_text(encoding="utf-8"))
@@ -83,6 +83,12 @@ def main(argv=None):
             if spec
             else config
         )
+        if spec and spec.get("synthetic"):
+            input_config = {
+                **input_config,
+                "data_path": str((args.resume / "synthetic_market.parquet").resolve()),
+                "news_path": str((args.resume / "news_metadata.parquet").resolve()),
+            }
         data, _ = load_data(input_config, bundle_input_root(args.resume, ROOT))
         if spec:
             dates = pd.DatetimeIndex(data.dates)

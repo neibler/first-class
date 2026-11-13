@@ -16,6 +16,7 @@ from .infer import resolve_run, predict_weights
 from .backtest import performance
 from .accounting import equity_curve
 from .prediction import PredictionSession
+from .episode_clock import episode_clock, rebalance_phase
 
 
 class InvestmentService:
@@ -48,8 +49,16 @@ class InvestmentService:
         self.lock = RLock()
         state_key = hashlib.sha256(str(self.run.resolve()).encode()).hexdigest()
         self.latch_path = ROOT / "service_state" / f"{state_key}.json"
-        self.latches = (
+        saved_state = (
             json.loads(self.latch_path.read_text()) if self.latch_path.exists() else {}
+        )
+        self.latches = (
+            saved_state.get("latches", {})
+            if saved_state.get("version") == 2
+            else saved_state
+        )
+        self.episode_clocks = (
+            saved_state.get("clocks", {}) if saved_state.get("version") == 2 else {}
         )
         self.recurrent_sessions = {}
         single = (self.run / "run_spec.json").exists()
@@ -122,6 +131,13 @@ class InvestmentService:
             raise ValueError("Ensemble configuration mismatch")
         self.models = [bundle[0] for bundle in bundles]
         self.scaler = bundles[0][1]
+        self.state_model_hash = hashlib.sha256(
+            b"".join((path / "model.zip").read_bytes() for path in paths)
+        ).hexdigest()
+        if saved_state.get("version") == 2:
+            if saved_state.get("model_hash") != self.state_model_hash:
+                raise ValueError("Saved episode state belongs to a different model")
+            self._restore_recurrent(saved_state.get("recurrent", {}))
         for _, scaler, _ in bundles[1:]:
             for key in vars(self.scaler):
                 if not np.array_equal(getattr(self.scaler, key), getattr(scaler, key)):
@@ -153,6 +169,58 @@ class InvestmentService:
             if not history.date.equals(self.histories["ppo"].date):
                 raise ValueError("Saved strategy dates differ")
 
+    def _restore_recurrent(self, records):
+        for episode, record in records.items():
+            if len(record["sessions"]) != len(self.models):
+                raise ValueError("Recurrent state/model count mismatch")
+            sessions = []
+            for model, stored in zip(self.models, record["sessions"]):
+                session = PredictionSession(model, "recurrent_ppo")
+                session.episode_start = stored["episode_start"]
+                session.lstm_states = (
+                    tuple(
+                        np.asarray(x, dtype=np.float32) for x in stored["lstm_states"]
+                    )
+                    if stored["lstm_states"] is not None
+                    else None
+                )
+                if session.lstm_states is not None and (
+                    len(session.lstm_states) != 2
+                    or any(not np.isfinite(x).all() for x in session.lstm_states)
+                ):
+                    raise ValueError("Invalid recurrent state")
+                sessions.append(session)
+            self.recurrent_sessions[episode] = {**record, "sessions": sessions}
+
+    def _save_episode_state(self):
+        recurrent = {}
+        for episode, record in getattr(self, "recurrent_sessions", {}).items():
+            recurrent[episode] = {
+                **record,
+                "sessions": [
+                    {
+                        "episode_start": bool(p.episode_start),
+                        "lstm_states": (
+                            [x.tolist() for x in p.lstm_states]
+                            if p.lstm_states is not None
+                            else None
+                        ),
+                    }
+                    for p in record["sessions"]
+                ],
+            }
+        payload = {
+            "version": 2,
+            "model_hash": getattr(self, "state_model_hash", None),
+            "latches": self.latches,
+            "clocks": self.episode_clocks,
+            "recurrent": recurrent,
+        }
+        self.latch_path.parent.mkdir(parents=True, exist_ok=True)
+        pending = self.latch_path.with_suffix(".pending")
+        pending.write_text(json.dumps(payload, allow_nan=False), encoding="utf-8")
+        pending.replace(self.latch_path)
+
     def optimize(self, market=None, news=None, state=None):
         data = self.data
         source = self.data_source
@@ -170,6 +238,7 @@ class InvestmentService:
         elif news is not None:
             raise ValueError("news requires market in the same request")
         with self.lock:
+            supplied = state is not None
             state = dict(state) if state is not None else None
             if state is not None:
                 for flag in ("safeguard_triggered", "stopped", "reset_episode"):
@@ -205,19 +274,46 @@ class InvestmentService:
                         state["max_drawdown"], self.config["max_drawdown"]
                     )
                 )
+            self.episode_clocks = getattr(self, "episode_clocks", {})
+            previous_clock = self.episode_clocks.get(episode_id)
+            if (
+                previous_clock
+                and not supplied
+                and previous_clock["date"] != str(data.dates[-1])[:10]
+            ):
+                raise ValueError("Supply actual portfolio state to advance an episode")
+            clock = episode_clock(data.dates, state, previous_clock, reset)
+            if state is None:
+                state = {
+                    "date": str(data.dates[-1])[:10],
+                    "weights": {a: 0.0 for a in data.assets},
+                    "portfolio_value": 1.0,
+                    "peak_value": 1.0,
+                    "max_drawdown": 0.0,
+                    "days_since_rebalance": 0,
+                    "stopped": False,
+                }
+            state.update(
+                {k: clock[k] for k in ("episode_start_date", "episode_elapsed_bars")}
+            )
             recurrent = self.config.get("model_type") == "recurrent_ppo"
             if recurrent:
-                prediction = self._recurrent_prediction(data, state, episode_id, reset)
+                prediction = self._recurrent_prediction(
+                    data,
+                    state,
+                    episode_id,
+                    reset or (not previous_clock and not supplied),
+                )
             else:
                 prediction = predict_weights(
                     data, self.config, self.models, self.scaler, state
                 )
+            if not supplied:
+                prediction["mode"] = "new_portfolio_cash"
             # Persist after validation; an API restart must not clear a stop.
             self.latches[episode_id] = prediction["safeguard_triggered"]
-            self.latch_path.parent.mkdir(parents=True, exist_ok=True)
-            pending = self.latch_path.with_suffix(".pending")
-            pending.write_text(json.dumps(self.latches))
-            pending.replace(self.latch_path)
+            self.episode_clocks[episode_id] = clock
+            self._save_episode_state()
         current = state["weights"] if state else {asset: 0.0 for asset in data.assets}
         return {
             "schema_version": "3.0",
@@ -228,6 +324,11 @@ class InvestmentService:
             "status": prediction["status"],
             "safeguard_triggered": prediction["safeguard_triggered"],
             "episode_id": episode_id,
+            "episode_start_date": clock["episode_start_date"],
+            "episode_elapsed_bars": clock["episode_elapsed_bars"],
+            "rebalance_phase": rebalance_phase(
+                clock["episode_elapsed_bars"], self.config["rebalance_days"]
+            ),
             "observation_date": prediction["observation_date"],
             "decision_date": prediction["decision_date"],
             "execution_date": prediction["execution_date"],

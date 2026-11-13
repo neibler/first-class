@@ -13,6 +13,8 @@ python local_run.py train --config config/multi_model.json --model ppo --seed 22
 config/multi_model.json은 80/20 holdout이 아니라 명시적 Walk-Forward 3개 구간입니다. 2019~2022 학습/2023 평가, 2020~2023 학습/2024 평가, 2021~2024 학습/2025 평가입니다. 첫 시작일은 2019-02-05입니다. window_0, window_1, window_2로 저장됩니다.
 
 ```powershell
+# 학습과 같은 가상환경의 Python으로 분석 의존성을 설치합니다.
+python -m pip install -r backend/performance/requirements.txt
 $runId = "WF_" + (Get-Date -Format "yyyyMMdd_HHmmss")
 foreach ($model in @("ppo", "recurrent_ppo", "sac", "td3")) {
     python local_run.py train --config config/multi_model.json --model $model --seed 22 --run-id $runId

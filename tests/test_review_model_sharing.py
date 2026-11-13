@@ -123,7 +123,7 @@ def test_missing_bundled_input_rejected_before_install(packages, tmp_path):
     assert not (packages / "shared/trained_models.zip").exists()
 
 
-def test_empty_comparison_removes_both_stale_outputs(tmp_path):
+def test_empty_comparison_preserves_existing_outputs(tmp_path):
     output = tmp_path / "comparison.csv"
     summary = tmp_path / "comparison_seed_summary.csv"
     output.write_text("old")
@@ -131,7 +131,7 @@ def test_empty_comparison_removes_both_stale_outputs(tmp_path):
     unrelated = tmp_path / "model.zip"
     unrelated.write_bytes(b"keep")
     assert compare_completed(tmp_path, output).empty
-    assert not output.exists() and not summary.exists()
+    assert output.read_text() == "old" and summary.read_text() == "old"
     assert unrelated.read_bytes() == b"keep"
 
 

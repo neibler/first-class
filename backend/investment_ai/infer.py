@@ -11,6 +11,7 @@ from .portfolio_env import PortfolioEnv
 from .training import load_bundle
 from .accounting import safeguard_breached
 from .prediction import PredictionSession
+from .episode_clock import episode_clock, rebalance_phase
 from .rebalancing import (
     get_rebalance_reasons,
     filter_target_weights,
@@ -36,6 +37,7 @@ def resolve_run(path=None):
 def predict_weights(data, config, models, scaler, state=None, predictors=None):
     env = PortfolioEnv(data, config, scaler=scaler)
     date = str(data.dates[-1])[:10]
+    clock = episode_clock(data.dates, state)
     if state is None:
         state = {
             "date": date,
@@ -83,7 +85,7 @@ def predict_weights(data, config, models, scaler, state=None, predictors=None):
         raise ValueError("stopped must be boolean")
     if not isinstance(elapsed, int) or elapsed < 0:
         raise ValueError("days_since_rebalance must be a nonnegative integer")
-    phase = elapsed % config["rebalance_days"] / config["rebalance_days"]
+    phase = rebalance_phase(clock["episode_elapsed_bars"], config["rebalance_days"])
     obs = env.observation_at(len(data.dates) - 1, held, dd, mdd, phase)
     recurrent = config.get("model_type", "ppo") == "recurrent_ppo"
     stopped = (
@@ -141,6 +143,9 @@ def predict_weights(data, config, models, scaler, state=None, predictors=None):
     )
     return {
         "as_of_date": date,
+        "episode_start_date": clock["episode_start_date"],
+        "episode_elapsed_bars": clock["episode_elapsed_bars"],
+        "rebalance_phase": phase,
         "model_target_weights": dict(zip(data.assets, map(float, raw_target))),
         "raw_target_weights": dict(zip(data.assets, map(float, raw_target))),
         "filtered_target_weights": dict(zip(data.assets, map(float, target))),

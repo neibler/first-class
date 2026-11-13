@@ -6,6 +6,7 @@ import numpy as np
 from .rewards import calculate_reward, canonical_reward
 from .accounting import safeguard_breached
 from .settings import risk_score_enabled
+from .episode_clock import rebalance_phase
 from .rebalancing import (
     get_rebalance_reasons,
     validate_rebalancing,
@@ -108,7 +109,7 @@ class PortfolioEnv(gym.Env):
         return result
 
     def _get_observation(self):
-        phase = ((self.t - self.episode_start) % self.period) / self.period
+        phase = rebalance_phase(self.t - self.episode_start, self.period)
         return self.observation_at(
             self.t - self.lag, self.weights, self.drawdown, self.mdd, phase
         )

@@ -6,6 +6,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 from .accounting import equity_curve, sharpe_ratio
+from .settings import ROOT
 
 METRICS = ["cagr", "sharpe", "sortino", "mdd", "calmar"]
 
@@ -31,6 +32,8 @@ def metrics_from_returns(returns, annual_rf=0.0):
 
 
 def compare_completed(root, output):
+    if not Path(root).is_dir():
+        raise FileNotFoundError(f"Comparison search directory does not exist: {root}")
     rows, seen = [], set()
     for path in sorted(Path(root).rglob("evaluation.json")):
         meta = json.loads(path.read_text(encoding="utf-8"))
@@ -74,11 +77,7 @@ def compare_completed(root, output):
             }
         )
     if not rows:
-        output = Path(output)
-        # Only remove outputs owned by this comparison, never saved model results.
-        output.unlink(missing_ok=True)
-        output.with_name(output.stem + "_seed_summary.csv").unlink(missing_ok=True)
-        print("No completed model runs found. Stale comparison outputs removed.")
+        print("No completed model runs found. Existing comparison outputs preserved.")
         return pd.DataFrame()
     table = pd.DataFrame(rows)
     output = Path(output)
@@ -94,7 +93,7 @@ def compare_completed(root, output):
 
 def main(argv=None):
     parser = argparse.ArgumentParser()
-    parser.add_argument("--runs", type=Path, default=Path("runtime/models"))
+    parser.add_argument("--runs", type=Path, default=ROOT / "models")
     parser.add_argument(
         "--output", type=Path, default=Path("results/model_comparison.csv")
     )

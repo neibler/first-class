@@ -17,6 +17,7 @@ from .records import asset_rows
 from .rebalancing import REBALANCE_POLICY
 from .checkpoints import publish_checkpoint, resolve_checkpoint
 from .settings import validate_config
+from .episode_clock import PHASE_DEFINITION
 
 
 def source_hash():
@@ -88,6 +89,7 @@ def feature_names(data, config):
 def schema_for(data, config):
     return {
         "version": SCHEMA_VERSION,
+        "phase_definition": PHASE_DEFINITION,
         "execution_policy": REBALANCE_POLICY,
         "feature_names": feature_names(data, config),
         "execution_delay": 1,
@@ -122,7 +124,11 @@ def schema_for(data, config):
 
 def train_model(data, config, train_end, seed, output, resume=None, run_spec=None):
     output = Path(output)
-    validate_config(config)
+    if resume:
+        checkpoint_path, old = resolve_checkpoint(resume)
+    validate_config(
+        config, completed_steps=old.get("actual_timesteps", 0) if resume else 0
+    )
     torch.set_num_threads(1)
     scaler = FeatureScaler.fit(data, train_end)
     data_hash = fingerprint(data)
@@ -133,6 +139,8 @@ def train_model(data, config, train_end, seed, output, resume=None, run_spec=Non
         )
         if saved_schema.get("execution_policy") != REBALANCE_POLICY:
             raise ValueError("Incompatible execution policy; retrain the model")
+        if saved_schema.get("phase_definition") != PHASE_DEFINITION:
+            raise ValueError("Unverified phase definition; retrain the model")
         old_config = json.loads(
             (Path(resume) / "config.json").read_text(encoding="utf-8")
         )
@@ -164,8 +172,12 @@ def train_model(data, config, train_end, seed, output, resume=None, run_spec=Non
             raise ValueError("Resume data, source, seed or split mismatch")
         scaler = FeatureScaler.load(Path(resume) / "scaler.json")
     output.mkdir(parents=True, exist_ok=False)
+    write_json(output / "config.json", config)
     if run_spec is not None:
         write_json(output / "run_spec.json", run_spec)
+    from .bundle_inputs import preserve_inputs
+
+    preserve_inputs(output, data, config, run_spec, resume)
     env = Monitor(
         PortfolioEnv(
             data,
@@ -232,6 +244,8 @@ def load_bundle(path, data=None, exact_data=False):
     schema = json.loads((path / "schema.json").read_text(encoding="utf-8"))
     if schema.get("execution_policy") != REBALANCE_POLICY:
         raise ValueError("Incompatible execution policy; retrain the model")
+    if schema.get("phase_definition") != PHASE_DEFINITION:
+        raise ValueError("Unverified phase definition; retrain the model")
     if schema["version"] != SCHEMA_VERSION:
         raise ValueError("Incompatible model schema version")
     if data is not None and schema != schema_for(data, config):

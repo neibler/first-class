@@ -4,11 +4,16 @@ import argparse
 import csv
 import hashlib
 import json
+import sys
 from pathlib import Path
 import zipfile
 
 PROJECT = Path(__file__).resolve().parents[1]
-RUNTIME = PROJECT / "runtime"
+if str(PROJECT) not in sys.path:
+    sys.path.insert(0, str(PROJECT))
+from backend.investment_ai.settings import ROOT  # noqa: E402
+
+RUNTIME = ROOT
 KINDS = ("ppo", "recurrent_ppo", "sac", "td3")
 
 
@@ -21,6 +26,9 @@ def verify_inputs(config, spec, expected):
     from backend.investment_ai.data_loader import load_data, fingerprint
     from backend.investment_ai.model_runs import subset
 
+    for key in ("data_path", "news_path"):
+        if not (RUNTIME / config[key]).resolve().is_relative_to(RUNTIME.resolve()):
+            raise ValueError("Input resolves outside runtime")
     data, _ = load_data(
         {**config, "seed": spec.get("data_seed", config.get("seed", 42))}, RUNTIME
     )
@@ -45,8 +53,9 @@ def build(seed=None, selections=None):
     models = {}
 
     def add(path):
-        path = path.resolve()
-        if not path.is_relative_to(RUNTIME):
+        # Preserve configured archive names; resolve only for boundary validation.
+        path = Path(path).absolute()
+        if not path.resolve().is_relative_to(RUNTIME.resolve()) or ".." in path.parts:
             raise ValueError("Only runtime files may be shared")
         name = path.relative_to(RUNTIME).as_posix()
         payload[name] = path.read_bytes()
@@ -61,7 +70,9 @@ def build(seed=None, selections=None):
             and json.loads(p.read_text(encoding="utf-8")).get("completed")
         ]
         if kind in selections:
-            selected = (RUNTIME / selections[kind]).resolve()
+            selected = (RUNTIME / selections[kind]).absolute()
+            if not selected.resolve().is_relative_to(RUNTIME.resolve()):
+                raise ValueError("Selected bundle must be inside runtime")
             candidates = [p for p in candidates if p.resolve() == selected]
         if seed is not None:
             candidates = [
