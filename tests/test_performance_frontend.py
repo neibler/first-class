@@ -7,7 +7,12 @@ import pytest
 from streamlit.testing.v1 import AppTest
 
 from frontend import api_client, performance_client as client
-from frontend.performance_view import chart_rows, convention_text, metric_rows
+from frontend.performance_view import (
+    chart_rows,
+    convention_text,
+    metric_rows,
+    safeguard_labels,
+)
 
 CONVENTION = "simple_daily_returns_annualized_sharpe_positive_mdd"
 
@@ -110,7 +115,9 @@ def test_view_keeps_server_values_and_units(monkeypatch, answers):
     assert first["S&P500 (SPY 매수 후 보유)"] == "12.42%"
     by_name = {r["성과지표"]: r for r in rows}
     assert by_name["Sharpe Ratio"]["동일가중 (리밸런싱)"] == "1.200"
-    assert by_name["총 회전율"]["PPO (ppo_return_mdd_seed22)"] == "2.50배"
+    assert (
+        by_name["총 회전율 (비중 변화 누적)"]["PPO (ppo_return_mdd_seed22)"] == "2.50배"
+    )
     assert by_name["현금 보유일"]["PPO (ppo_return_mdd_seed22)"] == "0일"
     points = chart_rows(result)
     assert len(points) == 4 * 3
@@ -219,3 +226,37 @@ def test_safeguard_synthetic_and_missing_notices(monkeypatch, answers):
     warnings = " ".join(w.value for w in app.warning)
     assert "합성 데이터" in warnings and "Safe-Guard" in warnings
     assert any("동일가중 (매수 후 보유)" in i.value for i in app.info)
+
+
+def test_benchmark_only_safeguard_is_named(monkeypatch, answers):
+    # Response flags describe PPO only; the stopped benchmark reports it in metrics.
+    answers["equal_rebalanced"]["benchmark_metrics"]["stop_triggered"] = True
+    respond(monkeypatch, answers)
+    result = client.get_backtest()
+    assert not result.stopped and not result.safeguard_triggered
+    assert safeguard_labels(result) == ["동일가중 (리밸런싱)"]
+    app = open_page(monkeypatch)
+    notice = " ".join(w.value for w in app.warning)
+    assert "Safe-Guard가 작동한 전략: 동일가중 (리밸런싱)" in notice
+    assert "PPO" not in notice
+
+
+def test_ppo_flag_and_benchmark_stop_are_both_named(monkeypatch, answers):
+    for body in answers.values():
+        body["safeguard_triggered"] = True
+    answers["spy_buy_hold"]["benchmark_metrics"]["stop_triggered"] = True
+    respond(monkeypatch, answers)
+    assert safeguard_labels(client.get_backtest()) == [
+        "PPO (ppo_return_mdd_seed22)",
+        "S&P500 (SPY 매수 후 보유)",
+    ]
+
+
+def test_no_safeguard_notice_and_turnover_wording(monkeypatch, answers):
+    respond(monkeypatch, answers)
+    app = open_page(monkeypatch)
+    assert not app.warning
+    captions = " ".join(c.value for c in app.caption)
+    assert "거래비용은 초기 자본 대비" in captions
+    assert "총 회전율은 리밸런싱마다 바뀐 비중의 합을 누적한 값" in captions
+    assert "거래비용과 회전율은" not in captions

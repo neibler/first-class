@@ -4,7 +4,12 @@ import streamlit as st
 
 from frontend import performance_client
 from frontend.charts import performance_comparison
-from frontend.performance_view import chart_rows, convention_text, metric_rows
+from frontend.performance_view import (
+    chart_rows,
+    convention_text,
+    metric_rows,
+    safeguard_labels,
+)
 from frontend.ui import page_heading
 
 page_heading(
@@ -34,9 +39,12 @@ with st.container(key="analysis-panel-comparison"):
             st.warning(
                 "합성 데이터 결과입니다. 실제 시장 데이터의 투자 성과가 아닙니다."
             )
-        if result.stopped or result.safeguard_triggered:
+        stopped = safeguard_labels(result)
+        if stopped:
             st.warning(
-                "평가 기간 중 Safe-Guard가 작동했습니다. 이후 구간은 보호 조치가 반영된 결과입니다."
+                "평가 기간 중 Safe-Guard가 작동한 전략: "
+                + ", ".join(stopped)
+                + ". 작동 이후 구간은 보호 조치가 반영된 결과입니다."
             )
         if result.missing:
             st.info("이 모델에 저장되지 않은 비교 전략: " + ", ".join(result.missing))
@@ -46,8 +54,9 @@ with st.container(key="analysis-panel-comparison"):
             metric_rows(result), hide_index=True, width="stretch", height="content"
         )
         st.caption(
-            f"서버 계산값 · {convention_text(result)} 거래비용과 회전율은 "
-            "초기 자본 대비입니다. —는 정의할 수 없는 값입니다."
+            f"서버 계산값 · {convention_text(result)} 거래비용은 초기 자본 대비이고, "
+            "총 회전율은 리밸런싱마다 바뀐 비중의 합을 누적한 값입니다. "
+            "—는 정의할 수 없는 값입니다."
         )
 with st.container(key="analysis-panel-walk-forward"):
     st.subheader("평가 방식")

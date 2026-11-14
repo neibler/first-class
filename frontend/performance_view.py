@@ -38,6 +38,18 @@ def metric_rows(result):
     return rows
 
 
+def safeguard_labels(result):
+    """Strategies whose own history hit the MDD Safe-Guard.
+
+    The response-level flags describe PPO only; benchmarks report theirs in metrics.
+    """
+    labels = [item.label for item in result.strategies if item.metrics.stop_triggered]
+    first = result.strategies[0].label if result.strategies else None
+    if (result.stopped or result.safeguard_triggered) and first not in labels:
+        labels.insert(0, first)
+    return labels
+
+
 def convention_text(result):
     if result.metric_convention == (
         "simple_daily_returns_annualized_sharpe_positive_mdd"

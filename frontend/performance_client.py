@@ -26,7 +26,7 @@ METRICS = (
     ("annualized_volatility", "연환산 변동성", "%"),
     ("sharpe", "Sharpe Ratio", ""),
     ("max_drawdown", "MDD (최대 낙폭)", "%"),
-    ("total_turnover", "총 회전율", "x"),
+    ("total_turnover", "총 회전율 (비중 변화 누적)", "x"),
     ("total_cost_initial_capital", "거래비용 (초기자본 대비)", "%"),
     ("cash_days", "현금 보유일", "일"),
     ("days", "평가 거래일", "일"),
