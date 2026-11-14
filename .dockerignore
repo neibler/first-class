@@ -15,6 +15,8 @@ backend/news_research/**
 frontend/**
 !frontend/app.py
 !frontend/api_client.py
+!frontend/performance_client.py
+!frontend/performance_view.py
 !frontend/requirements.txt
 !frontend/ui.py
 !frontend/shap_cabin.py

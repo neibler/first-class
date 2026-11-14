@@ -222,9 +222,10 @@ __marimo__/
 /docs/reference/
 /docs/ui-reference/
 /docs/progress.md
-/AGENTS.md
-/LOCAL_INTEGRATION.md
 /docs/local/
+/AGENTS.md
+/docker-compose.override.yml
+/LOCAL_INTEGRATION.md
 /.codex/
 /.agents/
 /.idea/
