@@ -182,7 +182,7 @@ def test_page_renders_comparison(monkeypatch, answers):
     respond(monkeypatch, answers)
     app = open_page(monkeypatch)
     assert not app.exception and not app.warning
-    assert len(app.get("page_link")) == 7
+    assert len(app.get("page_link")) == 5
     assert len(app.get("vega_lite_chart")) == 1
     assert app.dataframe[0].value.shape == (len(client.METRICS), 5)
     captions = " ".join(c.value for c in app.caption)
@@ -208,7 +208,7 @@ def test_http_failure_keeps_menu_and_recovers(
     respond(monkeypatch, answers, status, error)
     app = open_page(monkeypatch)
     assert not app.exception
-    assert len(app.get("page_link")) == 7
+    assert len(app.get("page_link")) == 5
     assert message in app.warning[0].value
     assert "PRIVATE" not in app.warning[0].value
     assert not app.dataframe

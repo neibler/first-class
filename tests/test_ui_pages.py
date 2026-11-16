@@ -30,38 +30,96 @@ def page(monkeypatch):
     return AppTest.from_file("frontend/app.py", default_timeout=10).run()
 
 
-def test_navigation_all_six_pages_and_placeholder_scope(page):
+def test_menu_pages_and_detail_pages(page):
     assert not page.exception
-    assert page.title[0].value == "포트폴리오 현황"
-    for slug, title in [
-        ("performance", "강화학습 성과"),
-        ("shap", "SHAP 해석"),
-        ("research", "에이전트 리서치"),
-        ("anova", "ANOVA 검증"),
-        ("risk", "리스크 모니터링"),
+    assert page.title[0].value == "포트폴리오"
+    # (page, title, links): 4 menu links + detail links on menu pages,
+    # or + 1 back link on detail pages.
+    for slug, title, links in [
+        ("risk", "위험도·설명", 6),
+        ("correlation", "자산 상세", 4),
+        ("research", "AI 도우미", 4),
+        ("performance", "강화학습 성과", 5),
+        ("shap", "SHAP 해석", 5),
+        ("anova", "ANOVA 검증", 5),
     ]:
         page.switch_page(f"app_pages/{slug}.py").run()
         assert not page.exception
         assert page.title[0].value == title
-        assert len(page.get("page_link")) == 7
+        assert len(page.get("page_link")) == links
+        assert any(e.label == "API 준비 상태" for e in page.expander)
         if slug == "research":
             assert page.text_area(key="research_question")
             assert page.date_input(key="research_date")
-            assert not page.selectbox
         elif slug == "performance":
             assert "백테스트 분석 결과" in page.warning[0].value
             assert page.button(key="refresh_performance")
         elif slug == "anova":
             assert page.info[0].value == "표시할 통계 검증 결과가 없습니다."
             assert page.button(key="refresh_statistics")
-        elif slug != "shap":
-            assert page.info[0].value == "화면 준비 중"
-            assert not page.selectbox
-            captions = " ".join(item.value for item in page.caption)
-            assert "분석 API와 데이터는 아직 준비되지 않았습니다" in captions
-            assert "위 분석은 UI 개발용 샘플" not in captions
     page.switch_page("app_pages/portfolio.py").run()
-    assert page.title[0].value == "포트폴리오 현황"
+    assert page.title[0].value == "포트폴리오"
+    assert len(page.get("page_link")) == 5
+
+
+def test_portfolio_cards_use_negative_drawdown(page):
+    labels = [m.label for m in page.metric]
+    assert labels[:3] == [
+        "누적 수익률",
+        "Sharpe Ratio · 위험 대비 수익",
+        "최대 하락폭 · MDD",
+    ]
+    assert page.metric[2].value.startswith("-")
+    assert any("왜 포트폴리오가 바뀌었나요?" in h.value for h in page.subheader)
+    assert any("준비 중" in i.value for i in page.info)
+
+
+def test_risk_page_shows_drawdown_safeguard_factors_and_guide(page):
+    page.switch_page("app_pages/risk.py").run()
+    assert not page.exception
+    assert [m.label for m in page.metric] == [
+        "최대 하락폭 · MDD",
+        "현재 낙폭",
+        "변동성 · 연환산",
+    ]
+    assert page.metric[0].value.startswith("-")
+    assert any("Safe-Guard 미작동" in s.value for s in page.success)
+    assert len(page.get("vega_lite_chart")) == 1
+    assert page.selectbox(key="risk_shap_asset")
+    text = " ".join(m.value for m in page.markdown)
+    assert "RSI" in text and "MACD" in text
+    captions = " ".join(c.value for c in page.caption)
+    assert "70 이상이면" in captions and "인과관계나 투자 권고가 아닙니다" in captions
+
+
+def test_risk_page_survives_missing_backtest_and_shap(page, monkeypatch):
+    from frontend import investment_client, shap_client
+
+    def no_portfolio(*args, **kwargs):
+        raise investment_client.InvestmentAPIError(
+            "투자 분석 결과를 불러오지 못했습니다."
+        )
+
+    def no_shap(model):
+        raise api_client.APIError("실제 SHAP 결과를 불러오지 못했습니다.")
+
+    monkeypatch.setattr(investment_client, "load_portfolio", no_portfolio)
+    monkeypatch.setattr(shap_client, "load_model_shap", no_shap)
+    page.switch_page("app_pages/risk.py").run()
+    assert not page.exception
+    assert len(page.warning) >= 2
+    assert not page.metric and not page.get("vega_lite_chart")
+    assert len(page.get("page_link")) == 6
+
+
+def test_asset_detail_has_etf_intro_for_every_asset():
+    from frontend.guide import ETF_GUIDE
+    from frontend.shap_explanations import ASSET_NAMES
+
+    assert set(ETF_GUIDE) == set(ASSET_NAMES)
+    assert all(
+        text.endswith("예요.") or text.endswith("요.") for text in ETF_GUIDE.values()
+    )
 
 
 def test_period_and_shap_filters_change_results(page):
@@ -92,15 +150,6 @@ def test_real_shap_unavailable_has_no_sample_fallback(page, monkeypatch):
     assert page.button(key="retry_shap")
 
 
-def test_state_query_is_ignored_without_dev_flag(page, monkeypatch):
-    monkeypatch.delenv("FIRST_CLASS_UI_DEV", raising=False)
-    page.query_params["ui_state"] = "error"
-    page.run()
-    assert not page.exception
-    assert not page.error
-    assert page.metric
-
-
 def test_portfolio_api_failure_is_visible(page, monkeypatch):
     from frontend import investment_client
 
@@ -114,7 +163,7 @@ def test_portfolio_api_failure_is_visible(page, monkeypatch):
     assert not page.exception
     assert page.error
     assert not page.metric
-    assert len(page.get("page_link")) == 7
+    assert len(page.get("page_link")) == 4
 
 
 def test_shap_raw_features_are_opt_in_and_correlation_separate(page):
@@ -213,3 +262,24 @@ def test_decision_focused_shap_ui(page, monkeypatch, before, target, direction):
     assert page.dataframe[2].value["shap value"].tolist() == [0.06, -0.02]
     assert len(page.dataframe[0].value) == 2
     assert any(e.label == "나머지 요인 보기" for e in page.expander)
+
+
+def test_portfolio_composition_lists_only_held_assets(page, monkeypatch):
+    from frontend import investment_client
+
+    original = investment_client.load_portfolio
+
+    def with_unheld(observations=None):
+        data = original(observations)
+        data["assets"] = data["assets"] + [
+            {"ticker": "ZERO", "name": "미보유", "weight": 0.0}
+        ]
+        return data
+
+    monkeypatch.setattr(investment_client, "load_portfolio", with_unheld)
+    page.switch_page("app_pages/portfolio.py").run()
+    assert not page.exception
+    table = page.dataframe[0].value
+    assert "ZERO" not in table["자산"].tolist()
+    assert len(table) == len(original()["assets"])
+    assert any("보유하지 않은 자산 1개는 생략" in c.value for c in page.caption)

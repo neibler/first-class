@@ -6,19 +6,25 @@ import streamlit as st
 from frontend.api_client import APIError
 from frontend.correlation_client import load_correlations
 from frontend.charts import chart_style
+from frontend.guide import ETF_GUIDE
 from frontend.shap_explanations import ASSET_NAMES
-from frontend.ui import page_heading
+from frontend.ui import card, page_heading
 
 page_heading(
-    "자산 관계 분석",
-    "MARKET RELATIONSHIPS / 07",
-    "이 ETF는 실제 시장에서 무엇과 같이 움직였을까요?",
+    "자산 상세",
+    "ASSET DETAIL / 03",
+    "ETF가 무엇인지, 실제 시장에서 무엇과 같이 움직였는지 살펴보세요.",
 )
 st.caption(
     "AI 결정 기여를 설명하는 SHAP, 시장 사건을 설명하는 뉴스 리서치와 별개의 분석입니다."
 )
 a, b = st.columns(2)
-ticker = a.selectbox("ETF", list(ASSET_NAMES), key="correlation_asset")
+ticker = a.selectbox(
+    "ETF",
+    list(ASSET_NAMES),
+    format_func=lambda t: f"{t} · {ASSET_NAMES[t]}",
+    key="correlation_asset",
+)
 window = b.selectbox(
     "분석 기간",
     [20, 60, 120, 252],
@@ -26,6 +32,10 @@ window = b.selectbox(
     format_func=lambda n: f"{n}거래일",
     key="correlation_window",
 )
+with card("etf-intro"):
+    st.subheader(f"{ticker}는 무엇인가요?")
+    st.write(ETF_GUIDE.get(ticker, "이 ETF의 소개 글은 아직 준비되지 않았습니다."))
+    st.caption("ETF가 따라가는 대상에 대한 일반적인 소개이며 투자 권유가 아닙니다.")
 try:
     data = load_correlations(ticker, window)
 except APIError as exc:
@@ -111,7 +121,7 @@ if data is not None:
                     color=alt.Color(
                         "series:N",
                         title="비교 대상",
-                        scale=alt.Scale(range=["#3ed5ce", "#ffd16a"]),
+                        scale=alt.Scale(range=["#2f6fed", "#f2a33a"]),
                     ),
                     tooltip=[
                         alt.Tooltip("date:T", title="날짜"),
@@ -159,7 +169,7 @@ if data is not None:
         history = pd.DataFrame(data["rolling"][selected])
         line = (
             alt.Chart(history)
-            .mark_line(color="#3ed5ce")
+            .mark_line(color="#2f6fed")
             .encode(
                 x=alt.X("date:T", title="날짜"),
                 y=alt.Y(
@@ -173,7 +183,7 @@ if data is not None:
         )
         zero = (
             alt.Chart(pd.DataFrame({"zero": [0]}))
-            .mark_rule(color="#9dbada", strokeDash=[4, 4])
+            .mark_rule(color="#8a97a8", strokeDash=[4, 4])
             .encode(y="zero:Q")
         )
         st.altair_chart(

@@ -178,5 +178,5 @@ if st.session_state.get("shap_details", False):
     st.markdown("**Rolling Correlation · 이 자산은 무엇과 같이 움직이는가?**")
     st.caption(
         "SHAP은 AI 결정 기여도이고 Correlation은 시장의 동행 관계입니다."
-        "왼쪽 자산 관계 분석 메뉴에서 실제 시장의 Rolling Correlation을 확인할 수 있습니다."
+        "왼쪽 자산 상세 메뉴에서 실제 시장의 Rolling Correlation을 확인할 수 있습니다."
     )

@@ -208,7 +208,7 @@ def test_no_post_before_submit_or_on_rerun_and_navigation(page, post):
     page.switch_page("app_pages/research.py").run()
     assert not page.exception
     assert page.text_area(key="research_question").value == "아직 제출하지 않은 질문"
-    assert len(page.get("page_link")) == 7
+    assert len(page.get("page_link")) == 4
     post.assert_not_called()
 
 
@@ -232,7 +232,11 @@ def test_submit_displays_response_and_preserves_it_without_duplicate_post(
         assert expected in text
     assert page.dataframe[0].value.iloc[0]["뉴스 위험 지표"] == 0.48
     assert page.get("link_button")[0].proto.url == body["sources"][0]["url"]
-    assert page.expander[0].label == "완료 후 실행 요약 로그"
+    assert [e.label for e in page.expander][:3] == [
+        "출처 보기 (1건)",
+        "위험 태그 보기 (1건)",
+        "완료 후 실행 요약 로그",
+    ]
     page.text_area(key="research_question").set_value("새 질문").run()
     page.date_input(key="research_date").set_value(date(2024, 1, 1)).run()
     page.switch_page("app_pages/anova.py").run()
@@ -464,3 +468,21 @@ def test_invalid_input_after_success_still_reaches_api_validation(page, post):
     assert page.error[0].value == api_client.RESEARCH_ERRORS["invalid_research_request"]
     assert page.session_state["research_last_success"] is not None
     assert page.session_state["research_outcome"]["result"] is None
+
+
+def test_suggested_question_fills_the_box_without_posting(page, post):
+    from frontend.guide import SUGGESTED_QUESTIONS
+
+    page.button(key="research_suggestion_0").click().run()
+    assert not page.exception
+    assert page.text_area(key="research_question").value == SUGGESTED_QUESTIONS[0]
+    post.assert_not_called()
+    assert page.session_state["research_outcome"] is None
+
+
+def test_result_is_shown_as_chat_messages(page, post, body):
+    submit(page, "최근 QQQ 위험?")
+    names = [m.name for m in page.chat_message]
+    assert names == ["user", "assistant"]
+    assert "최근 QQQ 위험?" in [t.value for t in page.chat_message[0].text]
+    assert body["answer"] in [t.value for t in page.chat_message[1].text]

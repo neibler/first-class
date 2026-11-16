@@ -15,6 +15,23 @@
 - 성과 화면은 투자 모델이 필요하므로 상태 안내에서 "모델 미로드" 경고를 그대로 보여 준다.
 - MVO 비교, 12개 지표, Walk-Forward 구간별 결과, 학습 곡선은 이 API에 없어 화면에 표시하지 않는다.
 
+## UI 개편 (#30)
+
+- 일반 투자자용 밝은 테마로 바꿨다. `frontend/ui.py`가 `MENU`(왼쪽 메뉴 4개)와 `DETAILS`(상세 화면 3개와 소속 메뉴)를
+  정의하고, `app.py`가 브랜드·메뉴·선택한 페이지·"API 준비 상태"를 한 틀로 그린다. 상세 화면은 `st.navigation`에
+  등록된 기존 페이지 그대로이며 `detail_link`·`back_link`로 오간다. 상세 화면에서는 소속 메뉴가 강조된다.
+- 조종석·기내 이미지, `portfolio.css`·`shap.css`, `shap_cabin.py`, 에셋 전처리·외장 검사 스크립트를 삭제했다.
+  스타일은 `assets/theme.css`와 `.streamlit/config.toml`만 쓴다. 카드는 `card-*` 키 컨테이너다.
+  누적 수익률의 비행 경로 재생(`flight.js`)은 색만 밝은 배경용으로 바꿔 유지했다.
+- `risk.py`는 포트폴리오와 같은 `/backtest` 응답으로 최대 하락폭·현재 낙폭·변동성·하락폭 추이·Safe-Guard 상태를 보여 주고,
+  기존 SHAP 도우미(`group_shap_features`, `select_factors`)로 선택 자산의 최근 결정 요인 3개를 요약한다.
+  두 조회는 독립적이라 한쪽이 실패해도 다른 쪽은 표시한다. 최대 하락폭은 음수로 통일한다.
+- `correlation.py`는 "자산 상세"로 바꾸고 `guide.py`의 ETF 소개 글을 추가했다. `research.py`는 "AI 도우미"로 바꾸고
+  추천 질문 버튼(입력란만 채움, 전송은 기존 버튼)과 채팅 모양 결과를 넣었다. 질문·답변은 여전히 `st.text`로 표시해
+  서버 문자열이 마크다운으로 해석되지 않는다. 출처와 위험 태그는 펼침 안에 둔다.
+- "왜 포트폴리오가 바뀌었나요?"는 자리만 있고, VaR·CVaR·뉴스 리스크 연동·리밸런싱 이력·자산별 지표 차트는
+  서버 API가 생긴 뒤 추가한다.
+
 ## 현재 범위
 
 ```mermaid
@@ -43,8 +60,8 @@ flowchart LR
 
 - `POST /explain`은 미구현이다. 투자 `/optimize`·`/backtest`는 main 구현을 유지한다.
   저장된 성과·SHAP 결과를 조회하는 `/performance/*`는 별도로 제공한다.
-- 6개 페이지 내비게이션은 유지한다. 포트폴리오·리서치·성과·ANOVA는 HTTP로 연결하고
-  (성과·ANOVA는 저장 결과 조회), SHAP은 샘플이며 리스크는 준비 화면이다.
+- 화면은 메뉴 4개(포트폴리오 / 위험도·설명 / 자산 상세 / AI 도우미)와 버튼으로 여는 상세 화면 3개
+  (전략 성과 비교, SHAP, ANOVA)로 구성한다. 명세서 6개 페이지의 내용은 모두 유지한다.
 - main의 데이터 처리·Gymnasium·PPO·Safe-Guard·실험·백테스트 코드는 유지했다.
   이번 충돌 통합에서는 실제 학습·사용자 모델/데이터의 학교 성능 요건을 다시 검증하지 않는다.
 - SHAP, 리서치 결과의 투자 모델·리스크 모니터링 연동.
@@ -246,7 +263,7 @@ DB 경로는 API·벡터 저장소 build/search CLI·투자 키워드 조회 모
 
 ## Streamlit 리서치 HTTP 연결
 
-`frontend/app_pages/research.py`는 기존 6개 페이지·공통 기내 레이아웃을 유지하고
+`frontend/app_pages/research.py`는 공통 화면 틀 안에서 동작하고
 질문·기준일 폼과 최근 제출 결과를 표시한다. CSS·에셋·내비게이션 구성은 변경하지 않았다.
 브라우저에서 폼 제출 → Streamlit의 `api_client.post_research(question, as_of)` →
 `API_BASE_URL/research` → FastAPI 순서이며, frontend는 backend·Chroma·뉴스 모듈을 import하지 않는다.

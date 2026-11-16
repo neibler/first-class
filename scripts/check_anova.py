@@ -45,7 +45,7 @@ def main():
             page.set_viewport_size({"width": width, "height": 1000})
             page.goto(f"{args.base}/anova")
             ready(page)
-            expect(page.locator('[data-testid="stPageLink"]')).to_have_count(6)
+            expect(page.locator('[data-testid="stPageLink"]')).to_have_count(5)
             expect(page.locator('[data-testid="stVegaLiteChart"]')).to_have_count(
                 expected_charts
             )
@@ -73,11 +73,12 @@ def main():
             page.screenshot(
                 path=str(output / f"anova-posthoc-{width}.png"), full_page=True
             )
-            page.get_by_role("link", name="리스크 모니터링", exact=False).click()
+            # Back to the parent menu, then reopen ANOVA through its button.
+            page.get_by_role("link", name="돌아가기", exact=False).click()
             expect(
-                page.get_by_role("heading", name="리스크 모니터링", exact=True)
+                page.get_by_role("heading", name="위험도·설명", exact=True)
             ).to_be_visible()
-            page.get_by_role("link", name="ANOVA 검증", exact=False).click()
+            page.get_by_role("link", name="ANOVA", exact=False).click()
             ready(page)
             checks.append(
                 {"width": width, "overflow": overflow, "charts": expected_charts}

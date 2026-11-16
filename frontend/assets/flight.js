@@ -3,21 +3,21 @@ export default function ({ data, parentElement }) {
   const points = data.points;
   root.innerHTML = `
     <style>
-      .flight-root {font:14px system-ui,sans-serif;color:#dcecff;width:100%}
+      .flight-root {font:13px system-ui,sans-serif;color:#1b2a41;width:100%}
       .toolbar {display:flex;align-items:center;gap:18px;flex-wrap:wrap;margin:0 0 6px}
       .legend {display:flex;gap:18px;flex-wrap:wrap;font-size:13px}
-      .legend span:first-child {color:#75dfff}.legend span:last-child {color:#ffce70}
-      button {background:#071c31;color:#eef5ff;border:1px solid #698bad;border-radius:8px;
+      .legend span:first-child {color:#2f6fed}.legend span:last-child {color:#b9770e}
+      button {background:#ffffff;color:#2f6fed;border:1px solid #c9d6ea;border-radius:8px;
         padding:9px 14px;font:inherit;line-height:20px;cursor:pointer;margin-left:auto}
-      button:hover {border-color:#ffd17e} button:focus-visible {outline:3px solid #ffd17e}
+      button:hover {border-color:#2f6fed} button:focus-visible {outline:3px solid #9bbcff}
       button:disabled {opacity:.65;cursor:default}
       svg {display:block;width:100%;overflow:hidden;font:12px system-ui,sans-serif}
-      svg:focus-visible {outline:2px solid #75dfff;outline-offset:3px}
-      svg text {paint-order:stroke;stroke:#0a213b;stroke-width:2px;stroke-linejoin:round}
-      .readout {min-height:24px;color:#e2edf8;font-size:12px;padding-top:4px}
+      svg:focus-visible {outline:2px solid #2f6fed;outline-offset:3px}
+      svg text {paint-order:stroke;stroke:#ffffff;stroke-width:3px;stroke-linejoin:round}
+      .readout {min-height:24px;color:#44546a;font-size:12px;padding-top:4px}
     </style>
     <div class="toolbar"><div class="legend"><span>━ 포트폴리오</span>
-      <span>┄ 벤치마크 (합성)</span></div><button type="button">▷ 비행 경로 재생</button></div>
+      <span>┄ S&amp;P500 (SPY)</span></div><button type="button">▷ 비행 경로 재생</button></div>
     <svg role="img" tabindex="0" aria-label="날짜별 누적 수익률 비교. 좌우 방향키로 관측일 탐색."></svg>
     <div class="readout" aria-live="polite"></div>`;
   const svg = root.querySelector('svg'), button = root.querySelector('button');
@@ -36,7 +36,7 @@ export default function ({ data, parentElement }) {
   function show(index) {
     selected = index;
     const p = points[index];
-    readout.textContent = `${p.date} · 포트폴리오 ${pct(p.portfolio)} · 벤치마크 ${pct(p.benchmark)}`;
+    readout.textContent = `${p.date} · 포트폴리오 ${pct(p.portfolio)} · S&P500 ${pct(p.benchmark)}`;
     cursor.setAttribute('x1',x(index));cursor.setAttribute('x2',x(index));
   }
   function position(progress) {
@@ -63,7 +63,7 @@ export default function ({ data, parentElement }) {
   function draw() {
     cancelAnimationFrame(frame);
     width=Math.max(root.clientWidth,280); previousWidth=width;
-    const height=310, left=52, right=88, top=26, bottom=39;
+    const height=250, left=52, right=88, top=24, bottom=36;
     svg.replaceChildren(); svg.setAttribute('viewBox',`0 0 ${width} ${height}`);
     svg.style.height=`${height}px`;
     dates=points.map(p=>Date.parse(p.date+'T00:00:00Z'));
@@ -74,25 +74,25 @@ export default function ({ data, parentElement }) {
     // The continuous sky belongs to the outer window; SVG stays transparent.
     for(let i=0;i<5;i++) {
       const v=low+(high-low)*i/4, py=y(v);
-      el('line',{x1:left,y1:py,x2:width-right,y2:py,stroke:'#6a94b5','stroke-opacity':'.3'});
-      el('text',{x:left-10,y:py+4,'text-anchor':'end',fill:'#d6e8fa'},`${(v*100).toFixed(0)}%`);
+      el('line',{x1:left,y1:py,x2:width-right,y2:py,stroke:'#c5d0de','stroke-opacity':'.7'});
+      el('text',{x:left-10,y:py+4,'text-anchor':'end',fill:'#5d6d84'},`${(v*100).toFixed(0)}%`);
     }
     const ticks=width<500?3:6;
     for(let i=0;i<ticks;i++) {
       const index=Math.round(i*(points.length-1)/(ticks-1));
-      el('text',{x:x(index),y:height-10,'text-anchor':'middle',fill:'#d6e8fa'},points[index].date.slice(5));
+      el('text',{x:x(index),y:height-10,'text-anchor':'middle',fill:'#5d6d84'},points[index].date.slice(5));
     }
-    el('text',{x:left,y:14,fill:'#aac8e7'},'누적 수익률 (%)');
+    el('text',{x:left,y:14,fill:'#5d6d84'},'누적 수익률 (%)');
     const pathFor=field=>points.map((p,i)=>`${i?'L':'M'}${x(i)},${y(p[field])}`).join(' ');
-    benchmark=el('path',{d:pathFor('benchmark'),fill:'none',stroke:'#ffce70','stroke-width':2,'stroke-dasharray':'6 3'});
-    portfolio=el('path',{d:pathFor('portfolio'),fill:'none',stroke:'#69dcff','stroke-width':3});
-    cursor=el('line',{x1:0,y1:top,x2:0,y2:height-bottom,stroke:'#cce6ff','stroke-opacity':'.25','stroke-dasharray':'3 4'});
+    benchmark=el('path',{d:pathFor('benchmark'),fill:'none',stroke:'#f2a33a','stroke-width':2,'stroke-dasharray':'6 3'});
+    portfolio=el('path',{d:pathFor('portfolio'),fill:'none',stroke:'#2f6fed','stroke-width':3});
+    cursor=el('line',{x1:0,y1:top,x2:0,y2:height-bottom,stroke:'#5d6d84','stroke-opacity':'.45','stroke-dasharray':'3 4'});
     plane=el('g',{'aria-label':'포트폴리오 수익률 선의 끝점'});
     const shape=document.createElementNS(ns,'path');
     shape.setAttribute('d','M 14 0 L 4 -2 L -2 -10 L -5 -10 L -1 -2 L -8 -1 L -11 -5 L -13 -5 L -11 0 L -13 5 L -11 5 L -8 1 L -1 2 L -5 10 L -2 10 L 4 2 Z');
-    shape.setAttribute('fill','#e7faff');shape.setAttribute('stroke','#39baff');
-    shape.style.filter='drop-shadow(0 0 4px #29baff)';plane.appendChild(shape);
-    endLabel=el('text',{x:width-right+18,y:y(points.at(-1).portfolio)+4,fill:'#8de8ff','font-weight':'bold'},pct(points.at(-1).portfolio));
+    shape.setAttribute('fill','#2f6fed');shape.setAttribute('stroke','#ffffff');
+    shape.style.filter='drop-shadow(0 2px 4px rgba(47,111,237,.45))';plane.appendChild(shape);
+    endLabel=el('text',{x:width-right+18,y:y(points.at(-1).portfolio)+4,fill:'#2f6fed','font-weight':'bold'},pct(points.at(-1).portfolio));
     finish();
   }
   button.onclick=()=>{

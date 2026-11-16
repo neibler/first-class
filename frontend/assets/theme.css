@@ -1,0 +1,118 @@
+/* First Class light theme: white cards on a soft background, blue and mint accents. */
+:root {
+  --fc-blue: #2f6fed;
+  --fc-mint: #19b8a6;
+  --fc-ink: #1b2a41;
+  --fc-muted: #5d6d84;
+  --fc-line: #dbe3ee;
+  --fc-card: #ffffff;
+}
+
+.stMainBlockContainer {
+  max-width: 1240px;
+  padding-top: 1.4rem;
+  padding-bottom: 2rem;
+}
+
+/* Brand block at the top of the left rail. */
+.fc-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 4px 14px;
+}
+.fc-brand svg {
+  width: 36px;
+  height: 36px;
+  flex: none;
+}
+.fc-brand strong {
+  display: block;
+  font-size: 17px;
+  letter-spacing: 0.08em;
+  color: var(--fc-ink);
+}
+.fc-brand small {
+  display: block;
+  font-size: 12px;
+  color: var(--fc-muted);
+}
+
+/* Left rail and navigation. */
+.st-key-fc-rail {
+  background: var(--fc-card);
+  border: 1px solid var(--fc-line);
+  border-radius: 16px;
+  padding: 14px 12px;
+  box-shadow: 0 6px 20px rgba(27, 42, 65, 0.05);
+}
+.st-key-fc-nav a {
+  border-radius: 12px;
+  padding: 8px 10px;
+  color: var(--fc-muted);
+}
+.st-key-fc-nav a:hover {
+  background: #eef3fd;
+}
+.st-key-fc-nav .st-key-nav-__CURRENT_PAGE__ a {
+  background: #e7efff;
+  color: var(--fc-blue);
+  font-weight: 700;
+}
+
+/* Cards: any keyed container named card-*. */
+[class*="st-key-card-"] {
+  background: var(--fc-card);
+  border: 1px solid var(--fc-line);
+  border-radius: 16px;
+  padding: 14px 18px;
+  box-shadow: 0 6px 20px rgba(27, 42, 65, 0.05);
+}
+[class*="st-key-card-"] h3 {
+  padding-top: 0;
+}
+
+/* Tighter vertical rhythm so more fits on one screen. */
+.stMainBlockContainer [data-testid="stVerticalBlock"] {
+  gap: 0.7rem;
+}
+[data-testid="stMetricValue"] {
+  font-size: 1.55rem;
+}
+
+/* Page heading. */
+.st-key-page-heading {
+  padding-bottom: 4px;
+}
+.st-key-page-heading h1 {
+  padding-top: 0;
+}
+
+/* Buttons that open a detail view, and the way back. */
+[class*="st-key-detail-"] a,
+[class*="st-key-back-"] a {
+  border: 1px solid var(--fc-line);
+  border-radius: 12px;
+  background: var(--fc-card);
+  padding: 8px 14px;
+  color: var(--fc-blue);
+  font-weight: 600;
+}
+[class*="st-key-detail-"] a:hover,
+[class*="st-key-back-"] a:hover {
+  border-color: var(--fc-blue);
+  background: #f2f6ff;
+}
+
+.st-key-fc-footer {
+  color: var(--fc-muted);
+}
+
+@media (max-width: 640px) {
+  .stMainBlockContainer {
+    padding-top: 1.2rem;
+  }
+  [class*="st-key-card-"] {
+    padding: 16px;
+  }
+}

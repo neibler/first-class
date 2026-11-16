@@ -5,6 +5,7 @@ from datetime import date
 import streamlit as st
 
 from frontend import api_client
+from frontend.guide import SUGGESTED_QUESTIONS
 from frontend.ui import page_heading
 
 
@@ -17,6 +18,11 @@ def queue_research():
     }
 
 
+def use_suggestion(question):
+    """Fill the question box only; the user still presses 분석 실행."""
+    st.session_state["research_question"] = question
+
+
 st.session_state.setdefault("research_outcome", None)
 st.session_state.setdefault("research_last_success", None)
 api_base_url = api_client.get_api_base_url()
@@ -25,9 +31,9 @@ if saved is not None and saved["api_base_url"] != api_base_url:
     st.session_state["research_last_success"] = None
 
 page_heading(
-    "에이전트 리서치",
-    "AGENT RESEARCH / 04",
-    "투자 질문을 조사하고 뉴스 근거와 출처를 확인하세요.",
+    "AI 도우미",
+    "AI ASSISTANT / 04",
+    "궁금한 점을 물어보면 뉴스 근거와 출처를 찾아 답해 드려요.",
 )
 with st.container(key="analysis-availability"):
     st.caption(
@@ -35,8 +41,19 @@ with st.container(key="analysis-availability"):
         "다른 날짜도 요청할 수 있지만 관련 근거가 부족할 수 있습니다."
     )
 
-with st.container(key="analysis-panel-request"):
-    st.subheader("리서치 요청")
+with st.container(key="card-suggestions"):
+    st.markdown("**이런 질문은 어때요?**")
+    for index, question in enumerate(SUGGESTED_QUESTIONS):
+        st.button(
+            question,
+            key=f"research_suggestion_{index}",
+            on_click=use_suggestion,
+            args=(question,),
+        )
+    st.caption("질문을 누르면 아래 입력란에 채워집니다. 분석 실행을 눌러야 전송됩니다.")
+
+with st.container(key="card-request"):
+    st.subheader("질문하기")
     with st.form("research_form", enter_to_submit=False):
         st.text_area(
             "질문",
@@ -105,69 +122,73 @@ outcome = st.session_state["research_outcome"]
 if outcome is None:
     st.info("질문과 기준일을 입력한 뒤 분석 실행을 눌러 주세요.")
 else:
-    with st.container(key="analysis-panel-report"):
-        st.subheader("최근 제출한 요청")
+    with st.container(key="card-chat"):
+        with st.chat_message("user"):
+            st.text(outcome["request"]["question"] or "(빈 질문)", width="stretch")
+            st.text(f"요청 기준일: {outcome['request']['as_of'] or '미선택'}")
         st.caption(
-            "아래는 제출 당시의 요청입니다. 입력란을 수정해도 자동으로 다시 분석하지 않습니다."
+            "위는 제출 당시의 질문입니다. 입력란을 수정해도 자동으로 다시 분석하지 않습니다."
         )
-        st.text(outcome["request"]["question"] or "(빈 질문)", width="stretch")
-        st.text(f"요청 기준일: {outcome['request']['as_of'] or '미선택'}")
-        if outcome["error"]:
-            st.error(str(api_client.ResearchAPIError(outcome["error"])))
-        elif outcome["result"] is not None:
-            result = outcome["result"]
-            if outcome.get("reused"):
-                st.info("동일한 요청의 이전 분석 결과입니다.")
-            st.subheader("리서치 결과")
-            if result.status == "insufficient_evidence":
-                st.warning("판단할 근거가 부족합니다. 위험이 없다는 의미는 아닙니다.")
-            else:
-                st.success("리서치가 완료되었습니다.")
-            st.text(f"분석 기준일: {result.as_of.isoformat()}")
-            st.text(result.answer, width="stretch")
-            st.subheader("원문 출처")
-            for source in result.sources:
-                st.text(f"[{source.n}] {source.title}", width="stretch")
-                st.text(f"{source.source} · {source.date}", width="stretch")
-                url = api_client.safe_source_url(source.url)
-                if url:
-                    st.link_button(f"원문 보기 [{source.n}]", url)
-                else:
-                    st.caption(
-                        "안전한 http/https URL이 아니므로 링크를 표시하지 않습니다."
+        with st.chat_message("assistant"):
+            if outcome["error"]:
+                st.error(str(api_client.ResearchAPIError(outcome["error"])))
+            elif outcome["result"] is not None:
+                result = outcome["result"]
+                if outcome.get("reused"):
+                    st.info("동일한 요청의 이전 분석 결과입니다.")
+                if result.status == "insufficient_evidence":
+                    st.warning(
+                        "판단할 근거가 부족합니다. 위험이 없다는 의미는 아닙니다."
                     )
-            if not result.sources:
-                st.caption("제공된 원문 출처가 없습니다.")
-            st.subheader("위험 태그")
-            if result.risk_tags:
-                st.dataframe(
-                    [
-                        {
-                            "ETF": tag.ticker,
-                            "위험 유형": tag.risk_type,
-                            "뉴스 위험 지표": tag.risk_score,
-                            "위험 수준": tag.risk_level,
-                            "방향": tag.direction,
-                            "확신도": tag.confidence,
-                            "기준일": tag.date.isoformat(),
-                            "근거 번호": ", ".join(f"[{n}]" for n in tag.evidence),
-                        }
-                        for tag in result.risk_tags
-                    ],
-                    hide_index=True,
-                )
-                st.caption(
-                    "뉴스 위험 지표는 위험 수준 × 확신도이며 손실 확률이 아닙니다. "
-                    "일별 CSV 위험 점수와도 다른 지표입니다."
-                )
-            else:
-                st.caption("제공된 위험 태그가 없습니다.")
-            st.text(result.disclaimer, width="stretch")
-            with st.expander("완료 후 실행 요약 로그"):
-                st.caption(
-                    "응답에 포함된 실행 요약입니다. 실시간 진행 상황이 아닙니다."
-                )
-                st.text(
-                    "\n".join(result.log) or "제공된 실행 요약이 없습니다.",
-                    width="stretch",
-                )
+                else:
+                    st.success("리서치가 완료되었습니다.")
+                st.text(f"분석 기준일: {result.as_of.isoformat()}")
+                st.text(result.answer, width="stretch")
+                with st.expander(f"출처 보기 ({len(result.sources)}건)"):
+                    for source in result.sources:
+                        st.text(f"[{source.n}] {source.title}", width="stretch")
+                        st.text(f"{source.source} · {source.date}", width="stretch")
+                        url = api_client.safe_source_url(source.url)
+                        if url:
+                            st.link_button(f"원문 보기 [{source.n}]", url)
+                        else:
+                            st.caption(
+                                "안전한 http/https URL이 아니므로 링크를 표시하지 않습니다."
+                            )
+                    if not result.sources:
+                        st.caption("제공된 원문 출처가 없습니다.")
+                with st.expander(f"위험 태그 보기 ({len(result.risk_tags)}건)"):
+                    if result.risk_tags:
+                        st.dataframe(
+                            [
+                                {
+                                    "ETF": tag.ticker,
+                                    "위험 유형": tag.risk_type,
+                                    "뉴스 위험 지표": tag.risk_score,
+                                    "위험 수준": tag.risk_level,
+                                    "방향": tag.direction,
+                                    "확신도": tag.confidence,
+                                    "기준일": tag.date.isoformat(),
+                                    "근거 번호": ", ".join(
+                                        f"[{n}]" for n in tag.evidence
+                                    ),
+                                }
+                                for tag in result.risk_tags
+                            ],
+                            hide_index=True,
+                        )
+                        st.caption(
+                            "뉴스 위험 지표는 위험 수준 × 확신도이며 손실 확률이 아닙니다. "
+                            "일별 CSV 위험 점수와도 다른 지표입니다."
+                        )
+                    else:
+                        st.caption("제공된 위험 태그가 없습니다.")
+                st.text(result.disclaimer, width="stretch")
+                with st.expander("완료 후 실행 요약 로그"):
+                    st.caption(
+                        "응답에 포함된 실행 요약입니다. 실시간 진행 상황이 아닙니다."
+                    )
+                    st.text(
+                        "\n".join(result.log) or "제공된 실행 요약이 없습니다.",
+                        width="stretch",
+                    )

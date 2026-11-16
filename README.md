@@ -6,7 +6,8 @@
 
 FastAPI 앱 생성 함수에서 투자 모델 생명주기를 관리하고 투자·리서치 API를 제공합니다.
 포트폴리오와 강화학습 성과는 투자 HTTP API(활성 모델)를 사용하며, SHAP은 저장된 실제 모델 설명을 조회합니다.
-리서치·강화학습 성과·ANOVA 화면은 HTTP API에 연결되어 있고 리스크 화면은 준비 화면입니다.
+화면은 일반 투자자용 메뉴 4개(포트폴리오 / 위험도·설명 / 자산 상세 / AI 도우미)로 구성합니다.
+전략 성과 비교·SHAP 상세·ANOVA 검증은 각 메뉴의 버튼으로 여는 상세 화면이며 모두 HTTP API를 사용합니다.
 `/health`는 서버 연결 및 투자 모델 로드 상태를, `/ready`는 투자 모델 준비 상태를 반환합니다.
 모델이 없으면 포트폴리오는 준비 부족을 안내하며 샘플 성공으로 대체하지 않습니다.
 `POST /research`는 기존 뉴스 에이전트와 연결되며 서버의 Claude 키, 기존 DB,
@@ -44,8 +45,17 @@ PPO와 S&P500(SPY 매수 후 보유)·동일가중(리밸런싱)·동일가중(�
 값은 서버 계산값이며 화면에서 다시 계산하지 않습니다. 저장되지 않은 비교 전략은 안내 후 제외합니다.
 MVO 비교, 12개 지표, Walk-Forward 구간별 결과와 학습 곡선은 이 API가 제공하지 않아 표시하지 않습니다.
 
-화면의 메뉴로 7개 페이지를 이동합니다.
-포트폴리오의 분석 기간, SHAP의 자산·결정일을 선택할 수 있습니다.
+왼쪽 메뉴 4개로 이동합니다. 상세 화면 3개는 버튼으로 열고 "돌아가기"로 닫습니다.
+
+| 메뉴 | 바로 보이는 내용 | 버튼으로 여는 상세 화면 |
+|---|---|---|
+| 포트폴리오 | 누적 수익률(비행 경로 재생), 분석 기간 선택, ETF별 구성, 핵심 지표 | 전략 성과 비교 |
+| 위험도·설명 | 최대 하락폭·현재 낙폭·변동성, 하락폭 추이, Safe-Guard 상태, AI 판단 요인, RSI·MACD 풀이 | SHAP 상세, ANOVA 검증 |
+| 자산 상세 | ETF 소개, 시장에서 같이 움직인 자산·지표 | — |
+| AI 도우미 | 추천 질문, 질문·기준일 입력, 채팅 모양의 답변(출처·위험 태그는 펼침) | — |
+
+최대 하락폭은 모든 화면에서 음수로 표시합니다. VaR·CVaR, 뉴스 리스크 연동, 리밸런싱 설명 문장은
+서버 API가 준비된 뒤 추가합니다. 화면 아래 "API 준비 상태"에서 서버 연결과 모델 로드 여부를 확인합니다.
 `비행 경로 재생`은 브라우저에서만 실행되며 OS의 동작 감소 설정을 따릅니다.
 
 `에이전트 리서치`에서 질문과 기준일(기본 `2025-04-10`)을 입력하고 **분석 실행**을 누릅니다.
@@ -83,8 +93,8 @@ One-way 2종·Two-way의 F값, p값, η²와 그룹 요약, 요인별 Tukey 결�
 ### 실행 명령
 
 저장소 루트에서 의존성을 설치한 뒤 두 터미널에서 실행합니다.
-Python 3.12와 활성화된 가상환경을 권장합니다. 아래 설치에는 이미지 전처리용
-Pillow와 개발 검사 도구가 포함됩니다. 화면 실행만 필요하면 `requirements.txt`를 사용합니다.
+Python 3.12와 활성화된 가상환경을 권장합니다. 아래 설치에는 개발 검사 도구가 포함됩니다.
+화면 실행만 필요하면 `requirements.txt`를 사용합니다.
 
 ```powershell
 python -m pip install -r requirements-dev.txt
@@ -156,12 +166,9 @@ Streamlit 실행 상황에 따라 재클릭이 즉시 전달되지 않을 수 �
 
 ## 유지보수와 선택 검사
 
-표시용 에셋이 포함되어 있으므로 실행 전에 이미지 전처리를 할 필요는 없습니다.
-원본 PNG를 변경한 경우에만 개발 의존성을 설치하고 저장소 루트에서 재생성합니다.
+화면은 이미지 에셋 없이 `frontend/assets/theme.css`와 Streamlit 테마 설정으로 구성합니다.
 
 ```bash
-python scripts/prepare_cockpit_assets.py
-python scripts/prepare_cabin_assets.py
 python -m black --check backend frontend tests scripts
 python -m flake8 backend frontend tests scripts
 python -m pytest -q
@@ -175,24 +182,12 @@ API 8000과 UI 8501을 실행한 상태에서 다음 검사를 실행합니다.
 ```bash
 python scripts/check_ui.py
 python scripts/check_flight_replay.py --repeats 10
-python scripts/check_cockpit_assets.py
-python scripts/check_shap_cabin.py
-python scripts/check_shared_cabin.py
 ```
 
 ANOVA의 실제 저장 결과가 연결된 서버에서는 `python scripts/check_anova.py`로
 데스크톱·모바일 차트, 표, 새로고침과 메뉴 이동을 검사할 수 있습니다.
 
-샘플 로딩·빈 상태·오류의 재시도 검사까지 수행하려면 별도 터미널에서 개발 UI를 실행합니다.
-다른 터미널에서 `python scripts/check_ui.py --dev http://localhost:8502`를 실행합니다.
-개발 상태는 실제 API 응답이 아닌 UI 시연이며 일반 실행에서는 활성화되지 않습니다.
-
-```powershell
-$env:FIRST_CLASS_UI_DEV = "1"
-python -m streamlit run frontend/app.py --server.port 8502
-# 개발 서버 종료 후
-Remove-Item Env:FIRST_CLASS_UI_DEV
-```
+`check_ui.py`는 메뉴 4개, 상세 화면과 돌아가기, 비행 경로 재생, 데스크톱·모바일 배치를 검사합니다.
 
 검사 결과는 실행 시 생성되는 Git 제외 경로 `artifacts/ui/`에 저장됩니다.
 해당 경로의 기존 파일이나 별도 디자인 문서는 앱 실행에 필요하지 않습니다.
