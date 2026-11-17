@@ -163,7 +163,8 @@ def test_portfolio_api_failure_is_visible(page, monkeypatch):
     assert not page.exception
     assert page.error
     assert not page.metric
-    assert len(page.get("page_link")) == 4
+    # 4 menu links + the comparison link, which stays reachable on failure.
+    assert len(page.get("page_link")) == 5
 
 
 def test_shap_raw_features_are_opt_in_and_correlation_separate(page):

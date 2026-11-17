@@ -96,7 +96,8 @@ def check_live(browser, base, repeats):
         expect(button).to_have_text("▷ 비행 경로 재생", timeout=30000)
         plane = root.locator("svg g[aria-label]")
         endpoint = plane.get_attribute("transform")
-        path = root.locator('svg > path[stroke="#69dcff"]').get_attribute("d")
+        # Select by series, not color, so palette changes keep the check working.
+        path = root.locator('svg > path[data-series="portfolio"]').get_attribute("d")
         if recent:
             assert len(path.split("L")) == 64, "Old period data remained mounted"
 

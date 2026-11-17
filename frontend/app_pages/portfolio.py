@@ -117,8 +117,10 @@ if data:
             "지금은 위험도·설명 메뉴의 AI 판단 요인에서 근거를 확인할 수 있습니다."
         )
 
-    detail_link("performance", "다른 전략과 성과 비교하기")
+# The comparison page loads its own data, so keep it reachable on failure too.
+detail_link("performance", "다른 전략과 성과 비교하기")
 
+if data:
     with st.expander("계산 가정"):
         st.write(
             "서버에 저장된 모델 평가 결과입니다. 합성 데이터 결과는 실제 투자 성능을 뜻하지 않습니다."

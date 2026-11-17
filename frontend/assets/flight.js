@@ -84,8 +84,8 @@ export default function ({ data, parentElement }) {
     }
     el('text',{x:left,y:14,fill:'#5d6d84'},'누적 수익률 (%)');
     const pathFor=field=>points.map((p,i)=>`${i?'L':'M'}${x(i)},${y(p[field])}`).join(' ');
-    benchmark=el('path',{d:pathFor('benchmark'),fill:'none',stroke:'#f2a33a','stroke-width':2,'stroke-dasharray':'6 3'});
-    portfolio=el('path',{d:pathFor('portfolio'),fill:'none',stroke:'#2f6fed','stroke-width':3});
+    benchmark=el('path',{'data-series':'benchmark',d:pathFor('benchmark'),fill:'none',stroke:'#f2a33a','stroke-width':2,'stroke-dasharray':'6 3'});
+    portfolio=el('path',{'data-series':'portfolio',d:pathFor('portfolio'),fill:'none',stroke:'#2f6fed','stroke-width':3});
     cursor=el('line',{x1:0,y1:top,x2:0,y2:height-bottom,stroke:'#5d6d84','stroke-opacity':'.45','stroke-dasharray':'3 4'});
     plane=el('g',{'aria-label':'포트폴리오 수익률 선의 끝점'});
     const shape=document.createElementNS(ns,'path');
