@@ -55,6 +55,9 @@ flowchart LR
 - `.dockerignore`는 현재 실행에 필요한 파일만 허용한다. 새 런타임 모듈을 추가할 때
   Dockerfile의 `COPY`와 `.dockerignore`를 함께 갱신해야 한다.
   기본 health·Swagger에는 데이터·모델·키가 필요 없다. 실제 리서치에는 별도 준비가 필요하다.
+- (#33) API 이미지는 `shared/trained_models.zip`을 `scripts/install_trained_models.py`로 검증·설치하고
+  `config/serving.json`의 활성 모델을 로드한다. CI의 `scripts/smoke.py`는 모델 로드, `/ready`·`/backtest` 200,
+  포트폴리오 지표 표시를 확인한다. 컨테이너는 `OPENBLAS_NUM_THREADS=1`, `OMP_NUM_THREADS=1`로 실행한다.
 
 ## 학교 요구사항 중 남은 검증과 미구현
 

@@ -25,10 +25,19 @@ COPY shared/trained_models_manifest.json /app/shared/trained_models_manifest.jso
 COPY config/agent.yaml config/etf_news_map.yaml config/serving.json config/investment_ai.json config/multi_model.json /app/config/
 COPY shared/training_inputs.zip shared/training_inputs_manifest.json /app/shared/
 COPY scripts/install_training_inputs.py /app/scripts/install_training_inputs.py
+# 팀 공유 모델(Git 추적 ZIP)을 검증 후 설치한다. config/serving.json이 이 경로를
+# 활성 모델로 가리키므로 `docker compose up`만으로 모델이 로드된다. 학습은 하지 않는다.
+COPY shared/trained_models.zip /app/shared/trained_models.zip
+COPY scripts/install_trained_models.py /app/scripts/install_trained_models.py
 RUN python scripts/install_training_inputs.py --destination /app/runtime \
+    && python scripts/install_trained_models.py --destination /app/runtime \
     && chown -R appuser:appuser /app/runtime
 ENV INVESTMENT_AI_HOME=/app/runtime
 ENV RESULTS_DIR=/results
+# 추론은 CPU 1스레드로 충분하다. 수학 라이브러리가 코어 수만큼 작업 메모리를
+# 미리 잡지 않게 해 메모리가 적은 PC에서도 할당 실패를 줄인다.
+ENV OPENBLAS_NUM_THREADS=1 \
+    OMP_NUM_THREADS=1
 USER appuser
 EXPOSE 8000
 CMD ["python", "-m", "uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]

@@ -79,3 +79,7 @@ backend/performance/**
 !shared/training_inputs.zip
 !shared/training_inputs_manifest.json
 !scripts/install_training_inputs.py
+
+# Team-shared trained model, installed into the API image at build time.
+!shared/trained_models.zip
+!scripts/install_trained_models.py
