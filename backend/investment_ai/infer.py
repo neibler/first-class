@@ -12,6 +12,7 @@ from .training import load_bundle
 from .accounting import safeguard_breached
 from .prediction import PredictionSession
 from .episode_clock import episode_clock, rebalance_phase
+from . import baseline_execution as baseline
 from .rebalancing import (
     get_rebalance_reasons,
     filter_target_weights,
@@ -54,15 +55,20 @@ def predict_weights(data, config, models, scaler, state=None, predictors=None):
     if state["date"] != date or set(state["weights"]) != set(data.assets):
         raise ValueError("State date/assets must match latest input")
     held = np.array([state["weights"][a] for a in data.assets], dtype=float)
+    use_baseline = baseline.enabled(config)
     if (
         not np.isfinite(held).all()
         or np.any(held < 0)
-        or not (np.isclose(held.sum(), 1) or np.isclose(held.sum(), 0))
+        or not (
+            held.sum() <= 1 + baseline.EPS
+            if use_baseline
+            else (np.isclose(held.sum(), 1) or np.isclose(held.sum(), 0))
+        )
     ):
         raise ValueError("Holdings must be fully invested or entirely cash")
     if held.sum() > 0 and np.isclose(held.sum(), 1):
         held /= held.sum()
-    else:
+    elif not use_baseline:
         held[:] = 0
     value, peak, mdd = (
         state["portfolio_value"],
@@ -110,21 +116,35 @@ def predict_weights(data, config, models, scaler, state=None, predictors=None):
         if stopped
         else np.mean([p.predict(obs, env) for p in predictors], axis=0)
     )
+    last = held.copy()
+    if use_baseline:
+        supplied_last = state.get("last_executed_weights")
+        if supplied_last is None:
+            if np.any(held > baseline.EPS) and not stopped:
+                raise ValueError(
+                    "last_executed_weights required for baseline held portfolio"
+                )
+        else:
+            if set(supplied_last) != set(data.assets):
+                raise ValueError("last_executed_weights assets mismatch")
+            last = baseline.weights([supplied_last[a] for a in data.assets])
     target = (
         raw_target.copy()
-        if stopped
+        if stopped or use_baseline
         else filter_target_weights(
             raw_target,
             config.get("min_weight_threshold", MIN_WEIGHT_THRESHOLD),
             config.get("max_holdings"),
         )
     )
-    distance = portfolio_weight_distance(held, target)
-    reasons = get_rebalance_reasons(
+    reference = last if use_baseline else target
+    distance = portfolio_weight_distance(held, reference)
+    reason_fn = baseline.reasons if use_baseline else get_rebalance_reasons
+    reasons = reason_fn(
         data.dates[-1],
         data.dates[-2] if len(data.dates) > 1 else None,
         held,
-        target,
+        reference,
         data.risk[-1],
         mdd,
         config,
@@ -135,13 +155,18 @@ def predict_weights(data, config, models, scaler, state=None, predictors=None):
     elif reasons == ["hold"]:
         weights, status = held.copy(), "hold_until_rebalance"
     else:
-        weights, status = target.copy(), "target_proposal"
+        if use_baseline:
+            target, weights, _ = baseline.executable_target(raw_target, held, config)
+        else:
+            weights = target.copy()
+        status = "target_proposal"
     # A normal signal queues a t+1 target even if today's weights already match:
     # prices can drift before the fill. A latched cash stop never queues an exit.
     should_trade = reasons != ["hold"] and (
         reasons != ["mdd_stop"] or bool(np.any(held > 1e-12))
     )
     return {
+        "last_executed_weights": dict(zip(data.assets, map(float, last))),
         "as_of_date": date,
         "episode_start_date": clock["episode_start_date"],
         "episode_elapsed_bars": clock["episode_elapsed_bars"],

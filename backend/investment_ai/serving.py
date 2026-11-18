@@ -60,6 +60,7 @@ class InvestmentService:
         self.episode_clocks = (
             saved_state.get("clocks", {}) if saved_state.get("version") == 2 else {}
         )
+        self.execution_references = saved_state.get("execution_references", {})
         self.recurrent_sessions = {}
         single = (self.run / "run_spec.json").exists()
         if single:
@@ -215,6 +216,7 @@ class InvestmentService:
             "latches": self.latches,
             "clocks": self.episode_clocks,
             "recurrent": recurrent,
+            "execution_references": getattr(self, "execution_references", {}),
         }
         self.latch_path.parent.mkdir(parents=True, exist_ok=True)
         pending = self.latch_path.with_suffix(".pending")
@@ -296,6 +298,19 @@ class InvestmentService:
             state.update(
                 {k: clock[k] for k in ("episode_start_date", "episode_elapsed_bars")}
             )
+            from .baseline_execution import enabled
+
+            self.execution_references = getattr(self, "execution_references", {})
+            if enabled(self.config) and reset:
+                if any((state.get("last_executed_weights") or {}).values()):
+                    raise ValueError("Reset requires zero last_executed_weights")
+            if enabled(self.config) and state.get("last_executed_weights") is None:
+                if reset:
+                    state["last_executed_weights"] = {a: 0.0 for a in data.assets}
+                elif episode_id in self.execution_references:
+                    state["last_executed_weights"] = self.execution_references[
+                        episode_id
+                    ]
             recurrent = self.config.get("model_type") == "recurrent_ppo"
             if recurrent:
                 prediction = self._recurrent_prediction(
@@ -311,6 +326,11 @@ class InvestmentService:
             if not supplied:
                 prediction["mode"] = "new_portfolio_cash"
             # Persist after validation; an API restart must not clear a stop.
+            if enabled(self.config):
+                # Persist acknowledged execution state only, never a proposal.
+                self.execution_references[episode_id] = prediction[
+                    "last_executed_weights"
+                ]
             self.latches[episode_id] = prediction["safeguard_triggered"]
             self.episode_clocks[episode_id] = clock
             self._save_episode_state()
@@ -337,6 +357,7 @@ class InvestmentService:
                 "first_return_end_delay_trading_bars"
             ],
             "mode": prediction["mode"],
+            "last_executed_weights": prediction["last_executed_weights"],
             "target_weights": prediction["weights"],
             "model_target_weights": prediction["model_target_weights"],
             "raw_target_weights": prediction["raw_target_weights"],

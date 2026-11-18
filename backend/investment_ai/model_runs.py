@@ -8,7 +8,7 @@ import json
 import pandas as pd
 from .settings import ROOT, validate_config, write_json
 from .data_loader import load_data, fingerprint
-from .rebalancing import REBALANCE_POLICY
+from .baseline_execution import policy_for
 from .training import train_model, load_bundle
 from .backtest import compare
 from .rewards import canonical_reward
@@ -255,7 +255,7 @@ def evaluate_bundle(path):
         json.dumps(
             {
                 "config": common,
-                "rebalance_policy": REBALANCE_POLICY,
+                "rebalance_policy": policy_for(config),
                 "data": fingerprint(data),
                 "split": spec["test_start_index"],
             },
@@ -268,7 +268,7 @@ def evaluate_bundle(path):
             **spec,
             "completed": True,
             "comparison_group": group,
-            "rebalance_policy": REBALANCE_POLICY,
+            "rebalance_policy": policy_for(config),
             "final_test": metrics,
             "test_start": str(data.dates[spec["test_start_index"]])[:10],
             "test_end": str(data.dates[-1])[:10],

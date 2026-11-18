@@ -14,7 +14,48 @@ def performance(frame, annual_rf=0.0):
     equity = equity_curve(r)
     dd = 1 - equity / np.maximum.accumulate(equity)
     std = r.std(ddof=1) if len(r) > 1 else 0.0
+    traded = frame.rebalanced.astype(bool)
+    executed = frame.get(
+        "executed_turnover", (frame.turnover + frame.exit_turnover) * 0.5
+    )
+    holdings = frame.get("holdings_count", pd.Series(0, index=frame.index))
+    costs = float(frame.cost_amount.sum())
+    reason_counts = (
+        {
+            reason: int(
+                (
+                    traded
+                    & frame.rebalance_reason.fillna("")
+                    .str.split("|")
+                    .apply(lambda items: reason in items)
+                ).sum()
+            )
+            for reason in (
+                "monthly",
+                "portfolio_weight_distance",
+                "risk_score",
+                "mdd_stop",
+            )
+        }
+        if "rebalance_reason" in frame
+        else {}
+    )
     return {
+        "rebalance_count": int(traded.sum()),
+        "total_executed_turnover": float(executed.sum()),
+        "average_turnover_per_rebalance": (
+            float(executed.sum() / traded.sum()) if traded.any() else 0.0
+        ),
+        "max_turnover_per_rebalance": float(executed.max()),
+        "total_transaction_cost": costs,
+        "transaction_cost_initial_capital_ratio": costs,
+        "transaction_cost_final_value_ratio": costs / float(equity[-1]),
+        "average_holdings_count": float(holdings.mean()),
+        "min_holdings_count": int(holdings.min()),
+        "max_holdings_count": int(holdings.max()),
+        "entry_count": int(frame.get("entry_count", pd.Series(dtype=float)).sum()),
+        "exit_count": int(frame.get("exit_count", pd.Series(dtype=float)).sum()),
+        "rebalance_reason_counts": reason_counts,
         "days": len(r),
         "total_return": float(equity[-1] - 1),
         "annualized_return": float(equity[-1] ** (252 / len(r)) - 1),
@@ -83,6 +124,20 @@ def run_backtest(data, config, start, end, models=None, scaler=None, strategy="p
             cost=0.0,
             exit_cost=0.0,
             cost_amount=0.0,
+            executed_turnover=0.0,
+            normal_executed_turnover=0.0,
+            desired_turnover=0.0,
+            transaction_cost=0.0,
+            holdings_count=0,
+            entry_count=0,
+            exit_count=0,
+            rebalance_trigger="mdd_stop",
+            pre_trade_weights={a: 0.0 for a in data.assets},
+            post_trade_weights={a: 0.0 for a in data.assets},
+            normal_post_trade_weights={a: 0.0 for a in data.assets},
+            executable_target_weights={a: 0.0 for a in data.assets},
+            last_executed_weights_before={a: 0.0 for a in data.assets},
+            last_executed_weights={a: 0.0 for a in data.assets},
             rebalanced=False,
             should_rebalance=False,
             raw_target_weights={a: 0.0 for a in data.assets},

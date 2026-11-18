@@ -15,6 +15,7 @@ class Contract(BaseModel):
 class PortfolioState(Contract):
     date: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
     weights: dict[str, float]
+    last_executed_weights: dict[str, float] | None = None
     portfolio_value: float = Field(gt=0)
     peak_value: float = Field(gt=0)
     max_drawdown: float = Field(ge=0, le=1)
@@ -65,6 +66,7 @@ class OptimizeResponse(Contract):
     model_target_weights: dict[str, float] = Field(default_factory=dict)
     rebalance_reasons: list[str] = Field(default_factory=list)
     should_rebalance: bool = False
+    last_executed_weights: dict[str, float] = Field(default_factory=dict)
     target_weights: dict[str, float]
     current_weights: dict[str, float]
     cash_weight: float
@@ -93,6 +95,19 @@ class PathRow(Contract):
 
 
 class Metrics(Contract):
+    rebalance_count: int = 0
+    total_executed_turnover: float = 0.0
+    average_turnover_per_rebalance: float = 0.0
+    max_turnover_per_rebalance: float = 0.0
+    total_transaction_cost: float = 0.0
+    transaction_cost_initial_capital_ratio: float = 0.0
+    transaction_cost_final_value_ratio: float = 0.0
+    average_holdings_count: float = 0.0
+    min_holdings_count: int = 0
+    max_holdings_count: int = 0
+    entry_count: int = 0
+    exit_count: int = 0
+    rebalance_reason_counts: dict[str, int] = Field(default_factory=dict)
     days: int
     total_return: float
     annualized_return: float

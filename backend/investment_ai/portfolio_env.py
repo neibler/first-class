@@ -3,6 +3,7 @@
 import gymnasium as gym
 from gymnasium import spaces
 import numpy as np
+from . import baseline_execution as baseline
 from .rewards import calculate_reward, canonical_reward
 from .accounting import safeguard_breached
 from .settings import risk_score_enabled
@@ -73,6 +74,7 @@ class PortfolioEnv(gym.Env):
         self.weights = np.zeros(
             self.n_assets
         )  # initial capital is cash; charge first entry
+        self.last_executed_weights = self.weights.copy()
         self.value = self.peak = 1.0
         self.drawdown = self.mdd = 0.0
         self.safeguard_triggered = False
@@ -141,20 +143,24 @@ class PortfolioEnv(gym.Env):
                 "Target weights must be finite, nonnegative and sum to one"
             )
         raw_target = target.copy()
-        if apply_filter:
+        use_baseline = baseline.enabled(self.config) and apply_filter
+        if apply_filter and not use_baseline:
             target = filter_target_weights(
                 target,
                 self.config.get("min_weight_threshold", MIN_WEIGHT_THRESHOLD),
                 self.config.get("max_holdings"),
             )
         decision_weights = self.weights.copy()
-        distance = portfolio_weight_distance(decision_weights, target)
+        last_before = self.last_executed_weights.copy()
+        reference = last_before if use_baseline else target
+        distance = portfolio_weight_distance(decision_weights, reference)
         max_risk_score = float(self.data.risk[self.t].max())
-        reasons = get_rebalance_reasons(
+        reason_fn = baseline.reasons if use_baseline else get_rebalance_reasons
+        reasons = reason_fn(
             self.data.dates[self.t],
             self.data.dates[self.t - 1] if self.t else None,
             self.weights,
-            target,
+            reference,
             self.data.risk[self.t],
             self.mdd,
             self.config,
@@ -181,12 +187,38 @@ class PortfolioEnv(gym.Env):
             self.mdd, self.config["max_drawdown"]
         )
         turnover = cost = cost_amount = exit_turnover = exit_cost = 0.0
+        desired_turnover = executed_turnover = 0.0
+        executable = previous.copy()
+        normal_post = previous.copy()
+        entries = exits = 0
         if not self.safeguard_triggered and due:
-            turnover = float(np.abs(target - previous).sum())
-            cost = turnover * self.rate
+            if use_baseline:
+                target, executable, desired_turnover = baseline.executable_target(
+                    raw_target, previous, self.config
+                )
+                turnover, cost = baseline.execute(previous, executable, self.rate)
+            else:
+                executable = target.copy()
+                desired_turnover = portfolio_weight_distance(previous, target)
+                turnover = float(np.abs(target - previous).sum())
+                cost = turnover * self.rate
             cost_amount = self.value * cost
             self.value *= 1 - cost
-            self.weights = target.copy()
+            self.weights = executable.copy()
+            normal_post = self.weights.copy()
+            executed_turnover = portfolio_weight_distance(previous, self.weights)
+            entries = int(
+                np.count_nonzero(
+                    (previous <= baseline.EPS) & (self.weights > baseline.EPS)
+                )
+            )
+            exits = int(
+                np.count_nonzero(
+                    (previous > baseline.EPS) & (self.weights <= baseline.EPS)
+                )
+            )
+            if turnover > 0:
+                self.last_executed_weights = self.weights.copy()
             self.drawdown = 1 - self.value / self.peak
             self.mdd = max(self.mdd, self.drawdown)
             self.safeguard_triggered |= safeguard_breached(
@@ -200,7 +232,11 @@ class PortfolioEnv(gym.Env):
             exit_cost = exit_turnover * self.rate
             cost_amount += self.value * exit_cost
             self.value *= 1 - exit_cost
+            executed_turnover += 0.5 * exit_turnover
+            exits += int(np.count_nonzero(self.weights > baseline.EPS))
             self.weights = np.zeros(self.n_assets)
+            if exit_turnover > 0:
+                self.last_executed_weights = self.weights.copy()
         final_target = self.weights.copy()
         self.drawdown = 1 - self.value / self.peak
         self.mdd = max(self.mdd, self.drawdown)
@@ -210,6 +246,30 @@ class PortfolioEnv(gym.Env):
         self.done = terminated or truncated
         execution_date = str(self.data.dates[self.t])[:10]
         info = {
+            "last_executed_weights_before": dict(
+                zip(self.data.assets, map(float, last_before))
+            ),
+            "last_executed_weights": dict(
+                zip(self.data.assets, map(float, self.last_executed_weights))
+            ),
+            "pre_trade_weights": dict(zip(self.data.assets, map(float, previous))),
+            "post_trade_weights": dict(zip(self.data.assets, map(float, self.weights))),
+            "executable_target_weights": dict(
+                zip(self.data.assets, map(float, executable))
+            ),
+            "normal_post_trade_weights": dict(
+                zip(self.data.assets, map(float, normal_post))
+            ),
+            "desired_turnover": desired_turnover,
+            "executed_turnover": executed_turnover,
+            "normal_executed_turnover": portfolio_weight_distance(
+                previous, normal_post
+            ),
+            "transaction_cost": cost_amount,
+            "holdings_count": int(np.count_nonzero(self.weights > baseline.EPS)),
+            "entry_count": entries,
+            "exit_count": exits,
+            "rebalance_trigger": "|".join(reasons),
             "raw_target_weights": dict(zip(self.data.assets, map(float, raw_target))),
             "filtered_target_weights": dict(zip(self.data.assets, map(float, target))),
             "current_weights": dict(
@@ -273,6 +333,12 @@ class PortfolioEnv(gym.Env):
             window=self.config.get("reward_window", 20),
             mdd_lambda=self.config.get("mdd_lambda", 0.1),
             annual_rf=self.config.get("risk_free_annual", 0.0),
+            executed_turnover=executed_turnover,
+            turnover_penalty_lambda=(
+                self.config.get("turnover_penalty_lambda", 0.003)
+                if use_baseline
+                else 0.0
+            ),
         )
         self.history[-1]["reward"] = info["reward"] = reward
         return self._get_observation(), reward, terminated, truncated, info

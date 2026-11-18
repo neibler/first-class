@@ -306,3 +306,9 @@ python local_run.py train --config config/multi_model.json --model ppo --seed 22
 ```
 
 기본 Docker 이미지도 같은 검증된 training_inputs ZIP을 설치하여 Correlation에 사용합니다. 사용자 지정 runtime을 마운트하면 `python scripts/install_training_inputs.py --destination <해당 경로>`로 먼저 설치하세요. 모델은 별도로 설치/선택해야 합니다. 거래 정책 버전이 없는 이전 공유 모델은 새 추론 코드에서 거부됩니다. 해당 모델의 새 정책 학습본으로 공유 패키지를 갱신해야 합니다.
+
+
+### Low-churn 투자 실행 baseline
+
+새 실행 정책과 보상은 [baseline 안내](docs/LOW_CHURN_BASELINE.md)를 따릅니다.
+`config/low_churn_baseline.json`으로 선택하며 기존 공유 모델의 정책을 바꾸지 않습니다.
