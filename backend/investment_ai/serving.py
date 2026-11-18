@@ -240,6 +240,9 @@ class InvestmentService:
         elif news is not None:
             raise ValueError("news requires market in the same request")
         with self.lock:
+            from .baseline_execution import enabled
+
+            new_cash = state is None and enabled(self.config)
             supplied = state is not None
             state = dict(state) if state is not None else None
             if state is not None:
@@ -281,10 +284,11 @@ class InvestmentService:
             if (
                 previous_clock
                 and not supplied
+                and not new_cash
                 and previous_clock["date"] != str(data.dates[-1])[:10]
             ):
                 raise ValueError("Supply actual portfolio state to advance an episode")
-            clock = episode_clock(data.dates, state, previous_clock, reset)
+            clock = episode_clock(data.dates, state, previous_clock, reset or new_cash)
             if state is None:
                 state = {
                     "date": str(data.dates[-1])[:10],
@@ -298,16 +302,14 @@ class InvestmentService:
             state.update(
                 {k: clock[k] for k in ("episode_start_date", "episode_elapsed_bars")}
             )
-            from .baseline_execution import enabled
-
             self.execution_references = getattr(self, "execution_references", {})
             if enabled(self.config) and reset:
                 if any((state.get("last_executed_weights") or {}).values()):
                     raise ValueError("Reset requires zero last_executed_weights")
             if enabled(self.config) and state.get("last_executed_weights") is None:
-                if reset:
+                if reset or new_cash or not any(state["weights"].values()):
                     state["last_executed_weights"] = {a: 0.0 for a in data.assets}
-                elif episode_id in self.execution_references:
+                elif supplied and episode_id in self.execution_references:
                     state["last_executed_weights"] = self.execution_references[
                         episode_id
                     ]
@@ -317,7 +319,7 @@ class InvestmentService:
                     data,
                     state,
                     episode_id,
-                    reset or (not previous_clock and not supplied),
+                    reset or new_cash or (not previous_clock and not supplied),
                 )
             else:
                 prediction = predict_weights(
@@ -326,7 +328,9 @@ class InvestmentService:
             if not supplied:
                 prediction["mode"] = "new_portfolio_cash"
             # Persist after validation; an API restart must not clear a stop.
-            if enabled(self.config):
+            if enabled(self.config) and (
+                supplied or episode_id not in self.execution_references
+            ):
                 # Persist acknowledged execution state only, never a proposal.
                 self.execution_references[episode_id] = prediction[
                     "last_executed_weights"

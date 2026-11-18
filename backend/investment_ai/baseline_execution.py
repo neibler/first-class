@@ -55,6 +55,21 @@ def weights(value):
     return a.copy()
 
 
+def normalize_target(value):
+    """Accept floating-point target roundoff, never relax actual budget checks."""
+    raw = np.array(value, dtype=float, copy=True)
+    if (
+        raw.ndim != 1
+        or not raw.size
+        or not np.isfinite(raw).all()
+        or np.any(raw < 0)
+        or not np.isclose(raw.sum(), 1.0)
+    ):
+        raise ValueError("Invalid raw target weights")
+    raw /= raw.sum()
+    return raw
+
+
 def reasons(date, previous_date, current, last, risk, mdd, config, stopped=False):
     from .accounting import safeguard_breached
     from .rebalancing import is_monthly_rebalance_day, portfolio_weight_distance
@@ -91,10 +106,12 @@ def executable_target(raw, current, config):
     """
     from .rebalancing import portfolio_weight_distance
 
-    raw, current = weights(raw), weights(current)
+    raw, current = normalize_target(raw), weights(current)
     if raw.shape != current.shape or not np.isclose(raw.sum(), 1):
         raise ValueError("Invalid raw target")
     limit = config.get("max_holdings", 7)
+    if limit is None:
+        limit = len(current)  # Nullable schema means no holdings-count limit.
     if np.count_nonzero(current > EPS) > limit:
         raise ValueError("Existing holdings exceed max_holdings")
     held = current > EPS

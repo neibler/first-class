@@ -116,6 +116,10 @@ def predict_weights(data, config, models, scaler, state=None, predictors=None):
         if stopped
         else np.mean([p.predict(obs, env) for p in predictors], axis=0)
     )
+    if not stopped:
+        raw_target = baseline.normalize_target(raw_target)
+        if raw_target.shape != held.shape:
+            raise ValueError("Raw target shape differs from asset universe")
     last = held.copy()
     if use_baseline:
         supplied_last = state.get("last_executed_weights")

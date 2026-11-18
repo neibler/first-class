@@ -132,16 +132,9 @@ class PortfolioEnv(gym.Env):
         """Observe at t, accrue existing holdings to t+1, then execute at t+1 close."""
         if self.done:
             raise RuntimeError("Call reset before stepping")
-        target = np.asarray(target, dtype=float)
-        if (
-            target.shape != (self.n_assets,)
-            or not np.isfinite(target).all()
-            or np.any(target < 0)
-            or not np.isclose(target.sum(), 1)
-        ):
-            raise ValueError(
-                "Target weights must be finite, nonnegative and sum to one"
-            )
+        target = baseline.normalize_target(target)
+        if target.shape != (self.n_assets,):
+            raise ValueError("Target weights shape differs from asset universe")
         raw_target = target.copy()
         use_baseline = baseline.enabled(self.config) and apply_filter
         if apply_filter and not use_baseline:
@@ -172,6 +165,9 @@ class PortfolioEnv(gym.Env):
             elif force:
                 reasons = ([] if reasons == ["hold"] else reasons) + ["forced"]
         due = reasons not in (["hold"], ["mdd_stop"])
+        if use_baseline and due:
+            # Fail invalid holdings/config before advancing time or accounting.
+            baseline.executable_target(raw_target, self.weights, self.config)
         decision_date = str(self.data.dates[self.t])[:10]
         start_value = self.value
         self.t += 1
