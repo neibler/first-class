@@ -1,8 +1,7 @@
-"""Check the model-free Compose deployment over real HTTP, without fake results."""
+"""Check the Compose deployment with the shared model over real HTTP."""
 
 import os
 import json
-from urllib.error import HTTPError
 from urllib.request import urlopen
 
 from streamlit.testing.v1 import AppTest
@@ -18,37 +17,33 @@ print("PASS: allocation and weight_format imports inside dashboard image")
 assert os.environ["API_BASE_URL"] == "http://api:8000"
 health = get_health()
 assert health.status == "ok"
-assert health.model_loaded is False
+# The API image installs the Git-tracked shared model selected by serving.json.
+assert health.model_loaded is True, "Shared model was not loaded in the API image"
 
 with urlopen("http://127.0.0.1:8501/_stcore/health", timeout=3) as response:
     assert response.status == 200
 
-# CI ships verified inputs but no active trained model. Liveness remains healthy,
-# while readiness and portfolio data must explicitly report unavailable.
-for endpoint in ("/ready", "/backtest"):
-    try:
-        with urlopen(f"http://api:8000{endpoint}", timeout=3) as response:
-            raise AssertionError(f"{endpoint}: expected 503, got {response.status}")
-    except HTTPError as exc:
-        assert exc.code == 503, f"{endpoint}: unexpected HTTP {exc.code}"
+with urlopen("http://api:8000/ready", timeout=3) as response:
+    assert response.status == 200
+with urlopen("http://api:8000/backtest", timeout=60) as response:
+    backtest = json.load(response)
+    assert response.status == 200 and backtest["path"], "Empty backtest path"
 
 
-def assert_model_unavailable_page(page):
+def assert_model_ready_page(page):
     assert not page.exception, page.exception
-    assert [item.value for item in page.error] == [
-        "투자 분석 결과를 불러오지 못했습니다. 서버와 모델 준비 상태를 확인해 주세요."
-    ]
+    assert not page.error, [item.value for item in page.error]
     assert [item.value for item in page.success] == ["API 연결 정상"]
-    assert [item.value for item in page.warning] == ["모델이 로드되지 않았습니다."]
-    assert not page.metric, "Do not display fabricated portfolio metrics"
+    assert "모델이 로드되지 않았습니다." not in [item.value for item in page.warning]
+    assert page.metric, "Portfolio metrics from the real backtest are missing"
 
 
 # Execute the page and its HTTP client, not just the Streamlit health endpoint.
-page = AppTest.from_file("frontend/app.py", default_timeout=15).run()
-assert_model_unavailable_page(page)
+page = AppTest.from_file("frontend/app.py", default_timeout=60).run()
+assert_model_ready_page(page)
 page.button(key="refresh_health").click().run()
-assert_model_unavailable_page(page)
-print("PASS: real HTTP health, expected 503, unavailable UI, and health refresh")
+assert_model_ready_page(page)
+print("PASS: shared model loaded, real backtest, portfolio UI, and health refresh")
 
 page.switch_page("app_pages/research.py").run()
 assert not page.exception, page.exception

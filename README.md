@@ -31,8 +31,14 @@ docker compose ps
 | API 상태 | http://localhost:8000/health |
 | Swagger UI | http://localhost:8000/docs |
 
-화면 하단의 API 연결 상태를 펼치면
-실제 API 연결 상태와 모델 미로드 안내를 확인할 수 있습니다.
+API 이미지는 빌드할 때 Git에 포함된 팀 공유 모델(`shared/trained_models.zip`)을 검증 후 설치하고,
+`config/serving.json`이 가리키는 모델(현재 PPO FINAL2026)을 시작 시 로드합니다.
+별도 모델 설치나 재학습은 필요 없습니다. 공유 모델이 바뀌면 `--build`로 이미지를 다시 만듭니다.
+메모리 사용을 줄이기 위해 컨테이너의 수학 라이브러리 스레드는 1개로 제한합니다.
+Docker로 실행할 때는 `python local_run.py api`로 띄운 서버를 꺼 두세요(8000 포트가 겹칩니다).
+
+화면 하단의 `API 준비 상태`를 펼치면
+실제 API 연결 상태와 모델 로드 여부를 확인할 수 있습니다.
 `연결 상태 새로고침` 버튼으로 다시 조회합니다.
 컨테이너 내부에서는 dashboard가 `http://api:8000`으로 HTTP 요청합니다.
 
