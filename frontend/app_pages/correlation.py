@@ -5,8 +5,9 @@ import pandas as pd
 import streamlit as st
 from frontend.api_client import APIError
 from frontend.correlation_client import load_correlations
-from frontend.charts import chart_style
+from frontend.charts import asset_return, chart_style, indicator_line
 from frontend.guide import ETF_GUIDE
+from frontend.insights_client import load_asset_history
 from frontend.shap_explanations import ASSET_NAMES
 from frontend.ui import card, page_heading
 
@@ -36,6 +37,36 @@ with card("etf-intro"):
     st.subheader(f"{ticker}는 무엇인가요?")
     st.write(ETF_GUIDE.get(ticker, "이 ETF의 소개 글은 아직 준비되지 않았습니다."))
     st.caption("ETF가 따라가는 대상에 대한 일반적인 소개이며 투자 권유가 아닙니다.")
+with card("asset-history"):
+    st.subheader(f"{ticker} 가격과 지표 흐름")
+    try:
+        history = load_asset_history(ticker, window)
+    except APIError as exc:
+        st.warning(str(exc))
+        history = None
+    if history:
+        rows = history["rows"]
+        st.caption(
+            f"{rows[0]['date']} ~ {history['as_of']} · "
+            f"최근 {history['observations']}거래일 · 모델이 학습·평가에 쓴 실제 시장 데이터"
+        )
+        st.markdown("**누적 수익률** · 기간 첫날을 0%로 맞춘 가격 변화")
+        first, last = rows[0]["close"], rows[-1]["close"]
+        if first is not None and last is not None:
+            st.caption(f"가격 ${last:,.2f} · 기간 첫날 ${first:,.2f} (달러, 종가 기준)")
+        st.altair_chart(asset_return(rows), width="stretch")
+        rsi, macd = st.columns(2)
+        with rsi:
+            st.markdown(f"**RSI** · 현재 {rows[-1]['rsi']:.0f}")
+            st.altair_chart(
+                indicator_line(rows, "rsi", "RSI", [30, 70], [0, 100]),
+                width="stretch",
+            )
+            st.caption("70 이상은 과매수, 30 이하는 과매도 상태로 봅니다.")
+        with macd:
+            st.markdown(f"**MACD** · 현재 {rows[-1]['macd']:+.2f}")
+            st.altair_chart(indicator_line(rows, "macd", "MACD", [0]), width="stretch")
+            st.caption("0보다 크면 최근 흐름이 장기 흐름보다 강하다는 뜻입니다.")
 try:
     data = load_correlations(ticker, window)
 except APIError as exc:

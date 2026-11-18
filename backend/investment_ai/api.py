@@ -191,6 +191,10 @@ def create_app(run_dir=None):
 
     app.include_router(research_router)
 
+    from backend.insights_api import router as insights_router
+
+    app.include_router(insights_router)
+
     # 성능 분석 결과 API. 배포 이미지에 모듈을 넣지 않아도 서버는 떠야 하므로
     # 선택적으로 등록한다.
     performance_router = optional_performance_router()

@@ -71,7 +71,32 @@ def test_portfolio_cards_use_negative_drawdown(page):
     ]
     assert page.metric[2].value.startswith("-")
     assert any("왜 포트폴리오가 바뀌었나요?" in h.value for h in page.subheader)
-    assert any("준비 중" in i.value for i in page.info)
+
+
+def test_portfolio_shows_rebalancing_changes_from_the_api(page):
+    assert page.selectbox(key="rebalance_date").value == "2026-09-30"
+    text = " ".join(m.value for m in page.markdown)
+    assert "현재 비중이 AI 목표 비중과 기준 이상 달라져서" in text
+    table = next(d.value for d in page.dataframe if "변화" in d.value.columns)
+    assert list(table["자산"]) == ["SHY", "GLD"]
+    assert list(table["변화"]) == ["-37%p", "+34%p"]
+    assert any("187일 비중을 조정했습니다" in c.value for c in page.caption)
+    page.selectbox(key="rebalance_date").select("2026-09-29").run()
+    assert any("1%p 이상 바뀐 자산이 없습니다" in c.value for c in page.caption)
+    assert "월간 정기 점검일이라서" in " ".join(m.value for m in page.markdown)
+
+
+def test_portfolio_survives_missing_rebalancing(page, monkeypatch):
+    from frontend import insights_client
+
+    def unavailable(*args, **kwargs):
+        raise api_client.APIError("비중 변화 기록을 불러오지 못했습니다.")
+
+    monkeypatch.setattr(insights_client, "load_rebalancing", unavailable)
+    page.run()
+    assert not page.exception
+    assert any("비중 변화 기록" in w.value for w in page.warning)
+    assert page.metric, "Other portfolio cards must still render"
 
 
 def test_risk_page_shows_drawdown_safeguard_factors_and_guide(page):
@@ -81,8 +106,17 @@ def test_risk_page_shows_drawdown_safeguard_factors_and_guide(page):
         "최대 하락폭 · MDD",
         "현재 낙폭",
         "변동성 · 연환산",
+        "하루 예상 손실 · VaR 95%",
+        "나쁜 날 평균 손실 · CVaR 95%",
     ]
     assert page.metric[0].value.startswith("-")
+    assert [m.value for m in page.metric[3:]] == ["-1.47%", "-1.87%"]
+    # Explanation comes first, then risk next to the market's values.
+    titles = [h.value for h in page.subheader]
+    assert titles.index("AI 판단 요인") < titles.index("시장과 비교한 위험도")
+    market = [c.value for c in page.caption if c.value.startswith("S&P500 ")]
+    assert market[-2:] == ["S&P500 -1.42%", "S&P500 -1.72%"]
+    assert market[0].startswith("S&P500 -"), "Market MDD is negative like ours"
     assert any("Safe-Guard 미작동" in s.value for s in page.success)
     assert len(page.get("vega_lite_chart")) == 1
     assert page.selectbox(key="risk_shap_asset")
@@ -110,6 +144,35 @@ def test_risk_page_survives_missing_backtest_and_shap(page, monkeypatch):
     assert len(page.warning) >= 2
     assert not page.metric and not page.get("vega_lite_chart")
     assert len(page.get("page_link")) == 6
+
+
+def test_risk_page_keeps_other_cards_when_var_is_missing(page, monkeypatch):
+    from frontend import insights_client
+
+    def unavailable(*args, **kwargs):
+        raise api_client.APIError("위험 지표(VaR·CVaR)를 불러오지 못했습니다.")
+
+    monkeypatch.setattr(insights_client, "load_risk", unavailable)
+    page.switch_page("app_pages/risk.py").run()
+    assert not page.exception
+    assert len(page.metric) == 3
+    assert any("위험 지표(VaR·CVaR)" in c.value for c in page.caption)
+
+
+def test_asset_detail_shows_return_rsi_and_macd(page, monkeypatch):
+    from frontend import correlation_client
+
+    def unavailable(*args, **kwargs):
+        raise api_client.APIError("자산 관계를 불러오지 못했습니다.")
+
+    monkeypatch.setattr(correlation_client, "load_correlations", unavailable)
+    page.switch_page("app_pages/correlation.py").run()
+    assert not page.exception
+    assert any("가격과 지표 흐름" in h.value for h in page.subheader)
+    assert len(page.get("vega_lite_chart")) == 3
+    text = " ".join(m.value for m in page.markdown)
+    assert "RSI** · 현재 49" in text and "MACD** · 현재 +1.30" in text
+    assert any("가격 $762.63 · 기간 첫날 $765.61" in c.value for c in page.caption)
 
 
 def test_asset_detail_has_etf_intro_for_every_asset():

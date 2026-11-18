@@ -153,7 +153,8 @@ def get_statistics() -> StatisticsResult:
         if response.status_code == 503:
             raise StatisticsAPIError(
                 "통계 분석 결과가 아직 준비되지 않았습니다. "
-                "서버의 분석 결과 연결 상태를 확인해 주세요."
+                "현재 모델 기준의 ANOVA 분석 결과를 기다리고 있으며, "
+                "준비되면 이 화면에 표시됩니다."
             )
         if response.status_code != 200:
             raise StatisticsAPIError(
