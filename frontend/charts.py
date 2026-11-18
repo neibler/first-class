@@ -5,7 +5,7 @@ from html import escape
 import altair as alt
 import streamlit as st
 
-COLORS = ["#3bbdff", "#ffd16a", "#3ed5ce", "#ae94ff", "#ed8c68", "#9dbada"]
+COLORS = ["#2f6fed", "#19b8a6", "#f2a33a", "#8b6fe8", "#e86a5c", "#7d8ea3"]
 
 
 def chart_style(chart):
@@ -13,14 +13,14 @@ def chart_style(chart):
         chart.configure(background="transparent")
         .configure_view(stroke=None)
         .configure_axis(
-            labelColor="#c3d5e8",
-            titleColor="#a9bfd6",
-            gridColor="#24384c",
+            labelColor="#44546a",
+            titleColor="#5d6d84",
+            gridColor="#e3e9f2",
             labelFontSize=12,
             titleFontSize=12,
             labelLimit=155,
         )
-        .configure_legend(labelColor="#dce7f2", titleColor="#c3d5e8")
+        .configure_legend(labelColor="#33435a", titleColor="#5d6d84")
     )
 
 
@@ -62,7 +62,7 @@ def performance_comparison(records):
             ],
         )
     )
-    return chart_style(chart.properties(height=340))
+    return chart_style(chart.properties(height=290))
 
 
 def allocation(assets):
@@ -71,7 +71,7 @@ def allocation(assets):
     displayed = [{**a, "weight_label": format_weight(a["weight"])} for a in assets]
     chart = (
         alt.Chart(alt.Data(values=displayed))
-        .mark_arc(innerRadius=65, outerRadius=100, stroke="#061326", strokeWidth=3)
+        .mark_arc(innerRadius=52, outerRadius=82, stroke="#ffffff", strokeWidth=3)
         .encode(
             theta=alt.Theta("weight:Q", stack=True),
             color=alt.Color("ticker:N", scale=alt.Scale(range=COLORS), legend=None),
@@ -83,10 +83,10 @@ def allocation(assets):
     )
     center = (
         alt.Chart(alt.Data(values=[{"label": "100%"}]))
-        .mark_text(fontSize=30, color="#ffe2a4")
+        .mark_text(fontSize=24, color="#1b2a41")
         .encode(text="label:N")
     )
-    return chart_style((chart + center).properties(height=225))
+    return chart_style((chart + center).properties(height=185))
 
 
 def summary_plot(records, features):
@@ -105,7 +105,7 @@ def summary_plot(records, features):
             color=alt.Color(
                 "value:Q",
                 title="피처 값 (정규화)",
-                scale=alt.Scale(domain=[0, 1], range=["#259aff", "#ffcf65"]),
+                scale=alt.Scale(domain=[0, 1], range=["#2f6fed", "#f2a33a"]),
                 legend=alt.Legend(
                     orient="bottom",
                     gradientLength=150,
@@ -123,7 +123,7 @@ def summary_plot(records, features):
     )
     zero = (
         alt.Chart(alt.Data(values=[{"zero": 0}]))
-        .mark_rule(color="#c3c9d1", strokeDash=[4, 4])
+        .mark_rule(color="#8a97a8", strokeDash=[4, 4])
         .encode(x="zero:Q")
     )
     return chart_style((zero + points).properties(height=310))
@@ -179,7 +179,7 @@ def force_plot(features, decision):
     for i in range(6):
         value = low + (high - low) * i / 5
         elements.append(
-            f'<line x1="{x(value)}" y1="75" x2="{x(value)}" y2="142" stroke="#29445c"/>'
+            f'<line x1="{x(value)}" y1="75" x2="{x(value)}" y2="142" stroke="#d5dde8"/>'
             f'<text x="{x(value)}" y="162" text-anchor="middle">{value:.1%}</text>'
         )
     for sign, start in [(1, final - positive), (-1, final + negative)]:
@@ -190,28 +190,28 @@ def force_plot(features, decision):
             end = cursor + value
             a, b = x(cursor), x(end)
             tip = min(7, abs(b - a) / 3) * sign
-            color = "#ffcf65" if sign > 0 else "#259aff"
+            color = "#f2a33a" if sign > 0 else "#2f6fed"
             points = f"{a},87 {b-tip},87 {b},109 {b-tip},131 {a},131 {a+tip},109"
             label = escape(f"{feature}: {value * 100:+.2f}%p")
             elements.append(
-                f'<polygon points="{points}" fill="{color}" stroke="#07182a">'
+                f'<polygon points="{points}" fill="{color}" stroke="#ffffff">'
                 f"<title>{label}</title></polygon>"
             )
             if abs(b - a) > 48:
                 elements.append(
-                    f'<text x="{(a+b)/2}" y="114" fill="#051525" '
+                    f'<text x="{(a+b)/2}" y="114" fill="#ffffff" '
                     f'text-anchor="middle">{value*100:+.2f}</text>'
                 )
             cursor = end
     elements.extend(
         [
             f'<line x1="{x(base)}" y1="52" x2="{x(base)}" y2="142" '
-            'stroke="#c6d4e6" stroke-dasharray="4 4"/>',
+            'stroke="#7d8ea3" stroke-dasharray="4 4"/>',
             f'<text x="{x(base)}" y="43" text-anchor="middle">기준값 {base:.2%}</text>',
             f'<line x1="{x(final)}" y1="78" x2="{x(final)}" '
-            'y2="190" stroke="#fff0bd"/>',
+            'y2="190" stroke="#1b2a41"/>',
             f'<text x="{x(final)}" y="211" text-anchor="middle" '
-            f'fill="#ffe0a0">결정 비중 f(x) = {final:.2%}</text>',
+            f'fill="#1b2a41">결정 비중 f(x) = {final:.2%}</text>',
         ]
     )
     # st.html sanitizes SVG out in Streamlit 1.60. This trusted local HTML
@@ -221,10 +221,34 @@ def force_plot(features, decision):
         "<style>body{margin:0;background:transparent}svg{display:block}</style>"
         '<div style="overflow-x:auto" tabindex="0" role="region" '
         'aria-label="Force Plot 가로 스크롤"><svg role="img" '
-        'aria-label="Force Plot: 금색 양수 기여는 오른쪽, 파란색 음수 기여는 왼쪽으로 작용" '
+        'aria-label="Force Plot: 주황색 양수 기여는 오른쪽, 파란색 음수 기여는 왼쪽으로 작용" '
         'viewBox="0 0 900 230" style="width:100%;min-width:720px;'
-        'font:16px sans-serif;fill:#c6d4e6">'
+        'font:16px sans-serif;fill:#44546a">'
         + "".join(elements)
         + "</svg></div></html>",
         height="content",
     )
+
+
+def drawdown_trend(path):
+    """Daily drawdown from the server path; values are zero or negative."""
+    chart = (
+        alt.Chart(alt.Data(values=path))
+        .mark_area(color="#e86a5c", opacity=0.25, line={"color": "#e86a5c"})
+        .encode(
+            x=alt.X(
+                "date:T",
+                title="날짜",
+                scale=alt.Scale(type="utc"),
+                axis=alt.Axis(format="%y-%m", labelOverlap=True),
+            ),
+            y=alt.Y(
+                "drawdown:Q", title="최고점 대비 하락폭", axis=alt.Axis(format=".0%")
+            ),
+            tooltip=[
+                alt.Tooltip("date:T", title="날짜", format="%Y-%m-%d"),
+                alt.Tooltip("drawdown:Q", title="하락폭", format=".2%"),
+            ],
+        )
+    )
+    return chart_style(chart.properties(height=210))
