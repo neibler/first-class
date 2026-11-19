@@ -169,6 +169,23 @@ def test_exact_one_point_change_is_kept_despite_float_noise(client, service):
     assert sorted(c["ticker"] for c in changes["changes"]) == ["GLD", "SPY"]
 
 
+def test_blank_csv_close_becomes_null_without_failing(client, service, tmp_path):
+    from backend.investment_ai.data_loader import read_table
+
+    lines = ["date,ticker,close"]
+    for i, day in enumerate(pd.date_range("2026-01-01", periods=6)):
+        # Blank closes: one outside the requested window, one inside it.
+        close = "" if i in (0, 4) else f"{100 + i}.5"
+        lines += [f"{day:%Y-%m-%d},SPY,{close}", f"{day:%Y-%m-%d},GLD,50"]
+    path = tmp_path / "market.csv"
+    path.write_text("\n".join(lines), encoding="utf-8")
+    service.market_frame = read_table(path)
+    assert (service.market_frame["close"] == "").any(), "Loader keeps CSV blanks"
+    response = client.get("/assets/SPY/history", params={"observations": 3})
+    assert response.status_code == 200
+    assert [r["close"] for r in response.json()["rows"]] == [103.5, None, 105.5]
+
+
 def test_asset_history_refuses_an_inference_data_override(client, monkeypatch):
     monkeypatch.setenv("INVESTMENT_AI_DATA", "other_market.parquet")
     response = client.get("/assets/SPY/history")

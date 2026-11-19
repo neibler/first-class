@@ -210,8 +210,10 @@ def close_prices(service, symbol, dates):
     if frame is None or "close" not in frame:
         return [None] * len(dates)
     rows = frame[frame["ticker"] == symbol]
+    # close is optional and unvalidated; CSV blanks arrive as "". Treat anything
+    # non-numeric as a missing price instead of failing the whole request.
     closes = pd.Series(
-        rows["close"].to_numpy(dtype=float),
+        pd.to_numeric(rows["close"], errors="coerce").to_numpy(dtype=float),
         index=pd.to_datetime(rows["date"]).dt.strftime("%Y-%m-%d"),
     )
     closes = closes[~closes.index.duplicated()].reindex(dates)
