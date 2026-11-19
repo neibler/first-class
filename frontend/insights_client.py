@@ -1,6 +1,7 @@
 """HTTP-only client for risk, rebalancing and per-asset history. No local math."""
 
 import math
+from datetime import date
 
 import httpx
 
@@ -14,6 +15,14 @@ def _get(path, params, message):
         return response.json()
     except (httpx.HTTPError, ValueError):
         raise APIError(message) from None
+
+
+def _date(value):
+    """A YYYY-MM-DD string, the format every insights API date uses."""
+    try:
+        return isinstance(value, str) and date.fromisoformat(value).isoformat() == value
+    except ValueError:
+        return False
 
 
 def _finite(*values):
@@ -66,7 +75,11 @@ def load_asset_history(ticker, observations=252):
     try:
         if data["ticker"] != ticker or not data["rows"]:
             raise ValueError("Unexpected asset history")
+        if not _date(data["as_of"]) or not isinstance(data["observations"], int):
+            raise ValueError("Invalid asset history metadata")
         for row in data["rows"]:
+            if not _date(row["date"]):
+                raise ValueError("Missing asset history date")
             if not _finite(row["cumulative_return"], row["rsi"], row["macd"]):
                 raise ValueError("Invalid asset history value")
             close = row["close"]

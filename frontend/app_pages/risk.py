@@ -17,8 +17,16 @@ MARKET = "S&P500"
 
 
 def loss(value):
-    """Server loss sizes are positive; show them as negative like MDD."""
-    return "계산 불가" if value is None else f"{-value:.2%}"
+    """Server loss sizes are positive; show them as negative like MDD.
+
+    VaR/CVaR turn negative when even the worst days of the window were gains;
+    that is shown as a gain, never as a loss amount.
+    """
+    if value is None:
+        return "계산 불가"
+    if value < 0:
+        return f"손실 없음 · +{-value:.2%}"
+    return "0.00%" if value == 0 else f"{-value:.2%}"
 
 
 def market(column, text):

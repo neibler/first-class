@@ -23,6 +23,11 @@ def investment_ui_fixture(request, monkeypatch):
             data["returns"], data["periods_per_year"], data["annual_risk_free_rate"]
         )
         data.update(data_source="synthetic", stopped=False, cash_weight=0.0)
+        # Distinct market values so captions can be told apart from VaR/CVaR.
+        data.setdefault(
+            "benchmark_metrics",
+            {"max_drawdown": 0.0731, "annualized_volatility": 0.1222},
+        )
         return data
 
     monkeypatch.setattr(investment_client, "load_portfolio", payload)

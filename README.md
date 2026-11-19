@@ -19,9 +19,9 @@ FastAPI 앱 생성 함수에서 투자 모델 생명주기를 관리하고 투�
 
 | API | 내용 |
 | --- | --- |
-| `GET /risk?observations=` | 백테스트 일별 수익률 기준 1일 VaR·CVaR 95%(손실 크기를 양수로 반환, `backend/performance/metrics.py` 정의 사용). 비교 전략(기본 SPY 매수 후 보유) 값 포함 |
+| `GET /risk?observations=` | 백테스트 일별 수익률 기준 1일 VaR·CVaR 95%(`backend/performance/metrics.py` 정의 사용. 양수는 손실 크기이며, 구간의 가장 나쁜 5% 날도 이득이면 음수). 비교 전략(기본 SPY 매수 후 보유) 값 포함 |
 | `GET /rebalancing?observations=&limit=&min_change=` | 모델이 비중을 조정한 날짜별 이전·이후 비중과 변화, 조정 이유 코드. 최근 날짜부터, 기본 1%p 미만 변화는 생략 |
-| `GET /assets/{ticker}/history?observations=` | 설치된 시장 입력의 ETF별 누적 수익률(기간 첫날 0%), RSI, MACD. 기본 252거래일 |
+| `GET /assets/{ticker}/history?observations=` | 모델 학습 입력의 ETF별 종가, 누적 수익률(기간 첫날 0%), RSI, MACD. 기본 252거래일. `INVESTMENT_AI_DATA`로 시장 데이터를 바꿔 실행 중이면 학습 입력이 아니므로 503 |
 
 ## Docker 실행
 

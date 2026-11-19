@@ -115,8 +115,13 @@ def test_risk_page_shows_drawdown_safeguard_factors_and_guide(page):
     titles = [h.value for h in page.subheader]
     assert titles.index("AI 판단 요인") < titles.index("시장과 비교한 위험도")
     market = [c.value for c in page.caption if c.value.startswith("S&P500 ")]
-    assert market[-2:] == ["S&P500 -1.42%", "S&P500 -1.72%"]
-    assert market[0].startswith("S&P500 -"), "Market MDD is negative like ours"
+    # MDD, volatility, VaR, CVaR in card order; market MDD is negative like ours.
+    assert market == [
+        "S&P500 -7.31%",
+        "S&P500 12.22%",
+        "S&P500 -1.42%",
+        "S&P500 -1.72%",
+    ]
     assert any("Safe-Guard 미작동" in s.value for s in page.success)
     assert len(page.get("vega_lite_chart")) == 1
     assert page.selectbox(key="risk_shap_asset")
@@ -124,6 +129,35 @@ def test_risk_page_shows_drawdown_safeguard_factors_and_guide(page):
     assert "RSI" in text and "MACD" in text
     captions = " ".join(c.value for c in page.caption)
     assert "70 이상이면" in captions and "인과관계나 투자 권고가 아닙니다" in captions
+
+
+def test_gain_only_var_is_not_shown_as_a_loss(page, monkeypatch):
+    from frontend import insights_client
+    from tests.investment_ui_fixtures import RISK
+
+    gains = {**RISK, "portfolio": {"var": -0.004, "cvar": -0.002}}
+    monkeypatch.setattr(insights_client, "load_risk", lambda observations=None: gains)
+    page.switch_page("app_pages/risk.py").run()
+    assert not page.exception
+    assert [m.value for m in page.metric[3:]] == [
+        "손실 없음 · +0.40%",
+        "손실 없음 · +0.20%",
+    ]
+
+
+def test_anova_waiting_notice_names_the_operator_step(page, monkeypatch):
+    from frontend import statistics_client
+
+    def pending():
+        raise statistics_client.StatisticsPendingError(
+            "통계 분석 결과가 아직 준비되지 않았습니다."
+        )
+
+    monkeypatch.setattr(statistics_client, "get_statistics", pending)
+    page.switch_page("app_pages/anova.py").run()
+    assert not page.exception
+    assert any("아직 준비되지" in w.value for w in page.warning)
+    assert any("운영 담당" in c.value for c in page.caption)
 
 
 def test_risk_page_survives_missing_backtest_and_shap(page, monkeypatch):

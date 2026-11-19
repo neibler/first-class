@@ -10,6 +10,8 @@ installed market inputs). Nothing is trained, predicted or generated here.
 
 from __future__ import annotations
 
+import os
+
 import numpy as np
 import pandas as pd
 from fastapi import APIRouter, HTTPException, Query, Request
@@ -25,8 +27,18 @@ class Contract(BaseModel):
 
 
 class TailRisk(Contract):
-    var: float | None = Field(description="1-day VaR, loss size as a positive number")
-    cvar: float | None = Field(description="Mean loss beyond VaR, positive number")
+    var: float | None = Field(
+        description=(
+            "1-day VaR: the negated 5% return quantile. Positive values are losses; "
+            "a negative value means even the worst 5% of days were gains."
+        )
+    )
+    cvar: float | None = Field(
+        description=(
+            "Negated mean return of the days at or below the VaR quantile. Positive "
+            "values are losses; negative when that tail contains only gains."
+        )
+    )
 
 
 class RiskResponse(Contract):
@@ -110,6 +122,9 @@ def risk(
     from backend.performance.metrics import conditional_value_at_risk, value_at_risk
 
     service = active_service(request)
+    # A bundle without saved evaluation cannot answer at all; that is not a bad
+    # benchmark name, so report it before validating the benchmark.
+    saved_history(service, "ppo", None)
     if benchmark == "ppo" or benchmark not in service.histories:
         raise HTTPException(422, "Unknown benchmark")
     portfolio = saved_history(service, "ppo", observations)
@@ -158,7 +173,9 @@ def rebalancing(
                 "change": float(row[f"weight_change_{asset.lower()}"]),
             }
             for asset in assets
-            if abs(float(row[f"weight_change_{asset.lower()}"])) >= min_change
+            # Round away binary noise so an exact 1%p move stays at 0.01.
+            if round(abs(float(row[f"weight_change_{asset.lower()}"])), 12)
+            >= min_change
         ]
         changes.sort(key=lambda item: -abs(item["change"]))
         reason = row.get("rebalance_reason")
@@ -209,6 +226,14 @@ def asset_history(
 ):
     """Cumulative return (start = 0), RSI and MACD from the installed market input."""
     service = active_service(request)
+    if os.environ.get("INVESTMENT_AI_DATA"):
+        # The loaded market data is then an inference override, not the bundle's
+        # training input; do not present it under the trained model's name.
+        raise HTTPException(
+            503,
+            "Asset history needs the model's training input; it is unavailable "
+            "while INVESTMENT_AI_DATA overrides the market data",
+        )
     data = service.data
     symbol = ticker.upper()
     if symbol not in data.assets:

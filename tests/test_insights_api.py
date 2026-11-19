@@ -1,5 +1,7 @@
 """Risk, rebalancing and asset history APIs on a small in-memory service."""
 
+import json
+import math
 from types import SimpleNamespace
 
 import httpx
@@ -140,9 +142,57 @@ def test_asset_history_compounds_saved_log_returns(client, service):
     assert client.get("/assets/XYZ/history").status_code == 404
 
 
+def test_risk_without_saved_evaluation_is_not_ready(client, service):
+    # A bundle without evaluation.json loads with no histories: that is "not
+    # ready" (503), not a wrong benchmark name (422).
+    service.histories = {}
+    response = client.get("/risk")
+    assert response.status_code == 503
+    assert "No saved evaluation history" in response.json()["detail"]
+
+
+def test_gain_only_window_gives_negative_var(client, service):
+    gains = [0.01, 0.02, 0.015, 0.012, 0.011, 0.013, 0.014, 0.016, 0.017, 0.018]
+    service.histories["ppo"] = history(gains)
+    body = client.get("/risk").json()
+    assert body["portfolio"]["var"] < 0 and body["portfolio"]["cvar"] < 0
+
+
+def test_exact_one_point_change_is_kept_despite_float_noise(client, service):
+    frame = service.histories["ppo"]
+    # Both are exact 1%p moves; binary floats put one just below 0.01.
+    frame.loc[9, "weight_change_spy"] = 0.29 - 0.28  # 0.009999999999999953
+    frame.loc[9, "weight_change_gld"] = -(0.51 - 0.5)  # -0.010000000000000009
+    assert frame.loc[9, "weight_change_spy"] < 0.01
+    changes = client.get("/rebalancing", params={"limit": 1}).json()["events"][0]
+    # Both stay in; the larger raw magnitude (GLD) sorts first.
+    assert sorted(c["ticker"] for c in changes["changes"]) == ["GLD", "SPY"]
+
+
+def test_asset_history_refuses_an_inference_data_override(client, monkeypatch):
+    monkeypatch.setenv("INVESTMENT_AI_DATA", "other_market.parquet")
+    response = client.get("/assets/SPY/history")
+    assert response.status_code == 503
+    assert "training input" in response.json()["detail"]
+
+
 def fake_get(payload):
     def get(url, params=None, timeout=None):
         return httpx.Response(200, json=payload, request=httpx.Request("GET", url))
+
+    return get
+
+
+def raw_get(body):
+    """Serve an already-encoded body; json.dumps writes Infinity as-is."""
+
+    def get(url, params=None, timeout=None):
+        return httpx.Response(
+            200,
+            content=body,
+            headers={"content-type": "application/json"},
+            request=httpx.Request("GET", url),
+        )
 
     return get
 
@@ -152,8 +202,10 @@ def test_client_rejects_nonfinite_or_out_of_range_values(monkeypatch):
 
     monkeypatch.setattr(insights_client.httpx, "get", fake_get(RISK))
     assert insights_client.load_risk()["portfolio"]["var"] == 0.0147
-    bad = {**RISK, "portfolio": {"var": float("inf"), "cvar": 0.01}}
-    monkeypatch.setattr(insights_client.httpx, "get", fake_get(bad))
+    bad = json.dumps({**RISK, "portfolio": {"var": float("inf"), "cvar": 0.01}})
+    # Precondition: the body decodes, so only load_risk's validation can reject it.
+    assert math.isinf(json.loads(bad)["portfolio"]["var"])
+    monkeypatch.setattr(insights_client.httpx, "get", raw_get(bad))
     with pytest.raises(APIError):
         insights_client.load_risk()
     event = {**REBALANCING["events"][0]}
@@ -162,6 +214,26 @@ def test_client_rejects_nonfinite_or_out_of_range_values(monkeypatch):
     monkeypatch.setattr(insights_client.httpx, "get", fake_get(broken))
     with pytest.raises(APIError):
         insights_client.load_rebalancing()
+
+
+def test_client_rejects_asset_rows_without_dates(monkeypatch):
+    from tests.investment_ui_fixtures import asset_history
+
+    good = asset_history("SPY")
+    monkeypatch.setattr(insights_client.httpx, "get", fake_get(good))
+    assert insights_client.load_asset_history("SPY")["rows"]
+    for broken in (
+        {**good, "rows": [{k: v for k, v in good["rows"][0].items() if k != "date"}]},
+        {**good, "rows": [{**good["rows"][0], "date": "not-a-date"}]},
+        {**good, "as_of": None},
+    ):
+        monkeypatch.setattr(insights_client.httpx, "get", fake_get(broken))
+        with pytest.raises(APIError):
+            insights_client.load_asset_history("SPY")
+    # A missing close price stays allowed.
+    nullable = {**good, "rows": [{**good["rows"][0], "close": None}]}
+    monkeypatch.setattr(insights_client.httpx, "get", fake_get(nullable))
+    assert insights_client.load_asset_history("SPY")["rows"][0]["close"] is None
 
 
 def test_client_reports_connection_errors(monkeypatch):
