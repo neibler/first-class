@@ -230,6 +230,62 @@ def force_plot(features, decision):
     )
 
 
+def _date_axis():
+    return alt.X(
+        "date:T",
+        title="날짜",
+        scale=alt.Scale(type="utc"),
+        # Monthly ticks: weekly ticks repeat the same "yy-mm" label.
+        axis=alt.Axis(format="%y-%m", tickCount="month", labelOverlap=True),
+    )
+
+
+def asset_return(rows):
+    """Cumulative return of one ETF from the server; starts at 0%."""
+    chart = (
+        alt.Chart(alt.Data(values=rows))
+        .mark_line(color="#2f6fed")
+        .encode(
+            x=_date_axis(),
+            y=alt.Y(
+                "cumulative_return:Q", title="누적 수익률", axis=alt.Axis(format=".0%")
+            ),
+            tooltip=[
+                alt.Tooltip("date:T", title="날짜", format="%Y-%m-%d"),
+                alt.Tooltip("cumulative_return:Q", title="누적 수익률", format=".2%"),
+                alt.Tooltip("close:Q", title="종가($)", format=",.2f"),
+            ],
+        )
+    )
+    zero = alt.Chart(alt.Data(values=[{"y": 0}])).mark_rule(
+        color="#8a97a8", strokeDash=[4, 4]
+    )
+    return chart_style((chart + zero.encode(y="y:Q")).properties(height=190))
+
+
+def indicator_line(rows, field, title, guides, domain=None):
+    """RSI or MACD line from the server with fixed reference lines."""
+    scale = alt.Scale(domain=domain) if domain else alt.Scale(zero=False)
+    line = (
+        alt.Chart(alt.Data(values=rows))
+        .mark_line(color="#8b6fe8")
+        .encode(
+            x=_date_axis(),
+            y=alt.Y(f"{field}:Q", title=title, scale=scale),
+            tooltip=[
+                alt.Tooltip("date:T", title="날짜", format="%Y-%m-%d"),
+                alt.Tooltip(f"{field}:Q", title=title, format=".2f"),
+            ],
+        )
+    )
+    rules = (
+        alt.Chart(alt.Data(values=[{"y": value} for value in guides]))
+        .mark_rule(color="#8a97a8", strokeDash=[4, 4])
+        .encode(y="y:Q")
+    )
+    return chart_style((line + rules).properties(height=150))
+
+
 def drawdown_trend(path):
     """Daily drawdown from the server path; values are zero or negative."""
     chart = (

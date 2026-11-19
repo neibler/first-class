@@ -28,6 +28,16 @@ with urlopen("http://api:8000/ready", timeout=3) as response:
 with urlopen("http://api:8000/backtest", timeout=60) as response:
     backtest = json.load(response)
     assert response.status == 200 and backtest["path"], "Empty backtest path"
+with urlopen("http://api:8000/risk", timeout=30) as response:
+    # The sign depends on the data (gain-only windows give a negative VaR);
+    # the contract is a numeric value.
+    var = json.load(response)["portfolio"]["var"]
+    assert isinstance(var, (int, float)) and not isinstance(var, bool)
+with urlopen("http://api:8000/rebalancing?limit=1", timeout=30) as response:
+    assert len(json.load(response)["events"]) == 1
+with urlopen("http://api:8000/assets/SPY/history?observations=20", timeout=30) as r:
+    assert len(json.load(r)["rows"]) == 20
+print("PASS: risk, rebalancing and asset history APIs in the API image")
 
 
 def assert_model_ready_page(page):

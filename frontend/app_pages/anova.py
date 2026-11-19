@@ -23,6 +23,12 @@ try:
         result = client.get_statistics()
 except client.StatisticsAPIError as exc:
     st.warning(str(exc))
+    if isinstance(exc, client.StatisticsPendingError):
+        # Waiting alone never creates the file; name the step for the operator.
+        st.caption(
+            "운영 담당: 성능 분석 도구(`backend.performance.run_analysis`)로 현재 모델의 "
+            "분석 결과를 만들고 서버의 결과 폴더(RESULTS_DIR)에 연결하면 표시됩니다."
+        )
 else:
     if result.unsupported_count:
         st.warning(

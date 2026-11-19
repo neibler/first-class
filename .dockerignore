@@ -7,6 +7,7 @@ backend/**
 !backend/research_api.py
 !backend/research_schemas.py
 !backend/research_service.py
+!backend/insights_api.py
 !backend/news_research/
 backend/news_research/**
 !backend/news_research/settings.py
@@ -74,6 +75,7 @@ backend/performance/**
 !frontend/shap_presentation.py
 !frontend/shap_state.py
 !frontend/correlation_client.py
+!frontend/insights_client.py
 !config/multi_model.json
 
 !shared/training_inputs.zip
