@@ -251,6 +251,7 @@ def evaluate_bundle(path):
             "reward_candidates",
         }
     }
+    common["execution_policy"] = policy_for(config)
     group = hashlib.sha256(
         json.dumps(
             {

@@ -132,14 +132,15 @@ class PortfolioEnv(gym.Env):
         """Observe at t, accrue existing holdings to t+1, then execute at t+1 close."""
         if self.done:
             raise RuntimeError("Call reset before stepping")
-        target = baseline.normalize_target(target)
+        original_target = np.array(target, dtype=float, copy=True)
+        target = baseline.normalize_target(original_target)
         if target.shape != (self.n_assets,):
             raise ValueError("Target weights shape differs from asset universe")
         raw_target = target.copy()
         use_baseline = baseline.enabled(self.config) and apply_filter
         if apply_filter and not use_baseline:
             target = filter_target_weights(
-                target,
+                original_target,
                 self.config.get("min_weight_threshold", MIN_WEIGHT_THRESHOLD),
                 self.config.get("max_holdings"),
             )
@@ -170,11 +171,25 @@ class PortfolioEnv(gym.Env):
             baseline.executable_target(raw_target, self.weights, self.config)
         decision_date = str(self.data.dates[self.t])[:10]
         start_value = self.value
-        self.t += 1
-        gross = np.expm1(self.data.returns[self.t])
+        # Validate the next-close portfolio and fill before mutating episode state.
+        gross = np.expm1(self.data.returns[self.t + 1])
         gross_return = float(self.weights @ gross)
+        if (
+            not np.isfinite(gross).all()
+            or not np.isfinite(gross_return)
+            or gross_return <= -1
+        ):
+            raise ValueError("Invalid next-close market return")
+        drifted = self.weights * (1 + gross) / (1 + gross_return)
+        planned = None
+        if use_baseline:
+            baseline.weights(drifted)
+            if due and not self.safeguard_triggered:
+                planned = baseline.executable_target(raw_target, drifted, self.config)
+                planned_fill = baseline.execute(drifted, planned[1], self.rate)
+        self.t += 1
         self.value *= 1 + gross_return
-        self.weights = self.weights * (1 + gross) / (1 + gross_return)
+        self.weights = drifted
         previous = self.weights.copy()  # Drifted holdings immediately before execution.
         self.peak = max(self.peak, self.value)
         self.drawdown = 1 - self.value / self.peak
@@ -189,10 +204,8 @@ class PortfolioEnv(gym.Env):
         entries = exits = 0
         if not self.safeguard_triggered and due:
             if use_baseline:
-                target, executable, desired_turnover = baseline.executable_target(
-                    raw_target, previous, self.config
-                )
-                turnover, cost = baseline.execute(previous, executable, self.rate)
+                target, executable, desired_turnover = planned
+                turnover, cost = planned_fill
             else:
                 executable = target.copy()
                 desired_turnover = portfolio_weight_distance(previous, target)
@@ -221,7 +234,7 @@ class PortfolioEnv(gym.Env):
                 self.mdd, self.config["max_drawdown"]
             )
         if self.safeguard_triggered:
-            reasons = ["mdd_stop"]
+            reasons = (reasons + ["mdd_stop"]) if turnover > 0 else ["mdd_stop"]
             # Risk liquidation is immediate at the breach close.
             # Cancel queued buys.
             exit_turnover = float(self.weights.sum())

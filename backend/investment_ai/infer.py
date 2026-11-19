@@ -66,7 +66,7 @@ def predict_weights(data, config, models, scaler, state=None, predictors=None):
         )
     ):
         raise ValueError("Holdings must be fully invested or entirely cash")
-    if held.sum() > 0 and np.isclose(held.sum(), 1):
+    if not use_baseline and held.sum() > 0 and np.isclose(held.sum(), 1):
         held /= held.sum()
     elif not use_baseline:
         held[:] = 0
@@ -116,6 +116,7 @@ def predict_weights(data, config, models, scaler, state=None, predictors=None):
         if stopped
         else np.mean([p.predict(obs, env) for p in predictors], axis=0)
     )
+    original_target = raw_target.copy()
     if not stopped:
         raw_target = baseline.normalize_target(raw_target)
         if raw_target.shape != held.shape:
@@ -136,7 +137,7 @@ def predict_weights(data, config, models, scaler, state=None, predictors=None):
         raw_target.copy()
         if stopped or use_baseline
         else filter_target_weights(
-            raw_target,
+            original_target,
             config.get("min_weight_threshold", MIN_WEIGHT_THRESHOLD),
             config.get("max_holdings"),
         )

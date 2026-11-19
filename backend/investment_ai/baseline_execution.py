@@ -130,14 +130,32 @@ def executable_target(raw, current, config):
         alpha = min(1.0, cap / distance) if distance > EPS else 0.0
         return current + alpha * (target - current)
 
-    adjusted = adjust(desired)
-    if np.count_nonzero(adjusted > EPS) > limit:
-        # An exit cannot free a slot until fully filled. Keep residual cash
-        # rather than opening an eighth asset or exceeding the turnover cap.
-        deferred = desired.copy()
-        deferred[~held] = 0.0
+    deferred = desired.copy()
+    adjusted = adjust(deferred)
+    # Remove only the lowest-ranked entry until partial exits fit the limit.
+    for index in reversed(new):
+        if np.count_nonzero(adjusted > EPS) <= limit:
+            break
+        deferred[index] = 0.0
         adjusted = adjust(deferred)
-    adjusted[np.abs(adjusted) < EPS] = 0.0
+    # Dust liquidation consumes turnover too. Reserve its exact distance before
+    # interpolation, then recheck the final executable portfolio.
+    dust = (adjusted <= EPS) & (adjusted > 0)
+    if dust.any():
+        reserved = float(current[dust].sum()) * 0.5
+        clean_current = current.copy()
+        clean_current[dust] = 0.0
+        clean_target = deferred.copy()
+        clean_target[dust] = 0.0
+        distance = portfolio_weight_distance(clean_current, clean_target)
+        alpha = min(1.0, max(0.0, cap - reserved) / distance) if distance > 0 else 0.0
+        adjusted = clean_current + alpha * (clean_target - clean_current)
+        adjusted[adjusted <= EPS] = 0.0
+    weights(adjusted)
+    if np.count_nonzero(adjusted > EPS) > limit:
+        raise ValueError("Executable holdings exceed max_holdings")
+    if portfolio_weight_distance(current, adjusted) > cap + EPS:
+        raise ValueError("Executable turnover exceeds cap after dust cleanup")
     return desired, adjusted, desired_turnover
 
 
@@ -148,6 +166,10 @@ def execute(current, target, rate):
     notional / pre-trade equity, not the one-way weight-distance metric.
     """
     current, target = weights(current), weights(target)
+    if not np.isfinite(rate) or not 0 <= rate < 0.5:
+        raise ValueError("Invalid transaction cost rate")
+    if current.shape != target.shape:
+        raise ValueError("Execution weights shape mismatch")
     if np.array_equal(current, target):
         return 0.0, 0.0
     lo, hi = 0.0, 2.0

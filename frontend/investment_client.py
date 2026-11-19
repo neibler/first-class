@@ -53,9 +53,19 @@ def load_portfolio(observations=None):
     return data
 
 
-def optimize(state=None, market=None, news=None):
+def create_inference_session():
+    return _request("POST", "/inference-sessions")["session_token"]
+
+
+def optimize(
+    state=None, market=None, news=None, session_token=None, execution_confirmation=None
+):
     payload = {}
     for key, value in (("state", state), ("market", market), ("news", news)):
         if value is not None:
             payload[key] = value
+    if session_token is not None:
+        payload["session_token"] = session_token
+    if execution_confirmation is not None:
+        payload["execution_confirmation"] = execution_confirmation
     return _request("POST", "/optimize", json=payload)

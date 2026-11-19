@@ -209,6 +209,15 @@ def test_service_persists_acknowledged_reference_not_proposal(tmp_path):
     s = state(obj.data, mdd=0.05)
     s["weights"] = {"SPY": 0.5, "QQQ": 0.5}
     s["last_executed_weights"] = {"SPY": 0.6, "QQQ": 0.4}
+    acknowledged = {**s, "weights": s["last_executed_weights"].copy()}
+    obj.optimize(
+        state=acknowledged,
+        execution_confirmation={
+            "execution_id": "fill-1",
+            "date": s["date"],
+            "weights": acknowledged["weights"],
+        },
+    )
     first = obj.optimize(state=s)
     assert first["should_rebalance"]
     saved = json.loads(obj.latch_path.read_text())

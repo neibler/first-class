@@ -194,12 +194,14 @@ def test_new_cash_request_does_not_reuse_invested_recurrent_cache(tmp_path):
     obj = make_service(tmp_path, True)
     obj.optimize()
     # Simulate a previously supplied invested default-episode request cache.
-    record = obj.recurrent_sessions["default"]
+    record = deepcopy(next(iter(obj.recurrent_sessions.values())))
+    obj.recurrent_sessions["default"] = record
     record["signature"] = "invested-request"
     record["prediction"]["weights"] = {"SPY": 1.0, "QQQ": 0.0}
     obj.execution_references["default"] = {"SPY": 1.0, "QQQ": 0.0}
     result = obj.optimize()
     assert not result["should_rebalance"] and result["cash_weight"] == 1
-    assert obj.models[0].calls == 2
+    assert obj.models[0].calls == 1
+    assert obj.recurrent_sessions["default"]["signature"] == "invested-request"
     assert obj.optimize() == result
-    assert obj.models[0].calls == 2
+    assert obj.models[0].calls == 1

@@ -28,7 +28,15 @@ class PortfolioState(Contract):
     reset_episode: StrictBool = False
 
 
+class ExecutionConfirmation(Contract):
+    execution_id: str = Field(min_length=1, max_length=128)
+    date: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
+    weights: dict[str, float]
+
+
 class OptimizeRequest(Contract):
+    session_token: str | None = Field(default=None, min_length=32, max_length=128)
+    execution_confirmation: ExecutionConfirmation | None = None
     market: list[dict] | None = Field(default=None, min_length=1, max_length=100000)
     news: list[dict] | None = Field(default=None, max_length=100000)
     state: PortfolioState | None = None
@@ -42,6 +50,7 @@ class HealthResponse(Contract):
 
 
 class OptimizeResponse(Contract):
+    session_token: str | None = None
     schema_version: str
     model_version: str
     data_source: str
@@ -102,9 +111,9 @@ class Metrics(Contract):
     total_transaction_cost: float = 0.0
     transaction_cost_initial_capital_ratio: float = 0.0
     transaction_cost_final_value_ratio: float = 0.0
-    average_holdings_count: float = 0.0
-    min_holdings_count: int = 0
-    max_holdings_count: int = 0
+    average_holdings_count: float | None = None
+    min_holdings_count: int | None = None
+    max_holdings_count: int | None = None
     entry_count: int = 0
     exit_count: int = 0
     rebalance_reason_counts: dict[str, int] = Field(default_factory=dict)
@@ -178,14 +187,27 @@ def create_app(run_dir=None):
         service()
         return health()
 
+    @app.post("/inference-sessions")
+    def create_inference_session():
+        return {"schema_version": "3.0", "session_token": service().create_session()}
+
     @app.post("/optimize", response_model=OptimizeResponse)
     def optimize(request: OptimizeRequest):
         try:
-            return service().optimize(
+            engine = service()
+            token = request.session_token or engine.create_session()
+            result = engine.optimize(
                 request.market,
                 request.news,
                 request.state.model_dump() if request.state else None,
+                session_token=token,
+                execution_confirmation=(
+                    request.execution_confirmation.model_dump()
+                    if request.execution_confirmation
+                    else None
+                ),
             )
+            return {**result, "session_token": token}
         except (ValueError, KeyError, TypeError, OverflowError) as exc:
             raise HTTPException(422, str(exc)) from exc
 

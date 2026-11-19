@@ -15,6 +15,8 @@ FastAPI 앱 생성 함수에서 투자 모델 생명주기를 관리하고 투�
 투자는 `/optimize`·`/backtest`를 사용합니다. 저장된 성과·SHAP 결과는 `/performance/*`에서
 조회할 수 있으며 화면 연결 상태와 실행 방법은 [성능 분석 안내](backend/performance/README.md)를 따릅니다.
 
+투자 추론의 연속 요청·재시도는 [세션 및 체결 확인 계약](docs/INFERENCE_SESSIONS.md)에 따라 `session_token`을 전달합니다.
+
 ## Docker 실행
 
 Docker Desktop의 Linux 컨테이너 엔진과 Docker Compose v2가 필요합니다.

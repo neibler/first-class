@@ -3,7 +3,12 @@
 import streamlit as st
 
 from frontend.charts import allocation
-from frontend.investment_client import InvestmentAPIError, load_portfolio, optimize
+from frontend.investment_client import (
+    InvestmentAPIError,
+    load_portfolio,
+    optimize,
+    create_inference_session,
+)
 from frontend.ui import ASSETS, card, detail_link, page_heading
 from frontend.weight_format import format_weight
 
@@ -155,7 +160,16 @@ if data:
         )
         if st.button("목표 비중 계산"):
             try:
-                proposal = optimize()
+                if not st.session_state.get("investment_session_token"):
+                    st.session_state["investment_session_token"] = (
+                        create_inference_session()
+                    )
+                proposal = optimize(
+                    session_token=st.session_state["investment_session_token"]
+                )
+                st.session_state["investment_session_token"] = proposal.get(
+                    "session_token"
+                )
                 st.caption(
                     f"{proposal['as_of']} 피처 기준 · "
                     f"{proposal['execution_delay_trading_bars']} 거래일 지연 · 주문 전송 없음"

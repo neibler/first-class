@@ -51,8 +51,9 @@ PortfolioEnv.reset에서 last_executed_weights를 0으로 초기화합니다.
 실제 체결 직후 post-trade 비중으로 갱신하고 NO TRADE 날에는 유지합니다.
 가격 변동은 현재 비중에만 반영합니다. observation/action 크기는 변경하지 않습니다.
 API는 주문을 실행하지 않습니다. held portfolio의 첫 요청은 last_executed_weights가 필요합니다.
-호출자는 실제 체결을 확인한 뒤 그 비중을 state.last_executed_weights로 전달해야 합니다.
-서버는 전달/검증된 기준을 episode별 상태 파일에 보존합니다. 목표 제안만으로 갱신하지 않습니다.
+호출자는 실제 체결을 확인한 뒤 `execution_confirmation`에 체결 ID·날짜·실제 비중을 전달합니다.
+`state.last_executed_weights`만 전달한 요청은 입력으로 사용하지만 저장된 기준을 갱신하지 않습니다.
+확인된 기준만 세션·에피소드별로 보존합니다. [세션 및 체결 확인 계약](INFERENCE_SESSIONS.md)을 따르세요.
 부분 현금 상태를 지원합니다. 제안은 t 시점 예상값이며 실제 체결 시점 cap을 재검증해야 합니다.
 
 ## 기록
