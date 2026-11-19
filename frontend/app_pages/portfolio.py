@@ -5,6 +5,7 @@ import streamlit as st
 from frontend.charts import allocation
 from frontend.investment_client import (
     InvestmentAPIError,
+    UnknownInvestmentSessionError,
     load_portfolio,
     optimize,
     create_inference_session,
@@ -184,4 +185,6 @@ if data:
                 if proposal["cash_weight"]:
                     st.write(f"현금 비중: {format_weight(proposal['cash_weight'])}")
             except InvestmentAPIError as exc:
+                if isinstance(exc, UnknownInvestmentSessionError):
+                    st.session_state.pop("investment_session_token", None)
                 st.error(str(exc))
