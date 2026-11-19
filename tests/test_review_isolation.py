@@ -96,7 +96,7 @@ def restore_service(obj, tmp_path):
     restored = make_service(tmp_path, True)
     restored.session_tokens = set(saved["session_tokens"])
     restored.execution_references = saved["execution_references"]
-    restored.execution_confirmations = saved["execution_confirmations"]
+    restored._restore_execution_history(saved)
     restored.episode_clocks = saved["clocks"]
     restored.latches = saved["latches"]
     restored._restore_recurrent(saved["recurrent"])
