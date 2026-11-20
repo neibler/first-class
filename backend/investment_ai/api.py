@@ -6,6 +6,7 @@ from typing import Literal
 from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field, StrictBool
 from .serving import InvestmentService
+from .session_registry import SessionCapacityError
 
 
 class Contract(BaseModel):
@@ -189,13 +190,30 @@ def create_app(run_dir=None):
 
     @app.post("/inference-sessions")
     def create_inference_session():
-        return {"schema_version": "3.0", "session_token": service().create_session()}
+        try:
+            return {
+                "schema_version": "3.0",
+                "session_token": service().create_session(),
+            }
+        except SessionCapacityError as exc:
+            raise HTTPException(429, str(exc)) from exc
 
     @app.post("/optimize", response_model=OptimizeResponse)
     def optimize(request: OptimizeRequest):
         try:
             engine = service()
-            token = request.session_token or engine.create_session()
+            token = request.session_token
+            if token is None:
+                return engine.optimize_new_session(
+                    request.market,
+                    request.news,
+                    request.state.model_dump() if request.state else None,
+                    execution_confirmation=(
+                        request.execution_confirmation.model_dump()
+                        if request.execution_confirmation
+                        else None
+                    ),
+                )
             result = engine.optimize(
                 request.market,
                 request.news,
@@ -208,6 +226,8 @@ def create_app(run_dir=None):
                 ),
             )
             return {**result, "session_token": token}
+        except SessionCapacityError as exc:
+            raise HTTPException(429, str(exc)) from exc
         except (ValueError, KeyError, TypeError, OverflowError) as exc:
             raise HTTPException(422, str(exc)) from exc
 

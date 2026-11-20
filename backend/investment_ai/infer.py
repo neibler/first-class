@@ -35,7 +35,16 @@ def resolve_run(path=None):
     return ROOT / "runs" / pointer["run_id"]
 
 
-def predict_weights(data, config, models, scaler, state=None, predictors=None):
+def predict_weights(
+    data,
+    config,
+    models,
+    scaler,
+    state=None,
+    predictors=None,
+    *,
+    raw_target_weights=None,
+):
     env = PortfolioEnv(data, config, scaler=scaler)
     date = str(data.dates[-1])[:10]
     clock = episode_clock(data.dates, state)
@@ -99,7 +108,7 @@ def predict_weights(data, config, models, scaler, state=None, predictors=None):
         or state.get("safeguard_triggered", False)
         or safeguard_breached(mdd, config["max_drawdown"])
     )
-    if recurrent and not stopped and not predictors:
+    if recurrent and not stopped and not predictors and raw_target_weights is None:
         raise ValueError(
             "Recurrent inference requires explicit PredictionSession state"
         )
@@ -107,14 +116,18 @@ def predict_weights(data, config, models, scaler, state=None, predictors=None):
         predictors = [
             PredictionSession(m, config.get("model_type", "ppo")) for m in models
         ]
-    if not stopped and not predictors:
+    if not stopped and not predictors and raw_target_weights is None:
         raise ValueError("At least one prediction session is required")
     # All policies compute a fresh target every day, even when no trade is due.
     # A latched safety stop needs no further model calls until explicit reset.
     raw_target = (
         np.zeros(len(data.assets))
         if stopped
-        else np.mean([p.predict(obs, env) for p in predictors], axis=0)
+        else (
+            np.array(raw_target_weights, dtype=float, copy=True)
+            if raw_target_weights is not None
+            else np.mean([p.predict(obs, env) for p in predictors], axis=0)
+        )
     )
     original_target = raw_target.copy()
     if not stopped:

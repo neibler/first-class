@@ -3,7 +3,6 @@
 import json
 import os
 import hashlib
-import secrets
 from pathlib import Path
 from copy import deepcopy
 from threading import RLock
@@ -18,9 +17,10 @@ from .backtest import performance
 from .accounting import equity_curve
 from .prediction import PredictionSession
 from .episode_clock import episode_clock, rebalance_phase
+from .session_registry import SessionRegistry
 
 
-class InvestmentService:
+class InvestmentService(SessionRegistry):
     def __init__(self, run=None):
         torch.set_num_threads(1)
         serving_file = Path(__file__).resolve().parents[2] / "config/serving.json"
@@ -61,7 +61,7 @@ class InvestmentService:
         self.episode_clocks = (
             saved_state.get("clocks", {}) if saved_state.get("version") == 2 else {}
         )
-        self.session_tokens = set(saved_state.get("session_tokens", []))
+        migrated_sessions = self._restore_sessions(saved_state)
         self._restore_execution_history(saved_state)
         self.execution_references = saved_state.get("execution_references", {})
         self.recurrent_sessions = {}
@@ -173,6 +173,10 @@ class InvestmentService:
             if not history.date.equals(self.histories["ppo"].date):
                 raise ValueError("Saved strategy dates differ")
 
+        expired_sessions = self._expire_sessions()
+        if migrated_sessions and not expired_sessions:
+            self._save_episode_state()
+
     def _restore_recurrent(self, records):
         for episode, record in records.items():
             if len(record["sessions"]) != len(self.models):
@@ -239,6 +243,7 @@ class InvestmentService:
             "latches": self.latches,
             "clocks": getattr(self, "episode_clocks", {}),
             "session_tokens": sorted(getattr(self, "session_tokens", set())),
+            "session_expires_at": getattr(self, "session_expires_at", {}),
             "execution_confirmations": getattr(self, "execution_confirmations", {}),
             "execution_history": getattr(self, "execution_history", {}),
             "recurrent": recurrent,
@@ -248,31 +253,6 @@ class InvestmentService:
         pending = self.latch_path.with_suffix(".pending")
         pending.write_text(json.dumps(payload, allow_nan=False), encoding="utf-8")
         pending.replace(self.latch_path)
-
-    def create_session(self):
-        """Issue a bearer capability; never accept client-chosen owner identities."""
-        with self.lock:
-            token = secrets.token_urlsafe(32)
-            self.session_tokens = getattr(self, "session_tokens", set())
-            digest = hashlib.sha256(token.encode()).hexdigest()
-            self.session_tokens.add(digest)
-            try:
-                self._save_episode_state()
-            except Exception:
-                self.session_tokens.discard(digest)
-                raise
-            return token
-
-    def _session_scope(self, token):
-        if token is None:
-            # Trusted in-process callers only. HTTP always supplies a capability.
-            return None
-        if not isinstance(token, str):
-            raise ValueError("Invalid inference session token")
-        digest = hashlib.sha256(token.encode()).hexdigest()
-        if digest not in getattr(self, "session_tokens", set()):
-            raise ValueError("Unknown inference session; create a session first")
-        return digest
 
     def optimize(
         self,
@@ -284,6 +264,7 @@ class InvestmentService:
         execution_confirmation=None,
     ):
         with self.lock:
+            self._expire_sessions()
             names = (
                 "latches",
                 "episode_clocks",
@@ -520,6 +501,7 @@ class InvestmentService:
                     state,
                     episode_id,
                     reset or new_cash or (not previous_clock and not supplied),
+                    confirmed=confirmation is not None,
                 )
             else:
                 prediction = predict_weights(
@@ -599,7 +581,7 @@ class InvestmentService:
         self._save_episode_state()
         return result
 
-    def _recurrent_prediction(self, data, state, episode_id, reset):
+    def _recurrent_prediction(self, data, state, episode_id, reset, confirmed=False):
         if state and state.get("safeguard_triggered", False):
             return predict_weights(
                 data, self.config, self.models, self.scaler, state, []
@@ -608,19 +590,77 @@ class InvestmentService:
         # Include the full supplied panel: changing a repeated observation is an error.
         from .data_loader import fingerprint
 
+        data_hash = fingerprint(data)
         signature = hashlib.sha256(
-            (fingerprint(data) + json.dumps(state, sort_keys=True)).encode()
+            (data_hash + json.dumps(state, sort_keys=True)).encode()
         ).hexdigest()
+        model_state = dict(state)
+        model_state.pop("last_executed_weights", None)
+        observation_signature = hashlib.sha256(
+            (data_hash + json.dumps(model_state, sort_keys=True)).encode()
+        ).hexdigest()
+        from .baseline_execution import enabled
+
         old = self.recurrent_sessions.get(episode_id)
+        if (
+            old
+            and old["date"] == date
+            and not reset
+            and (confirmed or not enabled(self.config))
+        ):
+            # The execution reference is not a model observation. Only an otherwise
+            # identical observation may reuse today's raw model output.
+            previous_state = dict(state)
+            previous_state["last_executed_weights"] = old["prediction"].get(
+                "last_executed_weights"
+            )
+            prior_signature = hashlib.sha256(
+                (data_hash + json.dumps(previous_state, sort_keys=True)).encode()
+            ).hexdigest()
+            legacy_state = dict(state)
+            legacy_state.pop("last_executed_weights", None)
+            without_reference = hashlib.sha256(
+                (data_hash + json.dumps(legacy_state, sort_keys=True)).encode()
+            ).hexdigest()
+            legacy_state["last_executed_weights"] = None
+            null_reference = hashlib.sha256(
+                (data_hash + json.dumps(legacy_state, sort_keys=True)).encode()
+            ).hexdigest()
+            if old.get("observation_signature") == observation_signature or old[
+                "signature"
+            ] in (prior_signature, without_reference, null_reference):
+                if (
+                    not enabled(self.config)
+                    and "last_executed_weights" in old["prediction"]
+                ):
+                    # Legacy policy does not use the execution reference. Preserve
+                    # its original threshold result instead of filtering it twice.
+                    prediction = deepcopy(old["prediction"])
+                else:
+                    raw = [
+                        old["prediction"]["raw_target_weights"][a] for a in data.assets
+                    ]
+                    prediction = predict_weights(
+                        data,
+                        self.config,
+                        self.models,
+                        self.scaler,
+                        state,
+                        raw_target_weights=raw,
+                    )
+                self.recurrent_sessions[episode_id] = {
+                    **old,
+                    "signature": signature,
+                    "prediction": deepcopy(prediction),
+                }
+                return prediction
         if old and old["date"] == date:
             old_signature = signature
             if "last_executed_weights" not in old["prediction"]:
                 legacy_state = dict(state)
                 legacy_state.pop("last_executed_weights", None)
                 old_signature = hashlib.sha256(
-                    (
-                        fingerprint(data) + json.dumps(legacy_state, sort_keys=True)
-                    ).encode()
+                    (data_hash + json.dumps(legacy_state, sort_keys=True)).encode()
                 ).hexdigest()
             if old["signature"] in (signature, old_signature):
                 prediction = deepcopy(old["prediction"])
@@ -667,6 +707,7 @@ class InvestmentService:
         self.recurrent_sessions[episode_id] = {
             "date": date,
             "signature": signature,
+            "observation_signature": observation_signature,
             "sessions": sessions,
             "prediction": deepcopy(prediction),
         }
