@@ -17,9 +17,10 @@ from .backtest import performance
 from .accounting import equity_curve
 from .prediction import PredictionSession
 from .episode_clock import episode_clock, rebalance_phase
+from .session_registry import SessionRegistry
 
 
-class InvestmentService:
+class InvestmentService(SessionRegistry):
     def __init__(self, run=None):
         torch.set_num_threads(1)
         serving_file = Path(__file__).resolve().parents[2] / "config/serving.json"
@@ -60,6 +61,10 @@ class InvestmentService:
         self.episode_clocks = (
             saved_state.get("clocks", {}) if saved_state.get("version") == 2 else {}
         )
+        metadata = saved_state if saved_state.get("version") == 2 else {}
+        migrated_sessions = self._restore_sessions(metadata)
+        self._restore_execution_history(metadata)
+        self.execution_references = metadata.get("execution_references", {})
         self.recurrent_sessions = {}
         single = (self.run / "run_spec.json").exists()
         if single:
@@ -169,6 +174,10 @@ class InvestmentService:
             if not history.date.equals(self.histories["ppo"].date):
                 raise ValueError("Saved strategy dates differ")
 
+        expired_sessions = self._expire_sessions()
+        if migrated_sessions and not expired_sessions:
+            self._save_episode_state()
+
     def _restore_recurrent(self, records):
         for episode, record in records.items():
             if len(record["sessions"]) != len(self.models):
@@ -192,6 +201,26 @@ class InvestmentService:
                 sessions.append(session)
             self.recurrent_sessions[episode] = {**record, "sessions": sessions}
 
+    def _restore_execution_history(self, saved):
+        """Migrate the latest known legacy confirmation without inventing lost IDs."""
+        self.execution_confirmations = deepcopy(
+            saved.get("execution_confirmations", {})
+        )
+        self.execution_history = deepcopy(saved.get("execution_history", {}))
+        for episode, latest in self.execution_confirmations.items():
+            history = self.execution_history.setdefault(episode, {})
+            record = history.setdefault(
+                latest["execution_id"],
+                {
+                    "confirmation": deepcopy(latest),
+                    "response": None,
+                },
+            )
+            if record["confirmation"] != latest:
+                raise ValueError(
+                    "Stored execution history conflicts with latest confirmation"
+                )
+
     def _save_episode_state(self):
         recurrent = {}
         for episode, record in getattr(self, "recurrent_sessions", {}).items():
@@ -213,15 +242,67 @@ class InvestmentService:
             "version": 2,
             "model_hash": getattr(self, "state_model_hash", None),
             "latches": self.latches,
-            "clocks": self.episode_clocks,
+            "clocks": getattr(self, "episode_clocks", {}),
+            "session_tokens": sorted(getattr(self, "session_tokens", set())),
+            "session_expires_at": getattr(self, "session_expires_at", {}),
+            "execution_confirmations": getattr(self, "execution_confirmations", {}),
+            "execution_history": getattr(self, "execution_history", {}),
             "recurrent": recurrent,
+            "execution_references": getattr(self, "execution_references", {}),
         }
         self.latch_path.parent.mkdir(parents=True, exist_ok=True)
         pending = self.latch_path.with_suffix(".pending")
         pending.write_text(json.dumps(payload, allow_nan=False), encoding="utf-8")
         pending.replace(self.latch_path)
 
-    def optimize(self, market=None, news=None, state=None):
+    def optimize(
+        self,
+        market=None,
+        news=None,
+        state=None,
+        *,
+        session_token=None,
+        execution_confirmation=None,
+    ):
+        with self.lock:
+            self._expire_sessions()
+            names = (
+                "latches",
+                "episode_clocks",
+                "execution_references",
+                "execution_confirmations",
+                "execution_history",
+            )
+            snapshot = {name: deepcopy(getattr(self, name, {})) for name in names}
+            # Sessions are never advanced in place; _recurrent_prediction clones
+            # LSTM arrays. Keep model objects shared rather than copying networks.
+            records = {
+                k: {**v, "prediction": deepcopy(v["prediction"])}
+                for k, v in getattr(self, "recurrent_sessions", {}).items()
+            }
+            try:
+                return self._optimize(
+                    market,
+                    news,
+                    state,
+                    session_token=session_token,
+                    execution_confirmation=execution_confirmation,
+                )
+            except Exception:
+                for name, value in snapshot.items():
+                    setattr(self, name, value)
+                self.recurrent_sessions = records
+                raise
+
+    def _optimize(
+        self,
+        market=None,
+        news=None,
+        state=None,
+        *,
+        session_token=None,
+        execution_confirmation=None,
+    ):
         data = self.data
         source = self.data_source
         if market is not None:
@@ -238,13 +319,30 @@ class InvestmentService:
         elif news is not None:
             raise ValueError("news requires market in the same request")
         with self.lock:
+            from .baseline_execution import enabled
+
+            scope = self._session_scope(session_token)
+            new_cash = state is None
             supplied = state is not None
             state = dict(state) if state is not None else None
             if state is not None:
                 for flag in ("safeguard_triggered", "stopped", "reset_episode"):
                     if flag in state and type(state[flag]) is not bool:
                         raise ValueError(f"{flag} must be a boolean")
-            episode_id = state.get("episode_id", "default") if state else "default"
+            public_episode = state.get("episode_id", "default") if state else "default"
+            if (
+                not isinstance(public_episode, str)
+                or not public_episode
+                or len(public_episode) > 128
+            ):
+                raise ValueError("Invalid episode_id")
+            episode_id = (
+                public_episode
+                if scope is None
+                else json.dumps([scope, "episode", public_episode])
+            )
+            if new_cash:
+                episode_id = json.dumps([scope, "cash-preview", None])
             if state and state.get("reset_episode", False):
                 if (
                     state.get("stopped", False)
@@ -258,6 +356,82 @@ class InvestmentService:
                         "with zero MDD"
                     )
             reset = bool(state and state.get("reset_episode", False))
+            if reset and execution_confirmation is not None:
+                raise ValueError(
+                    "Reset and execution confirmation require separate requests"
+                )
+            confirmation = None
+            if execution_confirmation is not None:
+                if state is None:
+                    raise ValueError(
+                        "Execution confirmation requires actual portfolio state"
+                    )
+                confirmation = deepcopy(execution_confirmation)
+                if set(confirmation) != {"execution_id", "date", "weights"}:
+                    raise ValueError("Invalid execution confirmation fields")
+                if (
+                    not isinstance(confirmation["execution_id"], str)
+                    or not confirmation["execution_id"]
+                ):
+                    raise ValueError("Execution confirmation requires an execution_id")
+                if confirmation["date"] != state["date"]:
+                    raise ValueError(
+                        "Execution confirmation must describe the supplied state date"
+                    )
+                from .baseline_execution import weights as validate_weights
+
+                if set(confirmation["weights"]) != set(data.assets):
+                    raise ValueError("Execution confirmation assets mismatch")
+                validate_weights([confirmation["weights"][a] for a in data.assets])
+                if confirmation["weights"] != state["weights"]:
+                    raise ValueError(
+                        "Confirmed weights must match actual post-execution holdings"
+                    )
+                previous_confirmation = getattr(
+                    self, "execution_confirmations", {}
+                ).get(episode_id)
+                history = getattr(self, "execution_history", {}).get(episode_id, {})
+                record = history.get(confirmation["execution_id"])
+                # Recognize the latest legacy record before its first migration save.
+                if (
+                    record is None
+                    and previous_confirmation
+                    and (
+                        previous_confirmation["execution_id"]
+                        == confirmation["execution_id"]
+                    )
+                ):
+                    record = {"confirmation": previous_confirmation, "response": None}
+                if record is not None:
+                    if record["confirmation"] != confirmation:
+                        raise ValueError("Conflicting execution confirmation retry")
+                    if record["response"] is not None:
+                        # Confirmation retries are acknowledgements, not new inference.
+                        return deepcopy(record["response"])
+                    if previous_confirmation and (
+                        previous_confirmation["execution_id"]
+                        != confirmation["execution_id"]
+                    ):
+                        # A historical retry acknowledges an already applied event.
+                        # Never rewind holdings, the episode clock or recurrent memory.
+                        response = record["response"]
+                        if response is None:
+                            # Legacy state has no original response. Return the latest
+                            # saved view, never reconstruct a historical model decision.
+                            response = history[previous_confirmation["execution_id"]][
+                                "response"
+                            ]
+                        if response is None:
+                            raise ValueError(
+                                "Historical confirmation has no saved response"
+                            )
+                        return deepcopy(response)
+                if (
+                    previous_confirmation
+                    and confirmation["date"] < previous_confirmation["date"]
+                ):
+                    raise ValueError("Stale execution confirmation")
+                state["last_executed_weights"] = dict(confirmation["weights"])
             if self.latches.get(episode_id, False) and not reset:
                 if state is None:
                     raise ValueError(
@@ -276,13 +450,35 @@ class InvestmentService:
                 )
             self.episode_clocks = getattr(self, "episode_clocks", {})
             previous_clock = self.episode_clocks.get(episode_id)
+            cash_key = json.dumps([scope, "cash-preview", None])
+            if (
+                supplied
+                and scope is None
+                and public_episode == "default"
+                and not reset
+                and previous_clock is None
+            ):
+                preview_clock = self.episode_clocks.get(cash_key)
+                if preview_clock and (
+                    state.get("episode_start_date")
+                    == preview_clock["episode_start_date"]
+                    or (scope is None and state.get("episode_start_date") is None)
+                ):
+                    previous_clock = dict(preview_clock)
+                    preview = getattr(self, "recurrent_sessions", {}).get(cash_key)
+                    if preview is not None:
+                        self.recurrent_sessions[episode_id] = {
+                            **preview,
+                            "prediction": deepcopy(preview["prediction"]),
+                        }
             if (
                 previous_clock
                 and not supplied
+                and not new_cash
                 and previous_clock["date"] != str(data.dates[-1])[:10]
             ):
                 raise ValueError("Supply actual portfolio state to advance an episode")
-            clock = episode_clock(data.dates, state, previous_clock, reset)
+            clock = episode_clock(data.dates, state, previous_clock, reset or new_cash)
             if state is None:
                 state = {
                     "date": str(data.dates[-1])[:10],
@@ -296,13 +492,27 @@ class InvestmentService:
             state.update(
                 {k: clock[k] for k in ("episode_start_date", "episode_elapsed_bars")}
             )
+            self.execution_references = getattr(self, "execution_references", {})
+            if enabled(self.config) and reset:
+                if any((state.get("last_executed_weights") or {}).values()):
+                    raise ValueError("Reset requires zero last_executed_weights")
+            if enabled(self.config) and state.get("last_executed_weights") is None:
+                if reset or new_cash:
+                    state["last_executed_weights"] = {a: 0.0 for a in data.assets}
+                elif supplied and episode_id in self.execution_references:
+                    state["last_executed_weights"] = self.execution_references[
+                        episode_id
+                    ]
+                elif not any(state["weights"].values()):
+                    state["last_executed_weights"] = {a: 0.0 for a in data.assets}
             recurrent = self.config.get("model_type") == "recurrent_ppo"
             if recurrent:
                 prediction = self._recurrent_prediction(
                     data,
                     state,
                     episode_id,
-                    reset or (not previous_clock and not supplied),
+                    reset or new_cash or (not previous_clock and not supplied),
+                    confirmed=confirmation is not None,
                 )
             else:
                 prediction = predict_weights(
@@ -311,11 +521,30 @@ class InvestmentService:
             if not supplied:
                 prediction["mode"] = "new_portfolio_cash"
             # Persist after validation; an API restart must not clear a stop.
+            if reset:
+                self.execution_references.pop(episode_id, None)
+                getattr(self, "execution_confirmations", {}).pop(episode_id, None)
+                getattr(self, "execution_history", {}).pop(episode_id, None)
+            if confirmation is not None:
+                self.execution_references[episode_id] = dict(confirmation["weights"])
+                self.execution_confirmations = getattr(
+                    self, "execution_confirmations", {}
+                )
+                self.execution_history = getattr(self, "execution_history", {})
+                history = self.execution_history.setdefault(episode_id, {})
+                if previous_confirmation and not reset:
+                    history.setdefault(
+                        previous_confirmation["execution_id"],
+                        {
+                            "confirmation": deepcopy(previous_confirmation),
+                            "response": None,
+                        },
+                    )
+                self.execution_confirmations[episode_id] = deepcopy(confirmation)
             self.latches[episode_id] = prediction["safeguard_triggered"]
             self.episode_clocks[episode_id] = clock
-            self._save_episode_state()
         current = state["weights"] if state else {asset: 0.0 for asset in data.assets}
-        return {
+        result = {
             "schema_version": "3.0",
             "model_version": self.run_id,
             "data_source": source,
@@ -323,7 +552,7 @@ class InvestmentService:
             "as_of": prediction["as_of_date"],
             "status": prediction["status"],
             "safeguard_triggered": prediction["safeguard_triggered"],
-            "episode_id": episode_id,
+            "episode_id": public_episode,
             "episode_start_date": clock["episode_start_date"],
             "episode_elapsed_bars": clock["episode_elapsed_bars"],
             "rebalance_phase": rebalance_phase(
@@ -337,6 +566,7 @@ class InvestmentService:
                 "first_return_end_delay_trading_bars"
             ],
             "mode": prediction["mode"],
+            "last_executed_weights": prediction["last_executed_weights"],
             "target_weights": prediction["weights"],
             "model_target_weights": prediction["model_target_weights"],
             "raw_target_weights": prediction["raw_target_weights"],
@@ -352,7 +582,17 @@ class InvestmentService:
             "is_order": False,
         }
 
-    def _recurrent_prediction(self, data, state, episode_id, reset):
+        if confirmation is not None:
+            record = self.execution_history[episode_id].setdefault(
+                confirmation["execution_id"],
+                {"confirmation": deepcopy(confirmation), "response": None},
+            )
+            if record["response"] is None:
+                record["response"] = deepcopy(result)
+        self._save_episode_state()
+        return result
+
+    def _recurrent_prediction(self, data, state, episode_id, reset, confirmed=False):
         if state and state.get("safeguard_triggered", False):
             return predict_weights(
                 data, self.config, self.models, self.scaler, state, []
@@ -361,12 +601,91 @@ class InvestmentService:
         # Include the full supplied panel: changing a repeated observation is an error.
         from .data_loader import fingerprint
 
+        data_hash = fingerprint(data)
         signature = hashlib.sha256(
-            (fingerprint(data) + json.dumps(state, sort_keys=True)).encode()
+            (data_hash + json.dumps(state, sort_keys=True)).encode()
         ).hexdigest()
+        model_state = dict(state)
+        model_state.pop("last_executed_weights", None)
+        observation_signature = hashlib.sha256(
+            (data_hash + json.dumps(model_state, sort_keys=True)).encode()
+        ).hexdigest()
+        from .baseline_execution import enabled
+
         old = self.recurrent_sessions.get(episode_id)
-        if old and old["date"] == date and old["signature"] == signature:
-            return deepcopy(old["prediction"])
+        if (
+            old
+            and old["date"] == date
+            and not reset
+            and (confirmed or not enabled(self.config))
+        ):
+            # The execution reference is not a model observation. Only an otherwise
+            # identical observation may reuse today's raw model output.
+            previous_state = dict(state)
+            previous_state["last_executed_weights"] = old["prediction"].get(
+                "last_executed_weights"
+            )
+            prior_signature = hashlib.sha256(
+                (data_hash + json.dumps(previous_state, sort_keys=True)).encode()
+            ).hexdigest()
+            legacy_state = dict(state)
+            legacy_state.pop("last_executed_weights", None)
+            without_reference = hashlib.sha256(
+                (data_hash + json.dumps(legacy_state, sort_keys=True)).encode()
+            ).hexdigest()
+            legacy_state["last_executed_weights"] = None
+            null_reference = hashlib.sha256(
+                (data_hash + json.dumps(legacy_state, sort_keys=True)).encode()
+            ).hexdigest()
+            if old.get("observation_signature") == observation_signature or old[
+                "signature"
+            ] in (prior_signature, without_reference, null_reference):
+                if (
+                    not enabled(self.config)
+                    and "last_executed_weights" in old["prediction"]
+                ):
+                    # Legacy policy does not use the execution reference. Preserve
+                    # its original threshold result instead of filtering it twice.
+                    prediction = deepcopy(old["prediction"])
+                else:
+                    raw = [
+                        old["prediction"]["raw_target_weights"][a] for a in data.assets
+                    ]
+                    prediction = predict_weights(
+                        data,
+                        self.config,
+                        self.models,
+                        self.scaler,
+                        state,
+                        raw_target_weights=raw,
+                    )
+                self.recurrent_sessions[episode_id] = {
+                    **old,
+                    "signature": signature,
+                    "prediction": deepcopy(prediction),
+                }
+                return prediction
+        if old and old["date"] == date:
+            old_signature = signature
+            if "last_executed_weights" not in old["prediction"]:
+                legacy_state = dict(state)
+                legacy_state.pop("last_executed_weights", None)
+                old_signature = hashlib.sha256(
+                    (data_hash + json.dumps(legacy_state, sort_keys=True)).encode()
+                ).hexdigest()
+            if old["signature"] in (signature, old_signature):
+                prediction = deepcopy(old["prediction"])
+                if "last_executed_weights" not in prediction:
+                    from .baseline_execution import weights as validate_weights
+
+                    reference = state.get("last_executed_weights") or state["weights"]
+                    if set(reference) != set(data.assets):
+                        raise ValueError("Cached reference assets mismatch")
+                    validate_weights([reference[a] for a in data.assets])
+                    prediction["last_executed_weights"] = dict(reference)
+                    old["prediction"] = deepcopy(prediction)
+                    old["signature"] = signature
+                return prediction
         if reset:
             old = None
         if old:
@@ -399,6 +718,7 @@ class InvestmentService:
         self.recurrent_sessions[episode_id] = {
             "date": date,
             "signature": signature,
+            "observation_signature": observation_signature,
             "sessions": sessions,
             "prediction": deepcopy(prediction),
         }

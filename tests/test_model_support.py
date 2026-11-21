@@ -179,7 +179,10 @@ def test_recurrent_service_isolates_episodes_and_repeated_requests(tmp_path):
     )
     obj.optimize(state=s)
     assert obj.models[0].calls[-1] == (None, True)
-    assert set(obj.recurrent_sessions) == {"default", "other"}
+    assert set(obj.recurrent_sessions) == {
+        json.dumps([None, "cash-preview", None]),
+        "other",
+    }
     s["reset_episode"] = False
     with pytest.raises(ValueError, match="consecutive"):
         obj.optimize(state=s)
