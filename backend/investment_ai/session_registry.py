@@ -69,10 +69,14 @@ class SessionRegistry:
         expired = [
             key for key in self.session_tokens if self.session_expires_at[key] <= now()
         ]
+        if expired:
+            self._expiry_cleanup_pending = True
         for digest in expired:
             self._discard_session(digest)
-        if expired:
+        # Keep expired tokens invalid in memory, but retry failed durable cleanup.
+        if getattr(self, "_expiry_cleanup_pending", False):
             self._save_episode_state()
+            self._expiry_cleanup_pending = False
         return bool(expired)
 
     def _allocate_session(self, persist):

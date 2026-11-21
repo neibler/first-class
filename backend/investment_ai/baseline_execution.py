@@ -115,7 +115,7 @@ def executable_target(raw, current, config):
     if np.count_nonzero(current > EPS) > limit:
         raise ValueError("Existing holdings exceed max_holdings")
     held = current > EPS
-    keep = held & (raw >= config.get("sell_threshold", 0.03))
+    keep = held & (raw > 0) & (raw >= config.get("sell_threshold", 0.03))
     new = np.flatnonzero(~held & (raw >= config.get("buy_threshold", 0.05)))
     new = new[np.argsort(-raw[new], kind="stable")]
     keep[new[: max(0, limit - int(keep.sum()))]] = True

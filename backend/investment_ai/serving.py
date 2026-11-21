@@ -61,9 +61,10 @@ class InvestmentService(SessionRegistry):
         self.episode_clocks = (
             saved_state.get("clocks", {}) if saved_state.get("version") == 2 else {}
         )
-        migrated_sessions = self._restore_sessions(saved_state)
-        self._restore_execution_history(saved_state)
-        self.execution_references = saved_state.get("execution_references", {})
+        metadata = saved_state if saved_state.get("version") == 2 else {}
+        migrated_sessions = self._restore_sessions(metadata)
+        self._restore_execution_history(metadata)
+        self.execution_references = metadata.get("execution_references", {})
         self.recurrent_sessions = {}
         single = (self.run / "run_spec.json").exists()
         if single:
@@ -355,6 +356,10 @@ class InvestmentService(SessionRegistry):
                         "with zero MDD"
                     )
             reset = bool(state and state.get("reset_episode", False))
+            if reset and execution_confirmation is not None:
+                raise ValueError(
+                    "Reset and execution confirmation require separate requests"
+                )
             confirmation = None
             if execution_confirmation is not None:
                 if state is None:
@@ -446,7 +451,13 @@ class InvestmentService(SessionRegistry):
             self.episode_clocks = getattr(self, "episode_clocks", {})
             previous_clock = self.episode_clocks.get(episode_id)
             cash_key = json.dumps([scope, "cash-preview", None])
-            if supplied and scope is None and not reset and previous_clock is None:
+            if (
+                supplied
+                and scope is None
+                and public_episode == "default"
+                and not reset
+                and previous_clock is None
+            ):
                 preview_clock = self.episode_clocks.get(cash_key)
                 if preview_clock and (
                     state.get("episode_start_date")

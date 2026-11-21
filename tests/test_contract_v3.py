@@ -1,3 +1,4 @@
+import hashlib
 import json
 from pathlib import Path
 from threading import RLock
@@ -278,7 +279,11 @@ def test_api_latches_recovered_episode_and_validates_news(monkeypatch, tmp_path)
     payload.update(portfolio_value=1.0, max_drawdown=0.0)
     result = client.post("/optimize", json={"state": payload, "session_token": token})
     assert result.status_code == 200 and result.json()["cash_weight"] == 1
-    assert any(json.loads(obj.latch_path.read_text())["latches"].values())
+    saved = json.loads(obj.latch_path.read_text())
+    episode_key = json.dumps(
+        [hashlib.sha256(token.encode()).hexdigest(), "episode", "test"]
+    )
+    assert saved["latches"][episode_key] is True
     frame, news = inputs()
     bad = client.post(
         "/optimize",

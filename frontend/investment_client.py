@@ -73,7 +73,13 @@ def load_portfolio(observations=None):
 
 
 def create_inference_session():
-    return _request("POST", "/inference-sessions")["session_token"]
+    response = _request("POST", "/inference-sessions")
+    token = response.get("session_token")
+    if not isinstance(token, str) or not token.strip():
+        raise InvestmentAPIError(
+            "Invalid inference session response: missing session token"
+        )
+    return token
 
 
 def optimize(

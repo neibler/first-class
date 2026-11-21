@@ -184,6 +184,8 @@ def test_invalid_confirmation_is_atomic(tmp_path):
     s.update(weights={"SPY": 0.0, "QQQ": 0.0}, portfolio_value=1.0, reset_episode=True)
     obj.optimize(state=s, session_token=token)
     before = obj.latch_path.read_bytes()
+    # Confirmations follow initialization; reset + confirmation is a separate error.
+    s["reset_episode"] = False
     with pytest.raises(ValueError, match="Confirmed"):
         obj.optimize(
             state=s,
