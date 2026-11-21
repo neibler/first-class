@@ -15,6 +15,8 @@ FastAPI 앱 생성 함수에서 투자 모델 생명주기를 관리하고 투�
 투자는 `/optimize`·`/backtest`를 사용합니다. 저장된 성과·SHAP 결과는 `/performance/*`에서
 조회할 수 있으며 화면 연결 상태와 실행 방법은 [성능 분석 안내](backend/performance/README.md)를 따릅니다.
 
+투자 추론의 연속 요청·재시도는 [세션 및 체결 확인 계약](docs/INFERENCE_SESSIONS.md)에 따라 `session_token`을 전달합니다.
+
 활성 모델의 저장 데이터를 읽는 대시보드용 API도 제공합니다(`backend/insights_api.py`, 학습·예측 없음).
 
 | API | 내용 |
@@ -314,3 +316,9 @@ python local_run.py train --config config/multi_model.json --model ppo --seed 22
 ```
 
 기본 Docker 이미지도 같은 검증된 training_inputs ZIP을 설치하여 Correlation에 사용합니다. 사용자 지정 runtime을 마운트하면 `python scripts/install_training_inputs.py --destination <해당 경로>`로 먼저 설치하세요. 모델은 별도로 설치/선택해야 합니다. 거래 정책 버전이 없는 이전 공유 모델은 새 추론 코드에서 거부됩니다. 해당 모델의 새 정책 학습본으로 공유 패키지를 갱신해야 합니다.
+
+
+### Low-churn 투자 실행 baseline
+
+새 실행 정책과 보상은 [baseline 안내](docs/LOW_CHURN_BASELINE.md)를 따릅니다.
+`config/low_churn_baseline.json`으로 선택하며 기존 공유 모델의 정책을 바꾸지 않습니다.

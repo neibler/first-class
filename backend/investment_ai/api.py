@@ -6,6 +6,7 @@ from typing import Literal
 from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field, StrictBool
 from .serving import InvestmentService
+from .session_registry import SessionCapacityError
 
 
 class Contract(BaseModel):
@@ -15,6 +16,7 @@ class Contract(BaseModel):
 class PortfolioState(Contract):
     date: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
     weights: dict[str, float]
+    last_executed_weights: dict[str, float] | None = None
     portfolio_value: float = Field(gt=0)
     peak_value: float = Field(gt=0)
     max_drawdown: float = Field(ge=0, le=1)
@@ -27,7 +29,15 @@ class PortfolioState(Contract):
     reset_episode: StrictBool = False
 
 
+class ExecutionConfirmation(Contract):
+    execution_id: str = Field(min_length=1, max_length=128)
+    date: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
+    weights: dict[str, float]
+
+
 class OptimizeRequest(Contract):
+    session_token: str | None = Field(default=None, min_length=32, max_length=128)
+    execution_confirmation: ExecutionConfirmation | None = None
     market: list[dict] | None = Field(default=None, min_length=1, max_length=100000)
     news: list[dict] | None = Field(default=None, max_length=100000)
     state: PortfolioState | None = None
@@ -41,6 +51,7 @@ class HealthResponse(Contract):
 
 
 class OptimizeResponse(Contract):
+    session_token: str | None = None
     schema_version: str
     model_version: str
     data_source: str
@@ -65,6 +76,7 @@ class OptimizeResponse(Contract):
     model_target_weights: dict[str, float] = Field(default_factory=dict)
     rebalance_reasons: list[str] = Field(default_factory=list)
     should_rebalance: bool = False
+    last_executed_weights: dict[str, float] = Field(default_factory=dict)
     target_weights: dict[str, float]
     current_weights: dict[str, float]
     cash_weight: float
@@ -93,6 +105,19 @@ class PathRow(Contract):
 
 
 class Metrics(Contract):
+    rebalance_count: int = 0
+    total_executed_turnover: float = 0.0
+    average_turnover_per_rebalance: float = 0.0
+    max_turnover_per_rebalance: float = 0.0
+    total_transaction_cost: float = 0.0
+    transaction_cost_initial_capital_ratio: float = 0.0
+    transaction_cost_final_value_ratio: float = 0.0
+    average_holdings_count: float | None = None
+    min_holdings_count: int | None = None
+    max_holdings_count: int | None = None
+    entry_count: int = 0
+    exit_count: int = 0
+    rebalance_reason_counts: dict[str, int] = Field(default_factory=dict)
     days: int
     total_return: float
     annualized_return: float
@@ -163,14 +188,46 @@ def create_app(run_dir=None):
         service()
         return health()
 
+    @app.post("/inference-sessions")
+    def create_inference_session():
+        try:
+            return {
+                "schema_version": "3.0",
+                "session_token": service().create_session(),
+            }
+        except SessionCapacityError as exc:
+            raise HTTPException(429, str(exc)) from exc
+
     @app.post("/optimize", response_model=OptimizeResponse)
     def optimize(request: OptimizeRequest):
         try:
-            return service().optimize(
+            engine = service()
+            token = request.session_token
+            if token is None:
+                return engine.optimize_new_session(
+                    request.market,
+                    request.news,
+                    request.state.model_dump() if request.state else None,
+                    execution_confirmation=(
+                        request.execution_confirmation.model_dump()
+                        if request.execution_confirmation
+                        else None
+                    ),
+                )
+            result = engine.optimize(
                 request.market,
                 request.news,
                 request.state.model_dump() if request.state else None,
+                session_token=token,
+                execution_confirmation=(
+                    request.execution_confirmation.model_dump()
+                    if request.execution_confirmation
+                    else None
+                ),
             )
+            return {**result, "session_token": token}
+        except SessionCapacityError as exc:
+            raise HTTPException(429, str(exc)) from exc
         except (ValueError, KeyError, TypeError, OverflowError) as exc:
             raise HTTPException(422, str(exc)) from exc
 

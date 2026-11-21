@@ -13,6 +13,9 @@ ROUNDING_TOLERANCE = 1e-12
 
 
 def validate_rebalancing(config):
+    from .baseline_execution import validate
+
+    validate(config)
     limit = config.get("max_holdings")
     if limit is not None and (
         isinstance(limit, bool) or not isinstance(limit, int) or limit < 1

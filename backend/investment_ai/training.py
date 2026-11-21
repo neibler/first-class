@@ -14,7 +14,7 @@ from .data_loader import fingerprint
 from .portfolio_env import PortfolioEnv
 from .preprocessing import FeatureScaler
 from .records import asset_rows
-from .rebalancing import REBALANCE_POLICY
+from .baseline_execution import policy_for
 from .checkpoints import publish_checkpoint, resolve_checkpoint
 from .settings import validate_config
 from .episode_clock import PHASE_DEFINITION
@@ -90,7 +90,7 @@ def schema_for(data, config):
     return {
         "version": SCHEMA_VERSION,
         "phase_definition": PHASE_DEFINITION,
-        "execution_policy": REBALANCE_POLICY,
+        "execution_policy": policy_for(config),
         "feature_names": feature_names(data, config),
         "execution_delay": 1,
         "timing": "observe_close_t_execute_close_t_plus_1",
@@ -137,7 +137,7 @@ def train_model(data, config, train_end, seed, output, resume=None, run_spec=Non
         saved_schema = json.loads(
             (Path(resume) / "schema.json").read_text(encoding="utf-8")
         )
-        if saved_schema.get("execution_policy") != REBALANCE_POLICY:
+        if saved_schema.get("execution_policy") != policy_for(config):
             raise ValueError("Incompatible execution policy; retrain the model")
         if saved_schema.get("phase_definition") != PHASE_DEFINITION:
             raise ValueError("Unverified phase definition; retrain the model")
@@ -215,7 +215,7 @@ def train_model(data, config, train_end, seed, output, resume=None, run_spec=Non
             output,
             {
                 "schema_version": SCHEMA_VERSION,
-                "execution_policy": REBALANCE_POLICY,
+                "execution_policy": policy_for(config),
                 "model_type": config.get("model_type", "ppo"),
                 "reward_type": config["reward"],
                 "timesteps": config["total_timesteps"],
@@ -242,7 +242,7 @@ def load_bundle(path, data=None, exact_data=False):
     path = Path(path)
     config = json.loads((path / "config.json").read_text(encoding="utf-8"))
     schema = json.loads((path / "schema.json").read_text(encoding="utf-8"))
-    if schema.get("execution_policy") != REBALANCE_POLICY:
+    if schema.get("execution_policy") != policy_for(config):
         raise ValueError("Incompatible execution policy; retrain the model")
     if schema.get("phase_definition") != PHASE_DEFINITION:
         raise ValueError("Unverified phase definition; retrain the model")
