@@ -1,3 +1,4 @@
+import hashlib
 import json
 from pathlib import Path
 from threading import RLock
@@ -274,10 +275,15 @@ def test_api_latches_recovered_episode_and_validates_news(monkeypatch, tmp_path)
     first = client.post("/optimize", json={"state": payload})
     assert first.status_code == 200, first.text
     assert first.json()["safeguard_triggered"]
+    token = first.json()["session_token"]
     payload.update(portfolio_value=1.0, max_drawdown=0.0)
-    result = client.post("/optimize", json={"state": payload})
+    result = client.post("/optimize", json={"state": payload, "session_token": token})
     assert result.status_code == 200 and result.json()["cash_weight"] == 1
-    assert json.loads(obj.latch_path.read_text())["latches"]["test"]
+    saved = json.loads(obj.latch_path.read_text())
+    episode_key = json.dumps(
+        [hashlib.sha256(token.encode()).hexdigest(), "episode", "test"]
+    )
+    assert saved["latches"][episode_key] is True
     frame, news = inputs()
     bad = client.post(
         "/optimize",
@@ -288,7 +294,12 @@ def test_api_latches_recovered_episode_and_validates_news(monkeypatch, tmp_path)
     )
     assert bad.status_code == 422
     payload.update(reset_episode=True)
-    assert client.post("/optimize", json={"state": payload}).status_code == 422
+    assert (
+        client.post(
+            "/optimize", json={"state": payload, "session_token": token}
+        ).status_code
+        == 422
+    )
 
     class Model:
         def predict(self, *a, **kw):
@@ -296,5 +307,5 @@ def test_api_latches_recovered_episode_and_validates_news(monkeypatch, tmp_path)
 
     obj.models = [Model()]
     payload["weights"] = {"SPY": 0.0, "QQQ": 0.0}
-    reset = client.post("/optimize", json={"state": payload})
+    reset = client.post("/optimize", json={"state": payload, "session_token": token})
     assert reset.status_code == 200 and not reset.json()["safeguard_triggered"]

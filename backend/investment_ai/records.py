@@ -29,6 +29,10 @@ def asset_rows(row, assets):
             "rebalance_reason",
             "portfolio_weight_distance",
             "max_risk_score",
+            "desired_turnover",
+            "executed_turnover",
+            "transaction_cost",
+            "holdings_count",
         ]:
             if key in row:
                 item[key] = row[key]
