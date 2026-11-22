@@ -125,6 +125,7 @@ class Metrics(Contract):
     sharpe: float | None
     max_drawdown: float
     total_turnover: float
+    total_trade_notional_ratio: float | None = None
     total_cost_initial_capital: float
     cash_days: int
     stop_triggered: bool
