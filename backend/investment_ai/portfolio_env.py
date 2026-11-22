@@ -208,14 +208,14 @@ class PortfolioEnv(gym.Env):
                 turnover, cost = planned_fill
             else:
                 executable = target.copy()
-                desired_turnover = portfolio_weight_distance(previous, target)
+                desired_turnover = baseline.turnover(previous, target, self.config)
                 turnover = float(np.abs(target - previous).sum())
                 cost = turnover * self.rate
             cost_amount = self.value * cost
             self.value *= 1 - cost
             self.weights = executable.copy()
             normal_post = self.weights.copy()
-            executed_turnover = portfolio_weight_distance(previous, self.weights)
+            executed_turnover = baseline.turnover(previous, self.weights, self.config)
             entries = int(
                 np.count_nonzero(
                     (previous <= baseline.EPS) & (self.weights > baseline.EPS)
@@ -241,7 +241,9 @@ class PortfolioEnv(gym.Env):
             exit_cost = exit_turnover * self.rate
             cost_amount += self.value * exit_cost
             self.value *= 1 - exit_cost
-            executed_turnover += 0.5 * exit_turnover
+            executed_turnover += baseline.turnover(
+                self.weights, np.zeros(self.n_assets), self.config
+            )
             exits += int(np.count_nonzero(self.weights > baseline.EPS))
             self.weights = np.zeros(self.n_assets)
             if exit_turnover > 0:
@@ -271,8 +273,13 @@ class PortfolioEnv(gym.Env):
             ),
             "desired_turnover": desired_turnover,
             "executed_turnover": executed_turnover,
-            "normal_executed_turnover": portfolio_weight_distance(
-                previous, normal_post
+            "normal_executed_turnover": baseline.turnover(
+                previous, normal_post, self.config
+            ),
+            "turnover_definition": (
+                "cash_inclusive_one_way_v2"
+                if self.config.get("execution_policy") == baseline.CASH_POLICY
+                else "etf_half_l1_v1"
             ),
             "transaction_cost": cost_amount,
             "holdings_count": int(np.count_nonzero(self.weights > baseline.EPS)),

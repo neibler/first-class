@@ -1,7 +1,8 @@
 # Low-churn execution baseline
 
 새 설정: `config/low_churn_baseline.json`. 기존 multi_model.json과 저장된 모델은 변경하지 않습니다.
-정책 버전: `executed_drift_capped_hysteresis_v1`.
+정책 버전: `executed_drift_capped_hysteresis_cash_v2`.
+기존 `executed_drift_capped_hysteresis_v1` Bundle은 ETF-only turnover를 유지합니다. 새 PPO 실험은 새 설정으로 학습하세요.
 기존 `monthly_risk_distance_filtered_v2` 모델은 기존 방식으로 평가/추론합니다.
 새 baseline은 새로 학습해야 합니다. 기존 bundle 설정/스키마를 수동 수정하지 마세요.
 코드 변경 전 체크포인트의 resume는 기존 source_hash 검증 때문에 거부될 수 있습니다.
@@ -24,8 +25,12 @@
 
 ## 현금과 최대 보유 수
 
-거리/보상 turnover는 요청한 ETF 벡터의 0.5*L1입니다. 현금은 별도 자산 차원에 추가하지 않습니다.
-따라서 현금 100%에서 ETF 30%를 매수하면 turnover는 15%이며 현금 70%가 남습니다.
+트리거 distance는 현재 실제 ETF 비중과 마지막 체결 ETF 비중 사이의 0.5*L1을 유지합니다.
+거래 turnover는 `0.5 * (ETF 절대 비중 변화 합 + 현금 절대 비중 변화)`입니다.
+현금은 `1 - ETF 비중 합`으로 계산하며 observation/action 차원에 추가하지 않습니다.
+현금 100%에서 ETF 30%를 매수하면 turnover는 30%입니다. cap 15%에서는 ETF 총 편입 비중이 15%로 제한됩니다.
+같은 정의를 desired, cap, executed, reward penalty, 평가 통계에 적용합니다. MDD 청산은 cap보다 우선합니다.
+거래 후 수수료로 MDD가 발동하면 정상 거래와 긴급 청산의 turnover를 각각 계산해 합산합니다.
 초기 진입도 cap 예외가 아닙니다. 월별/뉴스 조건이 없으면 초기 현금 상태를 유지합니다.
 적격 ETF가 없으면 현금 목표가 가능합니다. 가장 큰 ETF를 강제 편입하지 않습니다.
 기존 적격 보유 종목을 우선 유지합니다. 7종목이 모두 퇴출 기준 이상이면 신규 편입을 보류합니다.
@@ -67,3 +72,19 @@ entry_count, exit_count, rebalance_trigger, distance, 기존 비용 및 거래 �
 초기자본은 기존 환경의 1.0 정규화 단위입니다. 원화 금액은 초기 투자금액을 곱합니다.
 안전장치 후 현금 유지 기간의 거래/편입/퇴출/비용은 0으로 기록합니다.
 벤치마크의 기존 buy-and-hold/동일비중 정의는 유지합니다.
+
+
+## PPO 실험 전 검증
+
+```powershell
+.\.venv312_e\Scripts\python.exe -m pytest tests/test_cash_turnover.py tests/test_low_churn_baseline.py -q
+if ($LASTEXITCODE -ne 0) { throw "Turnover tests failed; do not start training" }
+```
+
+새 학습은 `config/low_churn_baseline.json`을 사용합니다. 기존 Bundle/체크포인트를 수정하거나 기존 학습을 새 정책으로 resume하지 않습니다.
+새 정책 history의 `turnover_definition`은 `cash_inclusive_one_way_v2`입니다.
+`executed_turnover`와 평가 `total_turnover`/`total_executed_turnover`는 현금 포함 one-way입니다.
+기존 history의 `turnover`/`exit_turnover`는 비용 계산용 매수·매도 체결금액 비율을 유지합니다.
+평가 `total_trade_notional_ratio`는 이 체결금액 비율의 합이며 one-way와 구분합니다.
+비용은 실제 ETF 체결금액에 수수료+슬리피지율을 적용하고 현금 비중 변화에 별도 수수료를 부과하지 않습니다.
+구버전 history/평가의 의미는 그대로 유지되므로 새 실험 표에는 같은 새 정책 결과만 비교하세요.
