@@ -69,7 +69,15 @@ def performance(frame, annual_rf=0.0):
         "annualized_volatility": float(std * np.sqrt(252)),
         "sharpe": sharpe_ratio(r, annual_rf),
         "max_drawdown": float(dd.max()),
-        "total_turnover": float((frame.turnover + frame.exit_turnover).sum()),
+        "total_turnover": (
+            float(executed.sum())
+            if "turnover_definition" in frame
+            and frame.turnover_definition.eq("cash_inclusive_one_way_v2").all()
+            else float((frame.turnover + frame.exit_turnover).sum())
+        ),
+        "total_trade_notional_ratio": float(
+            (frame.turnover + frame.exit_turnover).sum()
+        ),
         "total_cost_initial_capital": float(frame.cost_amount.sum()),
         "cash_days": int((frame.cash_weight == 1).sum()),
         "stop_triggered": bool((frame.stop_reason == "max_drawdown").any()),

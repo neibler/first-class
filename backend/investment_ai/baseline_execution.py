@@ -3,18 +3,19 @@
 import numpy as np
 
 POLICY = "executed_drift_capped_hysteresis_v1"
+CASH_POLICY = "executed_drift_capped_hysteresis_cash_v2"
 EPS = 1e-12
 
 
 def enabled(config):
-    return config.get("execution_policy") == POLICY
+    return config.get("execution_policy") in (POLICY, CASH_POLICY)
 
 
 def policy_for(config):
     from .rebalancing import REBALANCE_POLICY
 
     policy = config.get("execution_policy", REBALANCE_POLICY)
-    if policy not in (REBALANCE_POLICY, POLICY):
+    if policy not in (REBALANCE_POLICY, POLICY, CASH_POLICY):
         raise ValueError("Unsupported execution_policy")
     return policy
 
@@ -53,6 +54,24 @@ def weights(value):
     ):
         raise ValueError("Invalid actual weights")
     return a.copy()
+
+
+def cash_turnover(current, target):
+    """One-way weight turnover including residual cash, separate from fill fees."""
+    current, target = weights(current), weights(target)
+    if current.shape != target.shape:
+        raise ValueError("Turnover weights shape mismatch")
+    cash_before = max(0.0, 1.0 - float(current.sum()))
+    cash_after = max(0.0, 1.0 - float(target.sum()))
+    return float(0.5 * (np.abs(target - current).sum() + abs(cash_after - cash_before)))
+
+
+def turnover(current, target, config):
+    from .rebalancing import portfolio_weight_distance
+
+    if config.get("execution_policy") == CASH_POLICY:
+        return cash_turnover(current, target)
+    return portfolio_weight_distance(current, target)
 
 
 def normalize_target(value):
@@ -104,7 +123,6 @@ def executable_target(raw, current, config):
     If proportional partial exits still occupy slots, defer new entries. There
     is no order queue: the next trigger recalculates everything from scratch.
     """
-    from .rebalancing import portfolio_weight_distance
 
     raw, current = normalize_target(raw), weights(current)
     if raw.shape != current.shape or not np.isclose(raw.sum(), 1):
@@ -122,11 +140,11 @@ def executable_target(raw, current, config):
     desired = np.where(keep, raw, 0.0)
     if desired.sum() > 0:
         desired /= desired.sum()
-    desired_turnover = portfolio_weight_distance(current, desired)
+    desired_turnover = turnover(current, desired, config)
     cap = config.get("max_rebalance_turnover", 0.15)
 
     def adjust(target):
-        distance = portfolio_weight_distance(current, target)
+        distance = turnover(current, target, config)
         alpha = min(1.0, cap / distance) if distance > EPS else 0.0
         return current + alpha * (target - current)
 
@@ -142,19 +160,19 @@ def executable_target(raw, current, config):
     # interpolation, then recheck the final executable portfolio.
     dust = (adjusted <= EPS) & (adjusted > 0)
     if dust.any():
-        reserved = float(current[dust].sum()) * 0.5
         clean_current = current.copy()
         clean_current[dust] = 0.0
+        reserved = turnover(current, clean_current, config)
         clean_target = deferred.copy()
         clean_target[dust] = 0.0
-        distance = portfolio_weight_distance(clean_current, clean_target)
+        distance = turnover(clean_current, clean_target, config)
         alpha = min(1.0, max(0.0, cap - reserved) / distance) if distance > 0 else 0.0
         adjusted = clean_current + alpha * (clean_target - clean_current)
         adjusted[adjusted <= EPS] = 0.0
     weights(adjusted)
     if np.count_nonzero(adjusted > EPS) > limit:
         raise ValueError("Executable holdings exceed max_holdings")
-    if portfolio_weight_distance(current, adjusted) > cap + EPS:
+    if turnover(current, adjusted, config) > cap + EPS:
         raise ValueError("Executable turnover exceeds cap after dust cleanup")
     return desired, adjusted, desired_turnover
 

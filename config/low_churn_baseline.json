@@ -132,7 +132,7 @@
       "test_end": "2025-12-31"
     }
   ],
-  "execution_policy": "executed_drift_capped_hysteresis_v1",
+  "execution_policy": "executed_drift_capped_hysteresis_cash_v2",
   "portfolio_distance_threshold": 0.1,
   "turnover_penalty_lambda": 0.003,
   "max_rebalance_turnover": 0.15,
