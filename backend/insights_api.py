@@ -163,8 +163,16 @@ def rebalancing(
     history = saved_history(service, "ppo", observations)
     assets = service.config["assets"]
     rebalanced = history[history.rebalanced.astype(bool)]
+    # A Safe-Guard liquidation is recorded as turnover=0 plus exit_turnover; count
+    # both, as backtest.py does for total_turnover. Ordinary days are unchanged.
+    exits = (
+        rebalanced["exit_turnover"]
+        if "exit_turnover" in rebalanced
+        else pd.Series(0.0, index=rebalanced.index)
+    )
+    traded = rebalanced.turnover + exits
     events = []
-    for _, row in rebalanced.iloc[::-1].head(limit).iterrows():
+    for index, row in rebalanced.iloc[::-1].head(limit).iterrows():
         changes = [
             {
                 "ticker": asset,
@@ -186,7 +194,7 @@ def rebalancing(
                 "reasons": (
                     [] if pd.isna(reason) else [r for r in str(reason).split("|") if r]
                 ),
-                "turnover": float(row.turnover),
+                "turnover": float(traded[index]),
                 "cash_weight": float(row.cash_weight),
                 "changes": changes,
             }
@@ -196,9 +204,7 @@ def rebalancing(
         "as_of": str(history.date.iloc[-1]),
         "observations": len(history),
         "rebalanced_days": len(rebalanced),
-        "average_turnover": (
-            float(rebalanced.turnover.mean()) if len(rebalanced) else 0.0
-        ),
+        "average_turnover": float(traded.mean()) if len(rebalanced) else 0.0,
         "min_change": min_change,
         "events": events,
     }
@@ -217,7 +223,9 @@ def close_prices(service, symbol, dates):
         index=pd.to_datetime(rows["date"]).dt.strftime("%Y-%m-%d"),
     )
     closes = closes[~closes.index.duplicated()].reindex(dates)
-    return [float(v) if np.isfinite(v) else None for v in closes.to_numpy()]
+    # A price must be finite and positive; 0 or negative is reported as missing,
+    # matching what the dashboard client accepts.
+    return [float(v) if np.isfinite(v) and v > 0 else None for v in closes.to_numpy()]
 
 
 @router.get("/assets/{ticker}/history", response_model=AssetHistoryResponse)

@@ -186,6 +186,30 @@ def test_blank_csv_close_becomes_null_without_failing(client, service, tmp_path)
     assert [r["close"] for r in response.json()["rows"]] == [103.5, None, 105.5]
 
 
+def test_safeguard_liquidation_counts_in_turnover(client, service):
+    frame = service.histories["ppo"]
+    frame["exit_turnover"] = 0.0
+    # The last day sells everything for the Safe-Guard: turnover 0, exit 1.
+    frame.loc[9, ["turnover", "exit_turnover"]] = [0.0, 1.0]
+    body = client.get("/rebalancing", params={"limit": 2}).json()
+    liquidation, ordinary = body["events"]
+    assert liquidation["turnover"] == 1.0
+    assert ordinary["turnover"] == pytest.approx(frame.loc[8, "turnover"])
+    expected = (frame.turnover + frame.exit_turnover).mean()
+    assert body["average_turnover"] == pytest.approx(expected)
+
+
+def test_non_positive_close_becomes_null(client, service):
+    frame = service.market_frame
+    spy = frame["ticker"] == "SPY"
+    days = frame.loc[spy, "date"].iloc[-3:].index
+    frame.loc[days[0], "close"] = 0.0
+    frame.loc[days[1], "close"] = -5.0
+    response = client.get("/assets/SPY/history", params={"observations": 3})
+    assert response.status_code == 200
+    assert [r["close"] for r in response.json()["rows"]] == [None, None, 105.0]
+
+
 def test_asset_history_refuses_an_inference_data_override(client, monkeypatch):
     monkeypatch.setenv("INVESTMENT_AI_DATA", "other_market.parquet")
     response = client.get("/assets/SPY/history")

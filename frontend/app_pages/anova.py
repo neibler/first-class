@@ -24,10 +24,12 @@ try:
 except client.StatisticsAPIError as exc:
     st.warning(str(exc))
     if isinstance(exc, client.StatisticsPendingError):
-        # Waiting alone never creates the file; name the step for the operator.
+        # run_analysis reads run directories, not the shared serving bundle, so
+        # there is no self-service step yet; say who the result is waiting on.
         st.caption(
-            "운영 담당: 성능 분석 도구(`backend.performance.run_analysis`)로 현재 모델의 "
-            "분석 결과를 만들고 서버의 결과 폴더(RESULTS_DIR)에 연결하면 표시됩니다."
+            "운영 담당: 현재 성능 분석 도구는 이 모델 형식을 아직 지원하지 않아, "
+            "성능 분석 담당의 현재 모델 기준 결과를 기다리는 중입니다. 결과가 서버의 "
+            "결과 폴더(RESULTS_DIR)에 연결되면 이 화면에 표시됩니다."
         )
 else:
     if result.unsupported_count:

@@ -76,7 +76,7 @@ def test_portfolio_cards_use_negative_drawdown(page):
 def test_portfolio_shows_rebalancing_changes_from_the_api(page):
     assert page.selectbox(key="rebalance_date").value == "2026-09-30"
     text = " ".join(m.value for m in page.markdown)
-    assert "현재 비중이 AI 목표 비중과 기준 이상 달라져서" in text
+    assert "비중 차이가 조정 기준 이상 벌어져서" in text
     table = next(d.value for d in page.dataframe if "변화" in d.value.columns)
     assert list(table["자산"]) == ["SHY", "GLD"]
     assert list(table["변화"]) == ["-37%p", "+34%p"]
@@ -157,7 +157,10 @@ def test_anova_waiting_notice_names_the_operator_step(page, monkeypatch):
     page.switch_page("app_pages/anova.py").run()
     assert not page.exception
     assert any("아직 준비되지" in w.value for w in page.warning)
-    assert any("운영 담당" in c.value for c in page.caption)
+    notice = " ".join(c.value for c in page.caption)
+    assert "운영 담당" in notice and "아직 지원하지 않아" in notice
+    # No command that cannot analyze the shared serving bundle.
+    assert "run_analysis" not in notice
 
 
 def test_risk_page_survives_missing_backtest_and_shap(page, monkeypatch):

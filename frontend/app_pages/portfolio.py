@@ -18,7 +18,9 @@ from frontend.weight_format import format_weight
 # Register in the page's runtime, not a cached imported module. AppTest creates
 # separate runtimes; each needs its own component registration.
 REASONS = {
-    "portfolio_weight_distance": "현재 비중이 AI 목표 비중과 기준 이상 달라져서",
+    # Policy-neutral: older bundles compare against the AI target, the low-churn
+    # policy against the last executed weights.
+    "portfolio_weight_distance": "비중 차이가 조정 기준 이상 벌어져서",
     "monthly": "월간 정기 점검일이라서",
     "risk_score": "뉴스 위험 점수가 기준을 넘어서",
     "mdd_stop": "손실 제한(Safe-Guard) 규칙이 발동해서",
