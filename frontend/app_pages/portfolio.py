@@ -1,32 +1,21 @@
-"""Portfolio overview: one return series drives the flight path and the cards."""
+"""Beginner first page: how the portfolio did, what it holds, what each ETF is.
+
+Per-ETF analysis and the portfolio report (why weights moved, risk, comparison,
+calculation notes) have their own pages, so this page stays short and easy.
+"""
 
 import streamlit as st
 
-from frontend.api_client import APIError
-from frontend.charts import allocation
-from frontend.insights_client import load_rebalancing
-from frontend.investment_client import (
-    InvestmentAPIError,
-    UnknownInvestmentSessionError,
-    load_portfolio,
-    optimize,
-    create_inference_session,
-)
-from frontend.ui import ASSETS, card, detail_link, page_heading
-from frontend.weight_format import format_weight
+from frontend.charts import ALLOCATION_PICK, allocation
+from frontend.etf_choice import open_on
+from frontend.guide import ETF_GUIDE
+from frontend.investment_client import InvestmentAPIError, load_portfolio
+from frontend.periods import ALL, period_options
+from frontend.shap_explanations import ASSET_NAMES
+from frontend.ui import ASSETS, card, page_heading
 
 # Register in the page's runtime, not a cached imported module. AppTest creates
 # separate runtimes; each needs its own component registration.
-REASONS = {
-    # Policy-neutral: older bundles compare against the AI target, the low-churn
-    # policy against the last executed weights.
-    "portfolio_weight_distance": "비중 차이가 조정 기준 이상 벌어져서",
-    "monthly": "월간 정기 점검일이라서",
-    "risk_score": "뉴스 위험 점수가 기준을 넘어서",
-    "mdd_stop": "손실 제한(Safe-Guard) 규칙이 발동해서",
-    "hold": "조정 조건에 해당하지 않아 유지",
-}
-
 flight_path = st.components.v2.component(
     "flight_path",
     html='<div class="flight-root"></div>',
@@ -36,16 +25,30 @@ flight_path = st.components.v2.component(
 page_heading(
     "포트폴리오",
     "PORTFOLIO / 01",
-    "지금 내 포트폴리오의 성과와 구성을 한눈에 확인하세요.",
+    "AI가 굴린 내 돈이 지금 얼마나 불었는지, 어디에 나눠 담겨 있는지 보여 드려요.",
 )
-period = st.selectbox("분석 기간", ["전체 기간", "최근 63개 관측일"], key="period")
 try:
-    data = load_portfolio(None if period == "전체 기간" else 63)
+    # The whole period first: its length decides which period choices exist.
+    full = load_portfolio(None)
 except InvestmentAPIError as exc:
     st.error(str(exc))
-    data = None
+    full = None
     if st.button("다시 시도"):
         st.rerun()
+
+data = None
+if full:
+    options = period_options(full["display_metrics"]["observations"])
+    period = st.selectbox(
+        "분석 기간", list(options), index=len(options) - 1, key="period"
+    )
+    if period == ALL:
+        data = full
+    else:
+        try:
+            data = load_portfolio(options[period])
+        except InvestmentAPIError as exc:
+            st.error(str(exc))
 
 if data:
     rows = data["returns"]
@@ -53,7 +56,7 @@ if data:
     st.caption(
         "합성 데이터로 학습·검증한 결과"
         if data["data_source"] == "synthetic"
-        else "저장된 과거 데이터 검증 결과"
+        else "저장된 과거 데이터로 모의 운용한 결과"
     )
     if data["stopped"]:
         st.warning("손실 제한 규칙이 발동하여 현금으로 유지 중인 백테스트 결과입니다.")
@@ -79,18 +82,44 @@ if data:
                 f"{data['as_of']} 기준 보유 비중 · 합계 100%"
                 + (f" · 보유하지 않은 자산 {skipped}개는 생략" if skipped else "")
             )
-            donut, table = st.columns([1, 1], vertical_alignment="center")
-            with donut:
-                st.altair_chart(allocation(held), theme=None)
-            with table:
-                st.dataframe(
-                    [
-                        dict(자산=a["ticker"], 비중=format_weight(a["weight"]))
-                        for a in sorted(held, key=lambda a: -a["weight"])
-                    ],
-                    hide_index=True,
-                    column_config={"비중": st.column_config.TextColumn()},
-                    height="content",
+            event = st.altair_chart(
+                allocation(held),
+                theme=None,
+                on_select="rerun",
+                selection_mode=[ALLOCATION_PICK],
+                key="allocation_chart",
+            )
+            picked = [
+                item["ticker"]
+                for item in event.get("selection", {}).get(ALLOCATION_PICK, [])
+            ]
+            if picked and picked[0] not in ASSET_NAMES:
+                # Cash (CASH) is shown in the composition but is not an ETF, so it
+                # gets a short note and no ETF-analysis link.
+                st.markdown("**현금**")
+                st.write(
+                    "ETF에 넣지 않고 남겨 둔 돈이에요. AI가 위험을 줄이거나 "
+                    "다음 거래를 기다릴 때 일부를 현금으로 둘 수 있어요."
+                )
+            elif picked:
+                ticker = picked[0]
+                st.markdown(f"**{ticker} · {ASSET_NAMES.get(ticker, ticker)}**")
+                st.write(
+                    ETF_GUIDE.get(
+                        ticker, "이 ETF의 소개 글은 아직 준비되지 않았습니다."
+                    )
+                )
+                # Open ETF analysis on the same ETF (plain key only; setting the
+                # other page's widget key showed SPY in its selector).
+                open_on(ticker)
+                st.page_link(
+                    "app_pages/correlation.py",
+                    label=f"{ticker} ETF 분석에서 더 보기",
+                    icon=":material/query_stats:",
+                )
+            else:
+                st.caption(
+                    "도넛이나 표에 마우스를 올리면 비중이, 누르면 어떤 ETF인지 짧은 설명이 나옵니다."
                 )
     with metrics:
         with card("metrics"):
@@ -108,6 +137,7 @@ if data:
                     if result["sharpe"] is not None
                     else "계산 불가"
                 ),
+                help="같은 위험을 졌을 때 수익을 얼마나 냈는지입니다. 높을수록 좋습니다.",
             )
             st.metric(
                 "최대 하락폭 · MDD",
@@ -117,127 +147,9 @@ if data:
                 delta_color="red",
                 help="선택 기간에 최고점 대비 가장 많이 떨어진 폭입니다. 미니 그래프는 시점별 낙폭입니다.",
             )
-            volatility = (data.get("metrics") or {}).get("annualized_volatility")
-            if volatility is not None:
-                st.metric(
-                    "변동성 · 연환산",
-                    f"{volatility:.2%}",
-                    help="수익률이 얼마나 크게 오르내렸는지를 1년 기준으로 나타낸 값입니다.",
-                )
-            st.caption(f"현재 낙폭 {result['current_drawdown']:.2%}")
+            # Volatility and current drawdown are in the report's risk card,
+            # next to the market; this page keeps the three result numbers.
 
-    with card("why"):
-        st.subheader("왜 포트폴리오가 바뀌었나요?")
-        try:
-            changes = load_rebalancing(None if period == "전체 기간" else 63)
-        except APIError as exc:
-            st.warning(str(exc))
-            changes = None
-        if changes and changes["events"]:
-            st.caption(
-                f"선택 기간 {changes['observations']}거래일 중 "
-                f"{changes['rebalanced_days']}일 비중을 조정했습니다 · "
-                f"하루 평균 거래 비중(회전율) {changes['average_turnover']:.0%}"
-            )
-            events = {event["date"]: event for event in changes["events"]}
-            day = st.selectbox(
-                "날짜 (최근 순)",
-                list(events),
-                key="rebalance_date",
-            )
-            event = events[day]
-            reasons = [REASONS.get(r, r) for r in event["reasons"]]
-            st.markdown(f"**{day} 조정 이유:** {', '.join(reasons) or '기록 없음'}")
-            if event["changes"]:
-                st.dataframe(
-                    [
-                        {
-                            "자산": item["ticker"],
-                            "이전": format_weight(item["before"]),
-                            "이후": format_weight(item["after"]),
-                            "변화": f"{item['change'] * 100:+.0f}%p",
-                        }
-                        for item in event["changes"]
-                    ],
-                    hide_index=True,
-                    height="content",
-                )
-            else:
-                st.caption("1%p 이상 바뀐 자산이 없습니다.")
-            st.caption(
-                f"{event['decision_date']} 장 마감 정보로 결정하고 {day}에 반영한 비중입니다. "
-                "1%p 미만 변화는 생략합니다. 이유를 쉬운 문장으로 풀어 주는 설명은 준비 중입니다."
-            )
-        elif changes:
-            st.info("선택 기간에 비중 변화 기록이 없습니다.")
-        st.caption(
-            "AI가 무엇을 보고 판단했는지는 위험도·설명 메뉴의 AI 판단 요인에서 확인할 수 있습니다."
-        )
-
-# The comparison page loads its own data, so keep it reachable on failure too.
-detail_link("performance", "다른 전략과 성과 비교하기")
-
-if data:
-    with st.expander("계산 가정"):
-        st.write(
-            "서버에 저장된 모델 평가 결과입니다. 합성 데이터 결과는 실제 투자 성능을 뜻하지 않습니다."
-        )
-        st.write(
-            f"연 {data['periods_per_year']} 거래일, "
-            f"연 무위험 수익률 {data['annual_risk_free_rate']:.1%}. "
-            "Sharpe는 비용 차감 후 단순수익률 기준이며 서버 계산값을 표시합니다."
-        )
-        st.write(
-            "최대 하락폭과 낙폭은 음수로 표시합니다. "
-            "모든 기준 전략에도 같은 손실 제한 규칙을 적용합니다. 보유 비중에는 현금이 포함됩니다."
-        )
-        st.dataframe(
-            result["path"],
-            hide_index=True,
-            column_config={
-                "date": "날짜",
-                "portfolio": st.column_config.NumberColumn(
-                    "포트폴리오", format="percent"
-                ),
-                "benchmark": st.column_config.NumberColumn(
-                    "벤치마크", format="percent"
-                ),
-                "drawdown": st.column_config.NumberColumn("낙폭", format="percent"),
-            },
-        )
-
-    with st.expander("오늘 새로 시작한다면? (참고용)"):
-        st.caption(
-            "빈 계좌(현금 100%)로 오늘 투자를 시작한다면 AI가 어떻게 나눌지 보여 주는 참고용 제안입니다. "
-            "위 포트폴리오는 이미 자산을 들고 운용 중인 계좌라, AI가 현재 보유 비중까지 고려해 결과가 다를 수 있습니다. "
-            "실제 주문은 나가지 않습니다."
-        )
-        if st.button("목표 비중 계산"):
-            try:
-                if not st.session_state.get("investment_session_token"):
-                    st.session_state["investment_session_token"] = (
-                        create_inference_session()
-                    )
-                proposal = optimize(
-                    session_token=st.session_state["investment_session_token"]
-                )
-                st.session_state["investment_session_token"] = proposal.get(
-                    "session_token"
-                )
-                st.caption(
-                    f"{proposal['as_of']} 피처 기준 · "
-                    f"{proposal['execution_delay_trading_bars']} 거래일 지연 · 주문 전송 없음"
-                )
-                st.dataframe(
-                    [
-                        {"자산": ticker, "목표 비중": format_weight(weight)}
-                        for ticker, weight in proposal["target_weights"].items()
-                    ],
-                    hide_index=True,
-                )
-                if proposal["cash_weight"]:
-                    st.write(f"현금 비중: {format_weight(proposal['cash_weight'])}")
-            except InvestmentAPIError as exc:
-                if isinstance(exc, UnknownInvestmentSessionError):
-                    st.session_state.pop("investment_session_token", None)
-                st.error(str(exc))
+st.caption(
+    "ETF별 자세한 내용은 ETF 분석에서, 비중이 바뀐 이유와 위험도는 운용 리포트에서 볼 수 있습니다."
+)

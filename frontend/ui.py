@@ -11,31 +11,37 @@ ASSETS = Path(__file__).parent / "assets"
 # Pages shown in the left menu, in order.
 MENU = [
     ("portfolio", "포트폴리오", "flight_takeoff"),
-    ("risk", "위험도·설명", "shield"),
-    ("correlation", "자산 상세", "query_stats"),
+    ("correlation", "ETF 분석", "query_stats"),
+    ("report", "운용 리포트", "assessment"),
     ("research", "AI 도우미", "smart_toy"),
 ]
 # Verification and evidence pages opened by a button, with the menu they belong to.
 DETAILS = {
-    "performance": ("전략 성과 비교", "trending_up", "portfolio"),
-    "shap": ("AI 판단 요인", "hub", "risk"),
-    "anova": ("ANOVA 통계 검증", "analytics", "risk"),
+    "performance": ("전략 성과 비교", "trending_up", "report"),
+    "shap": ("AI 판단 근거", "hub", "correlation"),
+    "price": ("가격·지표 상세", "show_chart", "correlation"),
+    "relations": ("자산 관계 상세", "share", "correlation"),
+    "anova": ("ANOVA 통계 검증", "analytics", "report"),
+    "trades": ("사고판 내역", "swap_horiz", "report"),
+    "risk": ("위험 지표 상세", "shield", "report"),
 }
 PAGE_INFO = MENU + [(slug, title, icon) for slug, (title, icon, _) in DETAILS.items()]
 HEALTH_NOTES = {
-    "portfolio": "포트폴리오 화면은 저장 모델의 백테스트와 추론 API를 사용합니다.",
+    "portfolio": "포트폴리오 화면은 저장 모델의 백테스트 API를 사용합니다.",
     "performance": (
         "이 화면은 활성 투자 모델의 백테스트 API를 사용합니다. "
         "모델이 로드되지 않으면 성과를 표시할 수 없습니다."
     ),
-    "risk": (
-        "위험도는 활성 투자 모델의 백테스트 API를, AI 판단 요인은 저장된 SHAP 결과를 사용합니다."
-    ),
     "shap": "이 화면은 활성 투자 모델에 저장된 SHAP 결과를 조회합니다.",
+    "price": "이 화면은 모델 학습 입력의 가격·RSI·MACD(/assets/{ticker}/history)를 사용합니다.",
+    "relations": "이 화면은 서버의 시장 데이터로 계산한 자산 관계 분석 결과를 사용합니다.",
     "correlation": (
-        "자산 상세는 서버의 시장 데이터로 계산한 관계를 조회합니다. "
-        "투자 모델 로드 여부와는 별개입니다."
+        "ETF 분석의 AI 판단 신호는 저장된 SHAP 결과를, 가격·지표 흐름은 모델 학습 입력을, "
+        "자산 관계는 서버의 시장 데이터로 계산한 결과를 사용합니다."
     ),
+    "report": "운용 리포트는 활성 투자 모델의 백테스트·리밸런싱 이력 API를 사용합니다.",
+    "trades": "이 화면은 리밸런싱 이력 API와 참고용 목표 비중 추론 API를 사용합니다.",
+    "risk": "이 화면은 백테스트 API와 위험 지표(/risk) API를 사용합니다.",
     "research": (
         "/health는 서버 연결 상태입니다. 리서치에 필요한 키·뉴스 DB·임베딩 모델의 "
         "준비 여부는 분석 요청에서 확인하며, model_loaded는 리서치 준비 상태가 아닙니다."
@@ -83,6 +89,16 @@ def page_heading(title, eyebrow, description):
             st.caption(description)
 
 
+def keep_choice(widget_key, memory_key):
+    """Restore a selectbox after visiting another page.
+
+    Streamlit drops a widget's state once a run does not draw it, so the choice
+    is also kept under a plain key that every page reads and writes.
+    """
+    if widget_key not in st.session_state and memory_key in st.session_state:
+        st.session_state[widget_key] = st.session_state[memory_key]
+
+
 def card(name):
     """A white rounded card; `name` must be unique on the page."""
     return st.container(key=f"card-{name}")
@@ -106,7 +122,7 @@ def back_link(slug):
     with st.container(key=f"back-{slug}"):
         st.page_link(
             f"app_pages/{parent}.py",
-            label=f"{title}(으)로 돌아가기",
+            label=f"{title} 화면으로 돌아가기",
             icon=":material/arrow_back:",
         )
 

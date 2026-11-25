@@ -33,20 +33,30 @@ def page(monkeypatch):
 def test_menu_pages_and_detail_pages(page):
     assert not page.exception
     assert page.title[0].value == "포트폴리오"
+    assert [link.label for link in page.get("page_link")] == [
+        "포트폴리오",
+        "ETF 분석",
+        "운용 리포트",
+        "AI 도우미",
+    ]
     # (page, title, links): 4 menu links + detail links on menu pages,
     # or + 1 back link on detail pages.
     for slug, title, links in [
-        ("risk", "위험도·설명", 6),
-        ("correlation", "자산 상세", 4),
+        ("correlation", "ETF 분석", 7),
+        ("report", "운용 리포트", 8),
         ("research", "AI 도우미", 4),
         ("performance", "강화학습 성과", 5),
-        ("shap", "SHAP 해석", 5),
+        ("shap", "AI 판단 근거", 5),
+        ("price", "가격·지표 상세", 5),
+        ("relations", "자산 관계 상세", 5),
+        ("trades", "사고판 내역", 5),
+        ("risk", "위험 지표 상세", 5),
         ("anova", "ANOVA 검증", 5),
     ]:
         page.switch_page(f"app_pages/{slug}.py").run()
-        assert not page.exception
+        assert not page.exception, slug
         assert page.title[0].value == title
-        assert len(page.get("page_link")) == links
+        assert len(page.get("page_link")) == links, slug
         assert any(e.label == "API 준비 상태" for e in page.expander)
         if slug == "research":
             assert page.text_area(key="research_question")
@@ -59,47 +69,86 @@ def test_menu_pages_and_detail_pages(page):
             assert page.button(key="refresh_statistics")
     page.switch_page("app_pages/portfolio.py").run()
     assert page.title[0].value == "포트폴리오"
-    assert len(page.get("page_link")) == 5
+    assert len(page.get("page_link")) == 4
 
 
-def test_portfolio_cards_use_negative_drawdown(page):
-    labels = [m.label for m in page.metric]
-    assert labels[:3] == [
+def test_portfolio_shows_only_the_current_state(page):
+    # Three result numbers; volatility and drawdown details live in the report.
+    assert [m.label for m in page.metric] == [
         "누적 수익률",
         "Sharpe Ratio · 위험 대비 수익",
         "최대 하락폭 · MDD",
     ]
     assert page.metric[2].value.startswith("-")
-    assert any("왜 포트폴리오가 바뀌었나요?" in h.value for h in page.subheader)
+    titles = [h.value for h in page.subheader]
+    assert titles == ["누적 수익률", "포트폴리오 구성", "핵심 지표"]
+    assert not page.expander or all(e.label == "API 준비 상태" for e in page.expander)
 
 
-def test_portfolio_shows_rebalancing_changes_from_the_api(page):
+def test_trades_page_shows_rebalancing_changes_from_the_api(page):
+    page.switch_page("app_pages/trades.py").run()
+    assert not page.exception
     assert page.selectbox(key="rebalance_date").value == "2026-09-30"
     text = " ".join(m.value for m in page.markdown)
     assert "비중 차이가 조정 기준 이상 벌어져서" in text
     table = next(d.value for d in page.dataframe if "변화" in d.value.columns)
-    assert list(table["자산"]) == ["SHY", "GLD"]
-    assert list(table["변화"]) == ["-37%p", "+34%p"]
-    assert any("187일 비중을 조정했습니다" in c.value for c in page.caption)
+    assert list(table["자산"]) == ["SHY", "GLD", "EFA", "DBB", "TIP", "SMH"]
+    assert list(table["변화"]) == ["-36%p", "+34%p", "+27%p", "-24%p", "-5%p", "+4%p"]
+    # Shown before/after each add up to 100%, and the shown changes to 0%p.
+    percent = [int(v[:-1]) for v in table["이전"]], [int(v[:-1]) for v in table["이후"]]
+    assert sum(percent[0]) == 100 and sum(percent[1]) == 100
+    assert sum(int(v[:-2]) for v in table["변화"]) == 0
     page.selectbox(key="rebalance_date").select("2026-09-29").run()
-    assert any("1%p 이상 바뀐 자산이 없습니다" in c.value for c in page.caption)
+    assert any("비중이 바뀐 자산이 없습니다" in c.value for c in page.caption)
     assert "월간 정기 점검일이라서" in " ".join(m.value for m in page.markdown)
+    assert any(e.label == "오늘 새로 시작한다면? (참고용)" for e in page.expander)
 
 
-def test_portfolio_survives_missing_rebalancing(page, monkeypatch):
+def test_report_answers_three_questions(page):
+    page.switch_page("app_pages/report.py").run()
+    assert not page.exception
+    assert [h.value for h in page.subheader] == [
+        "AI는 언제, 왜 사고팔았나요?",
+        "얼마나 오르내렸나요?",
+        "단순한 방법보다 나았나요?",
+    ]
+    text = " ".join(m.value for m in page.markdown)
+    assert "**187일** 비중을 조정했어요" in text
+    # 13% against the market's 12.22% reads as about the same.
+    assert "S&P500과 **비슷한 정도로** 오르내렸어요" in text
+    assert "**+4.7%**" in text and "**+12.4%**" in text
+    assert [m.label for m in page.metric] == [
+        "비중을 조정한 날",
+        "하루 평균 거래 비중",
+        "거래 비용 합계",
+        "최대 하락폭",
+        "변동성 · 연환산",
+    ]
+    assert page.metric[2].value == "원금의 19.7%"
+    links = [link.label for link in page.get("page_link")][4:]
+    assert links == [
+        "날짜별 사고판 내역 보기",
+        "위험 지표 자세히 보기",
+        "다른 전략과 자세히 비교하기",
+        "차이가 통계적으로 의미 있는지 보기 (ANOVA)",
+    ]
+
+
+def test_report_survives_missing_rebalancing(page, monkeypatch):
     from frontend import insights_client
 
     def unavailable(*args, **kwargs):
         raise api_client.APIError("비중 변화 기록을 불러오지 못했습니다.")
 
     monkeypatch.setattr(insights_client, "load_rebalancing", unavailable)
-    page.run()
+    page.switch_page("app_pages/report.py").run()
     assert not page.exception
     assert any("비중 변화 기록" in w.value for w in page.warning)
-    assert page.metric, "Other portfolio cards must still render"
+    assert page.metric, "The risk card must still render"
+    assert len(page.get("page_link")) == 8, "Detail pages stay reachable"
 
 
-def test_risk_page_shows_drawdown_safeguard_factors_and_guide(page):
+def test_risk_page_shows_only_portfolio_wide_risk(page):
     page.switch_page("app_pages/risk.py").run()
     assert not page.exception
     assert [m.label for m in page.metric] == [
@@ -111,9 +160,9 @@ def test_risk_page_shows_drawdown_safeguard_factors_and_guide(page):
     ]
     assert page.metric[0].value.startswith("-")
     assert [m.value for m in page.metric[3:]] == ["-1.47%", "-1.87%"]
-    # Explanation comes first, then risk next to the market's values.
-    titles = [h.value for h in page.subheader]
-    assert titles.index("AI 판단 요인") < titles.index("시장과 비교한 위험도")
+    # Risk detail page of the report: portfolio-wide only, plus the assumptions.
+    assert [h.value for h in page.subheader] == ["시장과 비교한 위험도", "하락폭 추이"]
+    assert not page.selectbox, "No ETF selection on the risk page"
     market = [c.value for c in page.caption if c.value.startswith("S&P500 ")]
     # MDD, volatility, VaR, CVaR in card order; market MDD is negative like ours.
     assert market == [
@@ -124,11 +173,6 @@ def test_risk_page_shows_drawdown_safeguard_factors_and_guide(page):
     ]
     assert any("Safe-Guard 미작동" in s.value for s in page.success)
     assert len(page.get("vega_lite_chart")) == 1
-    assert page.selectbox(key="risk_shap_asset")
-    text = " ".join(m.value for m in page.markdown)
-    assert "RSI" in text and "MACD" in text
-    captions = " ".join(c.value for c in page.caption)
-    assert "70 이상이면" in captions and "인과관계나 투자 권고가 아닙니다" in captions
 
 
 def test_gain_only_var_is_not_shown_as_a_loss(page, monkeypatch):
@@ -163,24 +207,90 @@ def test_anova_waiting_notice_names_the_operator_step(page, monkeypatch):
     assert "run_analysis" not in notice
 
 
-def test_risk_page_survives_missing_backtest_and_shap(page, monkeypatch):
-    from frontend import investment_client, shap_client
+def test_risk_page_survives_missing_backtest(page, monkeypatch):
+    from frontend import investment_client
 
     def no_portfolio(*args, **kwargs):
         raise investment_client.InvestmentAPIError(
             "투자 분석 결과를 불러오지 못했습니다."
         )
 
+    monkeypatch.setattr(investment_client, "load_portfolio", no_portfolio)
+    page.switch_page("app_pages/risk.py").run()
+    assert not page.exception
+    assert page.warning
+    assert not page.metric and not page.get("vega_lite_chart")
+    page.switch_page("app_pages/report.py").run()
+    assert not page.exception
+    assert len(page.get("page_link")) == 8, "Comparison and ANOVA stay reachable"
+
+
+def test_etf_analysis_answers_three_questions(page, monkeypatch):
+    from frontend import correlation_client
+
+    def unavailable(*args, **kwargs):
+        raise api_client.APIError("자산 관계를 불러오지 못했습니다.")
+
+    monkeypatch.setattr(correlation_client, "load_correlations", unavailable)
+    page.switch_page("app_pages/correlation.py").run()
+    page.selectbox(key="correlation_asset").set_value("QQQ").run()
+    assert not page.exception
+    assert [h.value for h in page.subheader] == [
+        "AI는 왜 이 비중을 정했나요?",
+        "가격은 어떻게 움직였나요?",
+        "다른 자산과 같이 움직이나요?",
+    ]
+    captions = " ".join(c.value for c in page.caption)
+    # The AI card shows the latest monthly decision, not the period below.
+    assert "2025-01-03 결정 기준 (가장 최근)" in captions
+    assert "저장된 2개 결정일의 판단도 볼 수 있습니다" in captions
+    assert "한 달에 한 번" not in captions and "월별" not in captions
+    assert page.selectbox(key="correlation_window").label == "가격·관계 분석 기간"
+    links = [link.label for link in page.get("page_link")]
+    assert links[4:] == [
+        "AI 판단 근거 자세히 보기 · 지난 결정일도 보기",
+        "가격·지표(RSI·MACD) 자세히 보기",
+        "자산 관계 자세히 보기",
+    ]
+    # The detail page opens on the same ETF and returns to ETF analysis.
+    page.switch_page("app_pages/shap.py").run()
+    assert not page.exception
+    assert page.selectbox(key="shap_asset").value == "QQQ"
+    assert "ETF 분석 화면으로 돌아가기" in [
+        link.label for link in page.get("page_link")
+    ]
+    # A date chosen there survives going back and forth.
+    page.selectbox(key="shap_date").set_value("2025-01-02").run()
+    page.switch_page("app_pages/correlation.py").run()
+    assert page.selectbox(key="correlation_asset").value == "QQQ"
+    page.switch_page("app_pages/shap.py").run()
+    assert page.selectbox(key="shap_date").value == "2025-01-02"
+    # An ETF without saved decisions says so instead of failing.
+    page.switch_page("app_pages/correlation.py").run()
+    page.selectbox(key="correlation_asset").set_value("SMH").run()
+    assert not page.exception
+    assert any("SMH의 AI 판단 기록이 없습니다" in i.value for i in page.info)
+
+
+def test_shared_choice_wins_over_a_stale_widget_value(page):
+    # What the portfolio composition click stores before opening ETF analysis.
+    page.session_state["etf_choice"] = "QQQ"
+    page.switch_page("app_pages/correlation.py").run()
+    assert not page.exception
+    assert page.selectbox(key="correlation_asset").value == "QQQ"
+
+
+def test_etf_analysis_survives_missing_shap(page, monkeypatch):
+    from frontend import shap_client
+
     def no_shap(model):
         raise api_client.APIError("실제 SHAP 결과를 불러오지 못했습니다.")
 
-    monkeypatch.setattr(investment_client, "load_portfolio", no_portfolio)
     monkeypatch.setattr(shap_client, "load_model_shap", no_shap)
-    page.switch_page("app_pages/risk.py").run()
+    page.switch_page("app_pages/correlation.py").run()
     assert not page.exception
-    assert len(page.warning) >= 2
-    assert not page.metric and not page.get("vega_lite_chart")
-    assert len(page.get("page_link")) == 6
+    assert any("SHAP 결과" in w.value for w in page.warning)
+    assert any("가격은 어떻게 움직였나요?" in h.value for h in page.subheader)
 
 
 def test_risk_page_keeps_other_cards_when_var_is_missing(page, monkeypatch):
@@ -196,7 +306,7 @@ def test_risk_page_keeps_other_cards_when_var_is_missing(page, monkeypatch):
     assert any("위험 지표(VaR·CVaR)" in c.value for c in page.caption)
 
 
-def test_asset_detail_shows_return_rsi_and_macd(page, monkeypatch):
+def test_price_story_and_price_detail_page(page, monkeypatch):
     from frontend import correlation_client
 
     def unavailable(*args, **kwargs):
@@ -205,11 +315,18 @@ def test_asset_detail_shows_return_rsi_and_macd(page, monkeypatch):
     monkeypatch.setattr(correlation_client, "load_correlations", unavailable)
     page.switch_page("app_pages/correlation.py").run()
     assert not page.exception
-    assert any("가격과 지표 흐름" in h.value for h in page.subheader)
+    # One plain sentence and one chart on the main page.
+    assert len(page.get("vega_lite_chart")) == 1
+    assert "가격이 **0.4% 내렸습니다.**" in " ".join(m.value for m in page.markdown)
+    page.switch_page("app_pages/price.py").run()
+    assert not page.exception
     assert len(page.get("vega_lite_chart")) == 3
-    text = " ".join(m.value for m in page.markdown)
-    assert "RSI** · 현재 49" in text and "MACD** · 현재 +1.30" in text
-    assert any("가격 $762.63 · 기간 첫날 $765.61" in c.value for c in page.caption)
+    titles = [h.value for h in page.subheader]
+    assert "RSI · 현재 49" in titles and "MACD · 현재 +1.30" in titles
+    captions = " ".join(c.value for c in page.caption)
+    # Escaped so Markdown shows the dollar signs instead of a formula.
+    assert "가격 \\$762.63 · 기간 첫날 \\$765.61" in captions
+    assert "70 이상이면" in captions
 
 
 def test_asset_detail_has_etf_intro_for_every_asset():
@@ -223,8 +340,12 @@ def test_asset_detail_has_etf_intro_for_every_asset():
 
 
 def test_period_and_shap_filters_change_results(page):
+    period = page.selectbox(key="period")
+    # Months that fit inside the fixture's daily returns, then the whole period.
+    assert period.options == ["1개월", "3개월", "6개월", "전체"]
+    assert period.value == "전체"
     before = page.metric[0].value
-    page.selectbox(key="period").set_value("최근 63개 관측일").run()
+    period.set_value("3개월").run()
     assert not page.exception
     assert page.metric[0].value != before
     page.switch_page("app_pages/shap.py").run()
@@ -263,8 +384,7 @@ def test_portfolio_api_failure_is_visible(page, monkeypatch):
     assert not page.exception
     assert page.error
     assert not page.metric
-    # 4 menu links + the comparison link, which stays reachable on failure.
-    assert len(page.get("page_link")) == 5
+    assert len(page.get("page_link")) == 4
 
 
 def test_shap_raw_features_are_opt_in_and_correlation_separate(page):
@@ -321,9 +441,14 @@ def test_shap_market_state_and_raw_detail_values(page, monkeypatch):
 def test_shap_contributions_are_not_trade_directions(page):
     page.switch_page("app_pages/shap.py").run()
     assert not page.exception
-    assert not page.metric
-    captions = " ".join(x.value for x in page.caption)
-    assert "거래 기록을 확인하지 못했습니다" in captions
+    # Base -> effect of the signals -> AI target; no trade record, no trade line.
+    assert [m.label for m in page.metric] == [
+        "기준 비중",
+        "신호들의 효과",
+        "AI 목표 비중",
+    ]
+    assert not any("실제 운용" in c.value for c in page.caption)
+    assert any(h.value == "이 화면 읽는 법" for h in page.subheader)
     page.button(key="shap_details_button").click().run()
     assert any(m.label == "SHAP 기준 비중" for m in page.metric)
 
@@ -350,14 +475,15 @@ def test_decision_focused_shap_ui(page, monkeypatch, before, target, direction):
     monkeypatch.setattr(shap_client, "load_model_shap", lambda model: data)
     page.switch_page("app_pages/shap.py").run()
     assert not page.exception
-    assert f"SPY 비중 {direction} 목표" in " ".join(x.value for x in page.markdown)
-    assert [m.value for m in page.metric] == [f"{before:.2%}", "14.00%", "14.00%"]
-    assert not any(m.label == "SHAP 기준 비중" for m in page.metric)
+    assert page.metric[2].value == "14.0%"
+    captions = " ".join(x.value for x in page.caption)
+    assert f"실제 운용: 거래 전 {before:.1%} → 거래 후 14.0%" in captions
     displayed = " ".join(x.value for x in page.markdown)
     assert "시장 변동성" in displayed and "금(GLD) 관련 신호" in displayed
-    assert "SHAP 기준 비중 대비" in " ".join(x.value for x in page.caption)
+    assert "+6.0%p" in displayed and "-2.0%p" in displayed
     page.button(key="shap_details_button").click().run()
     assert not page.exception
+    assert f"비중 {direction} 목표" in " ".join(x.value for x in page.caption)
     assert any(m.label == "SHAP 기준 비중" for m in page.metric)
     assert "macd_gld" in page.dataframe[2].value["raw feature"].tolist()
     assert page.dataframe[2].value["shap value"].tolist() == [0.06, -0.02]
@@ -366,6 +492,8 @@ def test_decision_focused_shap_ui(page, monkeypatch, before, target, direction):
 
 
 def test_portfolio_composition_lists_only_held_assets(page, monkeypatch):
+    import json
+
     from frontend import investment_client
 
     original = investment_client.load_portfolio
@@ -380,7 +508,108 @@ def test_portfolio_composition_lists_only_held_assets(page, monkeypatch):
     monkeypatch.setattr(investment_client, "load_portfolio", with_unheld)
     page.switch_page("app_pages/portfolio.py").run()
     assert not page.exception
-    table = page.dataframe[0].value
-    assert "ZERO" not in table["자산"].tolist()
-    assert len(table) == len(original()["assets"])
+    # Donut and its weight table are one chart sharing hover and click.
+    spec = json.loads(page.get("vega_lite_chart")[0].proto.spec)
+    assert "ZERO" not in json.dumps(spec)
+    assert [p["name"] for p in spec["params"]] == ["hover", "pick"]
     assert any("보유하지 않은 자산 1개는 생략" in c.value for c in page.caption)
+    assert any("누르면 어떤 ETF인지" in c.value for c in page.caption)
+
+
+def test_cash_pick_explains_cash_without_etf_link(page, monkeypatch):
+    from frontend import investment_client
+
+    original = investment_client.load_portfolio
+
+    def with_cash(observations=None):
+        data = original(observations)
+        data["assets"] = data["assets"] + [
+            {"ticker": "CASH", "name": "현금", "weight": 0.05}
+        ]
+        return data
+
+    monkeypatch.setattr(investment_client, "load_portfolio", with_cash)
+    # What a click on the cash slice sends back through the chart selection.
+    page.session_state["allocation_chart"] = {
+        "selection": {"pick": [{"ticker": "CASH"}]}
+    }
+    page.run()
+    assert not page.exception
+    assert "**현금**" in [m.value for m in page.markdown]
+    assert len(page.get("page_link")) == 4, "No ETF-analysis link for cash"
+    assert "etf_choice" not in page.session_state
+
+
+def test_shap_baseline_is_the_reference_input_output(page):
+    page.switch_page("app_pages/shap.py").run()
+    howto = " ".join(m.value for m in page.markdown)
+    assert "학습 기간 입력값의 평균을 넣었을 때" in howto
+    assert "평소" not in howto
+
+
+def test_etf_pick_shows_intro_and_opens_etf_analysis(page):
+    page.session_state["allocation_chart"] = {
+        "selection": {"pick": [{"ticker": "SPY"}]}
+    }
+    page.run()
+    assert not page.exception
+    assert page.get("page_link")[-1].label == "SPY ETF 분석에서 더 보기"
+    assert page.session_state["etf_choice"] == "SPY"
+    page.switch_page("app_pages/correlation.py").run()
+    assert page.selectbox(key="correlation_asset").value == "SPY"
+
+
+def test_etf_without_decisions_keeps_the_shared_choice(page):
+    page.switch_page("app_pages/correlation.py").run()
+    page.selectbox(key="correlation_asset").set_value("SMH").run()
+    page.switch_page("app_pages/shap.py").run()
+    assert not page.exception
+    # No silent fallback to another ETF, and the request is not overwritten.
+    assert page.selectbox(key="shap_asset").value is None
+    assert any("SMH의 AI 판단 기록이 없습니다" in i.value for i in page.info)
+    assert page.session_state["etf_choice"] == "SMH"
+    page.switch_page("app_pages/correlation.py").run()
+    assert page.selectbox(key="correlation_asset").value == "SMH"
+    # Picking an ETF that has decisions there becomes the shared choice.
+    page.switch_page("app_pages/shap.py").run()
+    page.selectbox(key="shap_asset").set_value("QQQ").run()
+    assert not page.exception
+    assert page.session_state["etf_choice"] == "QQQ"
+    page.switch_page("app_pages/correlation.py").run()
+    assert page.selectbox(key="correlation_asset").value == "QQQ"
+
+
+def test_trade_history_asks_for_every_day_and_says_when_cut(page, monkeypatch):
+    from frontend import insights_client
+    from tests.investment_ui_fixtures import REBALANCING
+
+    calls = []
+
+    def history(observations=None, limit=30, min_change=None):
+        calls.append(limit)
+        return REBALANCING
+
+    monkeypatch.setattr(insights_client, "load_rebalancing", history)
+    page.switch_page("app_pages/trades.py").run()
+    assert not page.exception
+    assert calls == [500], "The whole evaluation fits in one page"
+    # The fixture lists 2 of its 187 adjusted days, so the cut is stated.
+    assert any("187일 중 가장 최근 2일만" in c.value for c in page.caption)
+
+
+def test_chart_tooltips_show_the_date_as_received():
+    from frontend.charts import asset_return, drawdown_trend, indicator_line
+
+    row = {"date": "2026-01-06", "cumulative_return": 0.0, "close": 1.0, "rsi": 50.0}
+    for chart in (
+        asset_return([row]),
+        indicator_line([row], "rsi", "RSI", [30]),
+        drawdown_trend([{"date": "2026-01-06", "drawdown": 0.0}]),
+    ):
+        spec = chart.to_dict()
+        layers = spec.get("layer", [spec])
+        tooltips = [
+            t for layer in layers for t in layer.get("encoding", {}).get("tooltip", [])
+        ]
+        dates = [t for t in tooltips if t["field"] == "date"]
+        assert dates and all(t["type"] == "nominal" for t in dates)

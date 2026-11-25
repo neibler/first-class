@@ -6,15 +6,17 @@ import streamlit as st
 from frontend.api_client import APIError
 from frontend.charts import force_plot
 from frontend.shap_client import load_model_shap
-from frontend.ui import page_heading
+from frontend.etf_choice import choose_asset
+from frontend.shap_explanations import ASSET_NAMES
+from frontend.ui import card, keep_choice, page_heading
 from frontend.shap_explanations import group_shap_features, category_totals
 
 from frontend.shap_presentation import decision_direction, select_factors, compact_state
 
 page_heading(
-    "SHAP 해석",
-    "DECISION INSIGHTS / 03",
-    "Portfolio X-Ray · AI의 자산 배분 결정을 쉬운 요인으로 살펴보세요.",
+    "AI 판단 근거",
+    "ETF ANALYSIS / AI",
+    "AI가 ETF 비중을 정할 때 어떤 신호가 비중을 올리고 내렸는지 풀어서 설명합니다.",
 )
 try:
     data = load_model_shap(None)
@@ -23,86 +25,143 @@ except APIError as exc:
     if st.button("다시 시도", key="retry_shap"):
         st.rerun()
     st.stop()
-ticker = st.selectbox("자산", list(data["assets"]), key="shap_asset")
+a, b = st.columns(2)
+# Opens on the ETF chosen in ETF analysis, and going back keeps the one chosen here.
+ticker = choose_asset("shap", data["assets"], where=a)
+if ticker is None:
+    # The ETF chosen elsewhere has no saved decisions; say so instead of quietly
+    # showing another ETF.
+    st.info(
+        f"{st.session_state.get('etf_choice')}의 AI 판단 기록이 없습니다. "
+        "위에서 기록이 있는 ETF를 고르면 판단 근거를 볼 수 있습니다."
+    )
+    st.stop()
 records = data["assets"][ticker]["decisions"]
-date = st.selectbox(
-    "결정일", [r["date"] for r in records], index=len(records) - 1, key="shap_date"
+dates = [r["date"] for r in records]
+# The decision date survives leaving the page; a date this ETF lacks falls back
+# to the latest one.
+if st.session_state.get("shap_date_choice") not in dates:
+    st.session_state["shap_date_choice"] = dates[-1]
+keep_choice("shap_date", "shap_date_choice")
+if st.session_state["shap_date"] not in dates:
+    st.session_state["shap_date"] = dates[-1]
+date = b.selectbox(
+    "결정일",
+    dates,
+    key="shap_date",
+    # explain_bundle samples a few executed decisions evenly (np.linspace), so the
+    # saved dates are not a fixed calendar frequency.
+    help=(
+        "AI 판단 기록은 평가 기간의 거래 결정 중 일부 날짜만 고르게 뽑아 저장합니다. "
+        "처음에는 가장 최근 날짜가 선택됩니다."
+    ),
 )
+st.session_state["shap_date_choice"] = date
 row = next(r for r in records if r["date"] == date)
 factors = group_shap_features(data["features"], row["shap_values"], ticker, row)
-
-st.subheader(f"{ticker} 비중 결정과 모델 설명")
-st.caption(f"해석 모델: {data['model_type']} · 실행: {data['run_id']} · 결정일: {date}")
-st.caption("현재 활성 투자 모델에 저장된 SHAP 결과입니다.")
-st.caption(
-    data.get(
-        "weight_stage", "이 SHAP의 최소 비중 필터 적용 여부는 확인되지 않았습니다."
-    )
-)
-threshold = data.get("min_weight_threshold")
-if threshold is not None:
-    st.caption(f"이 학습본의 최소 목표 비중 설정: {threshold:.1%}")
-
 execution = row.get("execution_context")
 direction = decision_direction(execution)
 selected, opposite = select_factors(factors, direction)
 labels = {"increase": "증가", "decrease": "감소", "hold": "유지"}
-if direction != "unknown":
-    st.markdown(f"**{ticker} 비중 {labels[direction]} 목표**")
-    before, target, after = st.columns(3)
-    before.metric("거래 전 비중", f"{execution['previous_weight']:.2%}")
-    target.metric("AI 목표 비중", f"{execution['target_weight']:.2%}")
-    after.metric("거래 후 비중", f"{execution['current_weight']:.2%}")
-    st.caption(
-        f"{execution['execution_date']} 평가 기록 · "
-        + (
-            "해당 ETF 비중 변경 거래 있음"
-            if execution["traded"]
-            else "해당 ETF 거래 없음"
-        )
-    )
-else:
-    st.caption(
-        "거래 기록을 확인하지 못했습니다. 증가·감소를 추정하지 않고 주요 정보만 표시합니다."
+arrows = {"increase": "▲ 높이는 쪽", "decrease": "▼ 낮추는 쪽"}
+base, final = row["base_value"], row["final_value"]
+
+st.subheader(f"{ticker} · {ASSET_NAMES.get(ticker, ticker)} — {date} 결정")
+
+with card("shap-howto"):
+    st.subheader("이 화면 읽는 법")
+    st.markdown(
+        "1. **기준 비중**에서 출발합니다. 학습 기간 입력값의 평균을 넣었을 때 "
+        f"AI가 {ticker}에 주는 비중입니다.\n"
+        "2. 그날의 신호(가격 흐름, 금리, 다른 ETF 움직임 등)가 비중을 조금씩 "
+        "**올리거나(▲) 내립니다(▼)**.\n"
+        "3. 기준 비중에 신호들의 효과를 모두 더하면 AI가 계산한 **목표 비중**이 됩니다.\n\n"
+        "각 신호의 효과를 나눠 계산하는 방법을 **SHAP**이라고 합니다."
     )
 
-st.subheader(f"{ticker} 목표 비중 결정에 크게 반영된 요인")
-st.caption(
-    "영향력이 큰 순서입니다. 각 기여 방향은 이전 보유 비중이 아닌 모델 설명의 기준 비중 대비입니다."
-)
-if not selected:
-    st.info(
-        "요약할 주요 요인이 없습니다. 상세 분석 보기에서 전체 요인과 원본 값을 확인하세요."
+with card("shap-summary"):
+    st.subheader(f"{ticker} 비중은 이렇게 정해졌어요")
+    start, moved, end = st.columns(3)
+    # SHAP's base value is the model output at the averaged training input
+    # (model_shap.py background), not an average of past allocations.
+    start.metric(
+        "기준 비중",
+        f"{base:.1%}",
+        help="학습 기간 입력값의 평균을 넣었을 때 AI가 주는 비중(설명의 출발점)",
     )
-for factor in selected:
-    label, indicator = st.columns([3, 1.4])
-    with label:
-        st.markdown(f"**{factor['label']}**", help=factor["explanation"])
-        st.caption(compact_state(factor))
-        st.caption(
-            f"→ SHAP 기준 비중 대비 {labels.get(factor['direction'], '중립')} 기여"
+    moved.metric("신호들의 효과", f"{(final - base) * 100:+.1f}%p")
+    end.metric("AI 목표 비중", f"{final:.1%}")
+    if not any(row["shap_values"]):
+        st.info(
+            f"이 결정에서는 기준 비중과 비교해 {ticker} 비중({final:.0%})을 "
+            "움직인 신호가 없습니다."
         )
-    with indicator:
+    if direction != "unknown":
         st.caption(
-            "▰" * factor["level"]
-            + "▱" * (4 - factor["level"])
-            + " "
-            + factor["indicator_label"]
+            f"실제 운용: 거래 전 {execution['previous_weight']:.1%} → "
+            f"거래 후 {execution['current_weight']:.1%} "
+            f"({execution['execution_date']}, "
+            + ("거래 있음" if execution["traded"] else "거래 없음")
+            + "). 거래 비용·조정 규칙 때문에 목표 비중과 다를 수 있습니다."
         )
-st.caption("이 설명은 모델 판단에 대한 기여이며 경제적 인과관계를 의미하지 않습니다.")
+
+if selected:
+    with card("shap-factors"):
+        st.subheader("비중을 가장 크게 움직인 신호")
+        st.caption("영향이 큰 순서입니다. 막대가 길수록 영향이 큽니다.")
+        for factor in selected:
+            st.markdown(
+                f"**{factor['label']}** · "
+                f"{arrows.get(factor['direction'], '영향 없음')} "
+                f"{factor['signed_sum'] * 100:+.1f}%p"
+            )
+            st.caption(
+                "▰" * factor["level"]
+                + "▱" * (4 - factor["level"])
+                + f" {factor['indicator_label']} · 그날 상태: {compact_state(factor)}"
+            )
+            st.caption(factor["explanation"])
+        if opposite:
+            with st.expander(f"나머지 신호 {len(opposite)}개 보기"):
+                for factor in opposite:
+                    st.markdown(
+                        f"**{factor['label']}** · "
+                        f"{arrows.get(factor['direction'], '영향 없음')} "
+                        f"{factor['signed_sum'] * 100:+.1f}%p"
+                    )
+                    st.caption(factor["explanation"])
+st.caption(
+    "AI 판단에 대한 설명입니다. 신호가 실제 가격을 움직였다는 뜻(인과관계)이나 투자 권유가 아닙니다."
+)
 
 if st.button(
     (
-        "상세 분석 닫기"
+        "전문가용 상세 데이터 닫기"
         if st.session_state.get("shap_details", False)
-        else "상세 분석 보기"
+        else "전문가용 상세 데이터 보기"
     ),
     key="shap_details_button",
 ):
     st.session_state["shap_details"] = not st.session_state.get("shap_details", False)
     st.rerun()
 if st.session_state.get("shap_details", False):
-    st.subheader("상세 분석")
+    st.subheader("전문가용 상세 데이터")
+    st.caption(
+        f"해석 모델: {data['model_type']} · 실행: {data['run_id']} · 결정일: {date}"
+    )
+    st.caption(
+        data.get(
+            "weight_stage", "이 SHAP의 최소 비중 필터 적용 여부는 확인되지 않았습니다."
+        )
+    )
+    threshold = data.get("min_weight_threshold")
+    if threshold is not None:
+        st.caption(f"이 학습본의 최소 목표 비중 설정: {threshold:.1%}")
+    if direction != "unknown":
+        st.caption(
+            f"AI 목표 비중(거래 기록): {execution['target_weight']:.2%} · "
+            f"비중 {labels[direction]} 목표"
+        )
     base, output = st.columns(2)
     base.metric("SHAP 기준 비중", f"{row['base_value']:.2%}")
     output.metric("SHAP이 설명하는 출력 비중", f"{row['final_value']:.2%}")
@@ -175,8 +234,7 @@ if st.session_state.get("shap_details", False):
     force_plot(data["features"], row)
     st.caption("risk_type은 모델 입력이 아니므로 유형별 기여도를 만들지 않습니다.")
     st.divider()
-    st.markdown("**Rolling Correlation · 이 자산은 무엇과 같이 움직이는가?**")
     st.caption(
-        "SHAP은 AI 결정 기여도이고 Correlation은 시장의 동행 관계입니다."
-        "왼쪽 자산 상세 메뉴에서 실제 시장의 Rolling Correlation을 확인할 수 있습니다."
+        "SHAP은 AI 결정 기여도이고 상관관계는 시장의 동행 관계입니다. "
+        "실제 시장의 Rolling Correlation은 ETF 분석의 '자산 관계 자세히 보기'에서 확인할 수 있습니다."
     )

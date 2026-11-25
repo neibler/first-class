@@ -54,13 +54,14 @@ def check_clock(browser, source):
           button.click();
           equal(step(-1000), 52); // Earlier than the click's performance.now().
           equal(step(-1100), 52); // Defensive lower bound.
-          const middle = step(600);
+          // A replay lasts 5,000 ms; -1000 + 2,500 = 1,500 is halfway.
+          const middle = step(1500);
           equal(middle, (52 + end) / 2);
           button.click(); // Cancel pending old frame and reset the start clock.
           equal(at(), 52);
           equal(step(0), 52); // Zero is a valid first-frame timestamp.
-          equal(step(1600), middle);
-          equal(step(3200), end);
+          equal(step(2500), middle);
+          equal(step(5000), end);
           if (pending.size) throw Error('Completed replay scheduled another frame');
           button.click();
           equal(step(5000), 52);
@@ -89,7 +90,7 @@ def check_live(browser, base, repeats):
         recent = attempt % 2 == 1
         if recent:
             page.get_by_role("combobox").click()
-            page.get_by_role("option", name="최근 63개 관측일").click()
+            page.get_by_role("option", name="3개월").click()
             expect(page.get_by_text("63개 일간 수익률", exact=False)).to_be_visible()
         root = page.locator(".flight-root")
         button = root.get_by_role("button")
@@ -117,7 +118,15 @@ def check_live(browser, base, repeats):
         button.click()
         middle = moving()
         assert middle != endpoint
-        expect(plane).to_have_attribute("transform", endpoint, timeout=5000)
+        # The lines are revealed exactly up to the aircraft, not a margin behind.
+        gap = root.evaluate("""root => {
+              const svg = root.querySelector('svg');
+              const x = svg.querySelector('g[aria-label]')
+                .transform.baseVal.getItem(0).matrix.e;
+              return svg.querySelector('clipPath rect').width.baseVal.value - x;
+            }""")
+        assert 0 <= gap <= 2, f"Lines trail the aircraft by {gap}px"
+        expect(plane).to_have_attribute("transform", endpoint, timeout=8000)
         expect(button).to_have_text("▷ 비행 경로 재생")
         button.click()
         moving()
@@ -125,7 +134,7 @@ def check_live(browser, base, repeats):
         x = plane.evaluate("e => e.transform.baseVal.getItem(0).matrix.e")
         assert x < 62, f"Restart did not reset to the start: {x}"
         moving()
-        expect(plane).to_have_attribute("transform", endpoint, timeout=5000)
+        expect(plane).to_have_attribute("transform", endpoint, timeout=8000)
         expect(button).to_have_text("▷ 비행 경로 재생")
         assert not errors, errors
         results.append(
