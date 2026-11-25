@@ -243,7 +243,8 @@ def test_etf_analysis_answers_three_questions(page, monkeypatch):
     captions = " ".join(c.value for c in page.caption)
     # The AI card shows the latest monthly decision, not the period below.
     assert "2025-01-03 결정 기준 (가장 최근)" in captions
-    assert "지난 2번의 월별 판단도 볼 수 있습니다" in captions
+    assert "저장된 2개 결정일의 판단도 볼 수 있습니다" in captions
+    assert "한 달에 한 번" not in captions and "월별" not in captions
     assert page.selectbox(key="correlation_window").label == "가격·관계 분석 기간"
     links = [link.label for link in page.get("page_link")]
     assert links[4:] == [
@@ -513,3 +514,46 @@ def test_portfolio_composition_lists_only_held_assets(page, monkeypatch):
     assert [p["name"] for p in spec["params"]] == ["hover", "pick"]
     assert any("보유하지 않은 자산 1개는 생략" in c.value for c in page.caption)
     assert any("누르면 어떤 ETF인지" in c.value for c in page.caption)
+
+
+def test_cash_pick_explains_cash_without_etf_link(page, monkeypatch):
+    from frontend import investment_client
+
+    original = investment_client.load_portfolio
+
+    def with_cash(observations=None):
+        data = original(observations)
+        data["assets"] = data["assets"] + [
+            {"ticker": "CASH", "name": "현금", "weight": 0.05}
+        ]
+        return data
+
+    monkeypatch.setattr(investment_client, "load_portfolio", with_cash)
+    # What a click on the cash slice sends back through the chart selection.
+    page.session_state["allocation_chart"] = {
+        "selection": {"pick": [{"ticker": "CASH"}]}
+    }
+    page.run()
+    assert not page.exception
+    assert "**현금**" in [m.value for m in page.markdown]
+    assert len(page.get("page_link")) == 4, "No ETF-analysis link for cash"
+    assert "etf_choice" not in page.session_state
+
+
+def test_shap_baseline_is_the_reference_input_output(page):
+    page.switch_page("app_pages/shap.py").run()
+    howto = " ".join(m.value for m in page.markdown)
+    assert "학습 기간 입력값의 평균을 넣었을 때" in howto
+    assert "평소" not in howto
+
+
+def test_etf_pick_shows_intro_and_opens_etf_analysis(page):
+    page.session_state["allocation_chart"] = {
+        "selection": {"pick": [{"ticker": "SPY"}]}
+    }
+    page.run()
+    assert not page.exception
+    assert page.get("page_link")[-1].label == "SPY ETF 분석에서 더 보기"
+    assert page.session_state["etf_choice"] == "SPY"
+    page.switch_page("app_pages/correlation.py").run()
+    assert page.selectbox(key="correlation_asset").value == "SPY"

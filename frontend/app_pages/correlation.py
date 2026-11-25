@@ -35,7 +35,7 @@ with card("factors"):
         # The period selector below does not apply here: SHAP is stored per
         # monthly decision, so this card always shows the latest one.
         st.caption(
-            f"{row['date']} 결정 기준 (가장 최근) · AI 판단 기록은 한 달에 한 번 저장됩니다."
+            f"{row['date']} 결정 기준 (가장 최근) · AI 판단 기록은 평가 기간 중 일부 결정일만 저장됩니다."
         )
         st.markdown(
             f"AI가 계산한 {ticker} 목표 비중은 **{row['final_value']:.0%}**입니다."
@@ -44,8 +44,8 @@ with card("factors"):
             # Every contribution is exactly 0: the AI gave this ETF the same weight
             # whatever the inputs were, so no signal moved it.
             st.info(
-                f"AI는 평소에도, 이날에도 {ticker}에 {row['final_value']:.0%}를 줬습니다. "
-                "어떤 신호를 봐도 비중이 달라지지 않아서, 비중을 움직인 신호가 없습니다."
+                f"AI는 어떤 신호를 넣어도 {ticker}에 같은 비중"
+                f"({row['final_value']:.0%})을 줘서, 비중을 움직인 신호가 없습니다."
             )
         else:
             factors = group_shap_features(
@@ -60,8 +60,9 @@ with card("factors"):
                     help=factor["explanation"],
                 )
         st.caption(
-            f"자세히 보기에서는 결정일을 바꿔 지난 {len(shap['assets'][ticker]['decisions'])}번의 "
-            "월별 판단도 볼 수 있습니다. AI 판단에 대한 설명이며 투자 권유가 아닙니다."
+            "자세히 보기에서는 결정일을 바꿔 저장된 "
+            f"{len(shap['assets'][ticker]['decisions'])}개 결정일의 판단도 볼 수 있습니다. "
+            "AI 판단에 대한 설명이며 투자 권유가 아닙니다."
         )
     detail_link("shap", "AI 판단 근거 자세히 보기 · 지난 결정일도 보기")
 

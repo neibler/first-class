@@ -90,9 +90,18 @@ if data:
                 key="allocation_chart",
             )
             picked = [
-                item["ticker"] for item in event.selection.get(ALLOCATION_PICK, [])
+                item["ticker"]
+                for item in event.get("selection", {}).get(ALLOCATION_PICK, [])
             ]
-            if picked:
+            if picked and picked[0] not in ASSET_NAMES:
+                # Cash (CASH) is shown in the composition but is not an ETF, so it
+                # gets a short note and no ETF-analysis link.
+                st.markdown("**현금**")
+                st.write(
+                    "ETF에 넣지 않고 남겨 둔 돈이에요. AI가 위험을 줄이거나 "
+                    "다음 거래를 기다릴 때 일부를 현금으로 둘 수 있어요."
+                )
+            elif picked:
                 ticker = picked[0]
                 st.markdown(f"**{ticker} · {ASSET_NAMES.get(ticker, ticker)}**")
                 st.write(

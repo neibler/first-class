@@ -246,7 +246,7 @@ def test_empty_shap_summary_and_unmatched_replay_date(monkeypatch):
     page = AppTest.from_file("frontend/app_pages/shap.py", default_timeout=20).run()
     assert not page.exception
     # All-zero SHAP: say that no signal moved the weight, instead of failing.
-    assert any("비중이 달라지지 않아" in item.value for item in page.info)
+    assert any("비중을 움직인 신호가 없습니다" in item.value for item in page.info)
     page.button(key="shap_details_button").click().run()
     assert not page.exception and page.dataframe
     captions = " ".join(item.value for item in page.caption)

@@ -54,13 +54,14 @@ def check_clock(browser, source):
           button.click();
           equal(step(-1000), 52); // Earlier than the click's performance.now().
           equal(step(-1100), 52); // Defensive lower bound.
-          const middle = step(600);
+          // A replay lasts 5,000 ms; -1000 + 2,500 = 1,500 is halfway.
+          const middle = step(1500);
           equal(middle, (52 + end) / 2);
           button.click(); // Cancel pending old frame and reset the start clock.
           equal(at(), 52);
           equal(step(0), 52); // Zero is a valid first-frame timestamp.
-          equal(step(1600), middle);
-          equal(step(3200), end);
+          equal(step(2500), middle);
+          equal(step(5000), end);
           if (pending.size) throw Error('Completed replay scheduled another frame');
           button.click();
           equal(step(5000), 52);

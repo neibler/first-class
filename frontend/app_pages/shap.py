@@ -41,7 +41,12 @@ date = b.selectbox(
     "결정일",
     dates,
     key="shap_date",
-    help="AI 판단 기록은 한 달에 한 번 저장됩니다. 처음에는 가장 최근 날짜가 선택됩니다.",
+    # explain_bundle samples a few executed decisions evenly (np.linspace), so the
+    # saved dates are not a fixed calendar frequency.
+    help=(
+        "AI 판단 기록은 평가 기간의 거래 결정 중 일부 날짜만 고르게 뽑아 저장합니다. "
+        "처음에는 가장 최근 날짜가 선택됩니다."
+    ),
 )
 st.session_state["shap_date_choice"] = date
 row = next(r for r in records if r["date"] == date)
@@ -58,7 +63,8 @@ st.subheader(f"{ticker} · {ASSET_NAMES.get(ticker, ticker)} — {date} 결정")
 with card("shap-howto"):
     st.subheader("이 화면 읽는 법")
     st.markdown(
-        f"1. AI는 평소 {ticker}에 주던 **기준 비중**에서 출발합니다.\n"
+        "1. **기준 비중**에서 출발합니다. 학습 기간 입력값의 평균을 넣었을 때 "
+        f"AI가 {ticker}에 주는 비중입니다.\n"
         "2. 그날의 신호(가격 흐름, 금리, 다른 ETF 움직임 등)가 비중을 조금씩 "
         "**올리거나(▲) 내립니다(▼)**.\n"
         "3. 기준 비중에 신호들의 효과를 모두 더하면 AI가 계산한 **목표 비중**이 됩니다.\n\n"
@@ -68,15 +74,19 @@ with card("shap-howto"):
 with card("shap-summary"):
     st.subheader(f"{ticker} 비중은 이렇게 정해졌어요")
     start, moved, end = st.columns(3)
+    # SHAP's base value is the model output at the averaged training input
+    # (model_shap.py background), not an average of past allocations.
     start.metric(
-        "기준 비중", f"{base:.1%}", help="평소(비교 기준 기간) AI가 주던 평균 비중"
+        "기준 비중",
+        f"{base:.1%}",
+        help="학습 기간 입력값의 평균을 넣었을 때 AI가 주는 비중(설명의 출발점)",
     )
     moved.metric("신호들의 효과", f"{(final - base) * 100:+.1f}%p")
     end.metric("AI 목표 비중", f"{final:.1%}")
     if not any(row["shap_values"]):
         st.info(
-            f"AI는 평소에도, 이날에도 {ticker}에 {final:.0%}를 줬습니다. 어떤 신호를 봐도 "
-            "비중이 달라지지 않아서 비중을 움직인 신호가 없습니다."
+            f"AI는 어떤 신호를 넣어도 {ticker}에 같은 비중({final:.0%})을 줘서, "
+            "비중을 움직인 신호가 없습니다."
         )
     if direction != "unknown":
         st.caption(
