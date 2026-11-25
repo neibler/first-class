@@ -28,6 +28,14 @@ except APIError as exc:
 a, b = st.columns(2)
 # Opens on the ETF chosen in ETF analysis, and going back keeps the one chosen here.
 ticker = choose_asset("shap", data["assets"], where=a)
+if ticker is None:
+    # The ETF chosen elsewhere has no saved decisions; say so instead of quietly
+    # showing another ETF.
+    st.info(
+        f"{st.session_state.get('etf_choice')}의 AI 판단 기록이 없습니다. "
+        "위에서 기록이 있는 ETF를 고르면 판단 근거를 볼 수 있습니다."
+    )
+    st.stop()
 records = data["assets"][ticker]["decisions"]
 dates = [r["date"] for r in records]
 # The decision date survives leaving the page; a date this ETF lacks falls back
@@ -85,8 +93,8 @@ with card("shap-summary"):
     end.metric("AI 목표 비중", f"{final:.1%}")
     if not any(row["shap_values"]):
         st.info(
-            f"AI는 어떤 신호를 넣어도 {ticker}에 같은 비중({final:.0%})을 줘서, "
-            "비중을 움직인 신호가 없습니다."
+            f"이 결정에서는 기준 비중과 비교해 {ticker} 비중({final:.0%})을 "
+            "움직인 신호가 없습니다."
         )
     if direction != "unknown":
         st.caption(

@@ -32,15 +32,35 @@ def open_on(ticker):
 
 
 def choose_asset(prefix, options=None, where=st):
+    """ETF selector; None when the shared ETF is not among this page's options.
+
+    A page with fewer options (SHAP has only the ETFs with saved decisions) must
+    not silently show its first option and then publish it as the visitor's
+    choice: Streamlit resets an unavailable value to the first option. The
+    selector is left empty instead, the shared choice is kept, and the page says
+    the requested ETF has no record. Picking an ETF there updates the choice.
+    """
     key = f"{prefix}_asset"
+    names = list(options or ASSET_NAMES)
     keep_choice(key, "etf_choice")
+    # A first visit with no shared choice keeps the default first option.
+    if st.session_state.get(key, names[0]) not in names:
+        st.session_state[key] = None
+
+    def picked():
+        if st.session_state.get(key) is not None:
+            st.session_state["etf_choice"] = st.session_state[key]
+
     ticker = where.selectbox(
         "ETF",
-        list(options or ASSET_NAMES),
+        names,
         format_func=lambda t: f"{t} · {ASSET_NAMES.get(t, t)}",
         key=key,
+        placeholder="ETF를 고르세요",
+        on_change=picked,
     )
-    st.session_state["etf_choice"] = ticker
+    if ticker is not None:
+        st.session_state["etf_choice"] = ticker
     forget_other_pages(prefix, "asset")
     return ticker
 

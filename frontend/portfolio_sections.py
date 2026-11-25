@@ -59,10 +59,17 @@ def change_rows(event):
     return sorted(rows, key=lambda row: -abs(int(row["변화"][:-2])))
 
 
+HISTORY_LIMIT = 500  # the API's largest page; FINAL2026 has 187 adjusted days
+
+
 def load_changes():
-    """Every asset's change, so the display rounding sees full before/after weights."""
+    """Every asset's change, so the display rounding sees full before/after weights.
+
+    Asks for the API's largest page so the trade history is complete; the
+    default page of 30 dropped the older days.
+    """
     try:
-        return insights_client.load_rebalancing(None, min_change=0)
+        return insights_client.load_rebalancing(None, limit=HISTORY_LIMIT, min_change=0)
     except APIError as exc:
         st.warning(str(exc))
         return None
@@ -161,7 +168,16 @@ def why_changed(changes):
             st.info("비중 변화 기록이 없습니다.")
             return
         events = {event["date"]: event for event in changes["events"]}
-        day = st.selectbox("날짜 (최근 순)", list(events), key="rebalance_date")
+        if len(events) < changes["rebalanced_days"]:
+            # Only when more days exist than one page holds: say so instead of
+            # presenting a cut list as the whole history.
+            st.caption(
+                f"비중을 조정한 {changes['rebalanced_days']}일 중 "
+                f"가장 최근 {len(events)}일만 보여 줍니다."
+            )
+        day = st.selectbox(
+            f"날짜 (최근 순 · {len(events)}일)", list(events), key="rebalance_date"
+        )
         event = events[day]
         reasons = [REASONS.get(r, r) for r in event["reasons"]]
         st.markdown(f"**{day} 조정 이유:** {', '.join(reasons) or '기록 없음'}")

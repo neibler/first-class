@@ -41,11 +41,12 @@ with card("factors"):
             f"AI가 계산한 {ticker} 목표 비중은 **{row['final_value']:.0%}**입니다."
         )
         if not any(row["shap_values"]):
-            # Every contribution is exactly 0: the AI gave this ETF the same weight
-            # whatever the inputs were, so no signal moved it.
+            # Every contribution is 0 for this decision only: relative to the
+            # reference input no signal moved the weight. That says nothing about
+            # other inputs, so do not claim the weight never changes.
             st.info(
-                f"AI는 어떤 신호를 넣어도 {ticker}에 같은 비중"
-                f"({row['final_value']:.0%})을 줘서, 비중을 움직인 신호가 없습니다."
+                f"이 결정에서는 기준 비중과 비교해 {ticker} 비중"
+                f"({row['final_value']:.0%})을 움직인 신호가 없습니다."
             )
         else:
             factors = group_shap_features(

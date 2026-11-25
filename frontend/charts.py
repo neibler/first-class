@@ -63,7 +63,7 @@ def performance_comparison(records):
             ),
             detail="strategy:N",
             tooltip=[
-                alt.Tooltip("date:T", title="평가일", format="%Y-%m-%d"),
+                alt.Tooltip("date:N", title="평가일"),
                 alt.Tooltip("label:N", title="전략"),
                 alt.Tooltip("cumulative_return:Q", title="누적수익률", format="+.2%"),
             ],
@@ -314,6 +314,9 @@ def force_plot(features, decision):
 
 
 def _date_axis():
+    # Points sit at UTC midnight. Tooltips show the API's date string as is
+    # ("date:N"): a temporal tooltip is formatted in the viewer's local time and
+    # shows the previous day west of UTC.
     return alt.X(
         "date:T",
         title="날짜",
@@ -334,7 +337,7 @@ def asset_return(rows):
                 "cumulative_return:Q", title="누적 수익률", axis=alt.Axis(format=".0%")
             ),
             tooltip=[
-                alt.Tooltip("date:T", title="날짜", format="%Y-%m-%d"),
+                alt.Tooltip("date:N", title="날짜"),
                 alt.Tooltip("cumulative_return:Q", title="누적 수익률", format=".2%"),
                 alt.Tooltip("close:Q", title="종가($)", format=",.2f"),
             ],
@@ -356,7 +359,7 @@ def indicator_line(rows, field, title, guides, domain=None):
             x=_date_axis(),
             y=alt.Y(f"{field}:Q", title=title, scale=scale),
             tooltip=[
-                alt.Tooltip("date:T", title="날짜", format="%Y-%m-%d"),
+                alt.Tooltip("date:N", title="날짜"),
                 alt.Tooltip(f"{field}:Q", title=title, format=".2f"),
             ],
         )
@@ -385,7 +388,7 @@ def drawdown_trend(path):
                 "drawdown:Q", title="최고점 대비 하락폭", axis=alt.Axis(format=".0%")
             ),
             tooltip=[
-                alt.Tooltip("date:T", title="날짜", format="%Y-%m-%d"),
+                alt.Tooltip("date:N", title="날짜"),
                 alt.Tooltip("drawdown:Q", title="하락폭", format=".2%"),
             ],
         )

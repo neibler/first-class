@@ -557,3 +557,59 @@ def test_etf_pick_shows_intro_and_opens_etf_analysis(page):
     assert page.session_state["etf_choice"] == "SPY"
     page.switch_page("app_pages/correlation.py").run()
     assert page.selectbox(key="correlation_asset").value == "SPY"
+
+
+def test_etf_without_decisions_keeps_the_shared_choice(page):
+    page.switch_page("app_pages/correlation.py").run()
+    page.selectbox(key="correlation_asset").set_value("SMH").run()
+    page.switch_page("app_pages/shap.py").run()
+    assert not page.exception
+    # No silent fallback to another ETF, and the request is not overwritten.
+    assert page.selectbox(key="shap_asset").value is None
+    assert any("SMH의 AI 판단 기록이 없습니다" in i.value for i in page.info)
+    assert page.session_state["etf_choice"] == "SMH"
+    page.switch_page("app_pages/correlation.py").run()
+    assert page.selectbox(key="correlation_asset").value == "SMH"
+    # Picking an ETF that has decisions there becomes the shared choice.
+    page.switch_page("app_pages/shap.py").run()
+    page.selectbox(key="shap_asset").set_value("QQQ").run()
+    assert not page.exception
+    assert page.session_state["etf_choice"] == "QQQ"
+    page.switch_page("app_pages/correlation.py").run()
+    assert page.selectbox(key="correlation_asset").value == "QQQ"
+
+
+def test_trade_history_asks_for_every_day_and_says_when_cut(page, monkeypatch):
+    from frontend import insights_client
+    from tests.investment_ui_fixtures import REBALANCING
+
+    calls = []
+
+    def history(observations=None, limit=30, min_change=None):
+        calls.append(limit)
+        return REBALANCING
+
+    monkeypatch.setattr(insights_client, "load_rebalancing", history)
+    page.switch_page("app_pages/trades.py").run()
+    assert not page.exception
+    assert calls == [500], "The whole evaluation fits in one page"
+    # The fixture lists 2 of its 187 adjusted days, so the cut is stated.
+    assert any("187일 중 가장 최근 2일만" in c.value for c in page.caption)
+
+
+def test_chart_tooltips_show_the_date_as_received():
+    from frontend.charts import asset_return, drawdown_trend, indicator_line
+
+    row = {"date": "2026-01-06", "cumulative_return": 0.0, "close": 1.0, "rsi": 50.0}
+    for chart in (
+        asset_return([row]),
+        indicator_line([row], "rsi", "RSI", [30]),
+        drawdown_trend([{"date": "2026-01-06", "drawdown": 0.0}]),
+    ):
+        spec = chart.to_dict()
+        layers = spec.get("layer", [spec])
+        tooltips = [
+            t for layer in layers for t in layer.get("encoding", {}).get("tooltip", [])
+        ]
+        dates = [t for t in tooltips if t["field"] == "date"]
+        assert dates and all(t["type"] == "nominal" for t in dates)
