@@ -171,9 +171,10 @@ def test_correlation_ui_has_real_payload_and_details(market, monkeypatch):
         "load_correlations",
         lambda ticker, window: analyze_correlations(market, ticker, window),
     )
-    page = AppTest.from_file(
-        "frontend/app_pages/correlation.py", default_timeout=20
-    ).run()
+    # Through the app: the full analysis is a detail page of ETF analysis, and
+    # page links need the registered navigation.
+    page = AppTest.from_file("frontend/app.py", default_timeout=20).run()
+    page.switch_page("app_pages/relations.py").run()
     assert not page.exception
     assert page.metric[0].label == "현재 구간 상관계수"
     assert len(page.metric) == 3
@@ -182,9 +183,9 @@ def test_correlation_ui_has_real_payload_and_details(market, monkeypatch):
     assert any("정규화 가격 변화 비교" in m.value for m in page.markdown)
     assert any("60거래일 Rolling Correlation 변화" in m.value for m in page.markdown)
     assert len(page.selectbox(key="correlation_pair").options) == 5
-    page.selectbox(key="correlation_window").set_value(252).run()
+    page.selectbox(key="relations_window").set_value(252).run()
     assert not page.exception
-    page.selectbox(key="correlation_asset").set_value("TLT").run()
+    page.selectbox(key="relations_asset").set_value("TLT").run()
     assert not page.exception
     assert len(page.dataframe) == 1
 

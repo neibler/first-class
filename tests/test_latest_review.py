@@ -223,7 +223,8 @@ def test_correlation_error_keeps_footer_and_retry(monkeypatch):
         lambda: api_client.HealthStatus(status="ok", model_loaded=False),
     )
     page = AppTest.from_file("frontend/app.py", default_timeout=20).run()
-    page.switch_page("app_pages/correlation.py").run()
+    # The full relationship analysis is the ETF analysis detail page now.
+    page.switch_page("app_pages/relations.py").run()
     assert not page.exception
     assert any("교육용 데모" in item.value for item in page.caption)
     assert page.button(key="refresh_health")
@@ -244,7 +245,10 @@ def test_empty_shap_summary_and_unmatched_replay_date(monkeypatch):
     monkeypatch.setattr(shap_client, "load_model_shap", lambda _: record)
     page = AppTest.from_file("frontend/app_pages/shap.py", default_timeout=20).run()
     assert not page.exception
-    assert any("상세 분석 보기" in item.value for item in page.info)
+    # All-zero SHAP: say that no signal moved the weight, instead of failing.
+    info = " ".join(item.value for item in page.info)
+    # Only this decision: no claim that every input gives the same weight.
+    assert "움직인 신호가 없습니다" in info and "어떤 신호를 넣어도" not in info
     page.button(key="shap_details_button").click().run()
     assert not page.exception and page.dataframe
     captions = " ".join(item.value for item in page.caption)
@@ -254,9 +258,13 @@ def test_empty_shap_summary_and_unmatched_replay_date(monkeypatch):
 def test_docker_weight_formatter_and_allocation():
     from frontend.charts import allocation
 
-    assert "!frontend/weight_format.py" in Path(".dockerignore").read_text()
+    ignore = Path(".dockerignore").read_text(encoding="utf-8")
+    for module in ("weight_format", "periods", "portfolio_sections", "etf_choice"):
+        assert f"!frontend/{module}.py" in ignore
     chart = allocation([{"ticker": "SPY", "weight": 0.105}]).to_dict()
-    assert chart["layer"][0]["data"]["values"][0]["weight_label"] == "11%"
+    # Donut (layer) and drawn weight table side by side.
+    donut = chart["hconcat"][0]["layer"][0]
+    assert donut["data"]["values"][0]["weight_label"] == "11%"
 
 
 @pytest.mark.parametrize("failure", ["write", "replace"])

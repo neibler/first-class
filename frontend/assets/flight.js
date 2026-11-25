@@ -25,7 +25,9 @@ export default function ({ data, parentElement }) {
   const ns = 'http://www.w3.org/2000/svg';
   const motion = window.matchMedia('(prefers-reduced-motion: reduce)');
   let frame = 0, previousWidth = 0, selected = points.length - 1;
-  let x, y, width, portfolio, benchmark, plane, cursor, endLabel, dates;
+  let x, y, width, portfolio, benchmark, plane, cursor, endLabel, dates, clip;
+  // Unique per instance: the id lives in the page's shared id space.
+  const clipId=`flight-reveal-${Math.random().toString(36).slice(2)}`;
   function el(tag, attrs, content) {
     const node = document.createElementNS(ns, tag);
     Object.entries(attrs).forEach(([k,v]) => node.setAttribute(k,v));
@@ -46,16 +48,14 @@ export default function ({ data, parentElement }) {
     const px=x(i)+(x(i+1)-x(i))*t;
     const py=y(points[i].portfolio)+(y(points[i+1].portfolio)-y(points[i].portfolio))*t;
     plane.setAttribute('transform',`translate(${px},${py})`);
-    const fraction=(px-52)/(width-52-88);
-    [portfolio,benchmark].forEach(path => {
-      // Clip against the same date coordinate used by the aircraft.
-      path.style.clipPath=`inset(0 ${Math.max(0,width-px-1)}px 0 0)`;
-    });
-    if (fraction >= .9999) [portfolio,benchmark].forEach(p => p.style.clipPath='none');
+    // Reveal the lines up to the aircraft's x in the SVG's own coordinates. A CSS
+    // inset() is measured from each path's bounding box, which ends at the last
+    // point, not the SVG edge, so the lines trailed the aircraft by the margin.
+    clip.setAttribute('width',Math.max(0,px+1));
   }
   function finish() {
     cancelAnimationFrame(frame); frame=0;
-    position(points.length-1); endLabel.style.opacity='1';
+    position(points.length-1); showAll(); endLabel.style.opacity='1';
     button.disabled=motion.matches;
     button.textContent=motion.matches ? '동작 감소 · 정적 표시' : '▷ 비행 경로 재생';
     show(points.length-1);
@@ -84,8 +84,15 @@ export default function ({ data, parentElement }) {
     }
     el('text',{x:left,y:14,fill:'#5d6d84'},'누적 수익률 (%)');
     const pathFor=field=>points.map((p,i)=>`${i?'L':'M'}${x(i)},${y(p[field])}`).join(' ');
-    benchmark=el('path',{'data-series':'benchmark',d:pathFor('benchmark'),fill:'none',stroke:'#f2a33a','stroke-width':2,'stroke-dasharray':'6 3'});
-    portfolio=el('path',{'data-series':'portfolio',d:pathFor('portfolio'),fill:'none',stroke:'#2f6fed','stroke-width':3});
+    const defs=el('defs',{}), area=document.createElementNS(ns,'clipPath');
+    area.setAttribute('id',clipId); defs.appendChild(area);
+    clip=document.createElementNS(ns,'rect');
+    clip.setAttribute('x',0);clip.setAttribute('y',0);
+    clip.setAttribute('height',height);clip.setAttribute('width',width);
+    area.appendChild(clip);
+    const reveal=`url(#${clipId})`;
+    benchmark=el('path',{'data-series':'benchmark',d:pathFor('benchmark'),fill:'none',stroke:'#f2a33a','stroke-width':2,'stroke-dasharray':'6 3','clip-path':reveal});
+    portfolio=el('path',{'data-series':'portfolio',d:pathFor('portfolio'),fill:'none',stroke:'#2f6fed','stroke-width':3,'clip-path':reveal});
     cursor=el('line',{x1:0,y1:top,x2:0,y2:height-bottom,stroke:'#5d6d84','stroke-opacity':'.45','stroke-dasharray':'3 4'});
     plane=el('g',{'aria-label':'포트폴리오 수익률 선의 끝점'});
     const shape=document.createElementNS(ns,'path');
@@ -95,6 +102,7 @@ export default function ({ data, parentElement }) {
     endLabel=el('text',{x:width-right+18,y:y(points.at(-1).portfolio)+4,fill:'#2f6fed','font-weight':'bold'},pct(points.at(-1).portfolio));
     finish();
   }
+  function showAll() { clip.setAttribute('width',width); }
   button.onclick=()=>{
     if(motion.matches) return finish();
     cancelAnimationFrame(frame);endLabel.style.opacity='0';button.textContent='↻ 다시 재생';
@@ -103,7 +111,7 @@ export default function ({ data, parentElement }) {
     const tick=now=>{
       // Frame timestamps can precede the click handler's performance.now().
       if(start === undefined) start=now;
-      const t=Math.max(0,Math.min(1,(now-start)/3200));
+      const t=Math.max(0,Math.min(1,(now-start)/5000));
       position(t*(points.length-1));
       if(t<1) frame=requestAnimationFrame(tick); else finish();
     };

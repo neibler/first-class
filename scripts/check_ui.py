@@ -10,12 +10,12 @@ from pathlib import Path
 
 from playwright.sync_api import expect, sync_playwright
 
-MENU = ["포트폴리오", "위험도·설명", "자산 상세", "AI 도우미"]
+MENU = ["포트폴리오", "ETF 분석", "운용 리포트", "AI 도우미"]
 # (menu to open, link text on that page, heading of the detail page)
 DETAILS = [
-    ("포트폴리오", "다른 전략과 성과 비교하기", "강화학습 성과"),
-    ("위험도·설명", "AI 판단 요인 자세히 보기", "SHAP 해석"),
-    ("위험도·설명", "전략 차이가 통계적으로 의미 있는지 보기 (ANOVA)", "ANOVA 검증"),
+    ("운용 리포트", "다른 전략과 자세히 비교하기", "강화학습 성과"),
+    ("ETF 분석", "AI 판단 근거 자세히 보기", "AI 판단 근거"),
+    ("운용 리포트", "차이가 통계적으로 의미 있는지 보기 (ANOVA)", "ANOVA 검증"),
 ]
 
 

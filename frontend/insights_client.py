@@ -47,11 +47,13 @@ def load_risk(observations=None):
     return data
 
 
-def load_rebalancing(observations=None, limit=30):
+def load_rebalancing(observations=None, limit=30, min_change=None):
     message = (
         "비중 변화 기록을 불러오지 못했습니다. 서버와 모델 준비 상태를 확인해 주세요."
     )
     params = {"limit": limit}
+    if min_change is not None:
+        params["min_change"] = min_change
     if observations is not None:
         params["observations"] = observations
     data = _get("/rebalancing", params, message)

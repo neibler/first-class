@@ -76,7 +76,7 @@ def main():
             # Back to the parent menu, then reopen ANOVA through its button.
             page.get_by_role("link", name="돌아가기", exact=False).click()
             expect(
-                page.get_by_role("heading", name="위험도·설명", exact=True)
+                page.get_by_role("heading", name="운용 리포트", exact=True)
             ).to_be_visible()
             page.get_by_role("link", name="ANOVA", exact=False).click()
             ready(page)
