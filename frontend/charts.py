@@ -1,9 +1,16 @@
 """Native Vega charts and a small browser-only flight-path component."""
 
+import warnings
 from html import escape
 
 import altair as alt
 import streamlit as st
+
+# The allocation donut and its drawn table share one hover and one click
+# selection on purpose; Altair merges them and would warn on every rerun.
+warnings.filterwarnings(
+    "ignore", message="Automatically deduplicated selection parameter"
+)
 
 COLORS = ["#2f6fed", "#19b8a6", "#f2a33a", "#8b6fe8", "#e86a5c", "#7d8ea3"]
 
@@ -65,28 +72,104 @@ def performance_comparison(records):
     return chart_style(chart.properties(height=290))
 
 
-def allocation(assets):
-    from frontend.weight_format import format_weight
+ALLOCATION_PICK = "pick"
+TABLE_WIDTH = 170
 
-    displayed = [{**a, "weight_label": format_weight(a["weight"])} for a in assets]
-    chart = (
-        alt.Chart(alt.Data(values=displayed))
-        .mark_arc(innerRadius=52, outerRadius=82, stroke="#ffffff", strokeWidth=3)
+
+def allocation(assets):
+    """Donut and a drawn weight table that share one hover and one click selection.
+
+    Pointing at a slice or a table row shows that ETF in the donut's centre
+    ("EFA 27%"); leaving shows "100%" again. A click is the "pick" selection that
+    Streamlit receives to show the ETF's short introduction.
+    st.dataframe gives no pointer events, so the table is drawn in the chart.
+    """
+    from frontend.weight_format import format_weights
+
+    ordered = sorted(assets, key=lambda a: -a["weight"])
+    tickers = [a["ticker"] for a in ordered]
+    # Labels add up to 100%, so the centre and the table always agree.
+    labels = format_weights([a["weight"] for a in ordered])
+    rows = [{**a, "weight_label": label} for a, label in zip(ordered, labels)]
+    data = alt.Data(values=rows)
+    hover = alt.selection_point(
+        name="hover", fields=["ticker"], on="pointerover", clear="pointerout"
+    )
+    pick = alt.selection_point(name=ALLOCATION_PICK, fields=["ticker"])
+    color = alt.Color(
+        "ticker:N", scale=alt.Scale(domain=tickers, range=COLORS), legend=None
+    )
+    nothing_hovered = "length(data('hover_store')) == 0"
+
+    arcs = (
+        alt.Chart(data)
+        .mark_arc(
+            innerRadius=52,
+            outerRadius=82,
+            stroke="#ffffff",
+            strokeWidth=3,
+            cursor="pointer",
+        )
         .encode(
             theta=alt.Theta("weight:Q", stack=True),
-            color=alt.Color("ticker:N", scale=alt.Scale(range=COLORS), legend=None),
-            tooltip=[
-                alt.Tooltip("ticker:N", title="자산"),
-                alt.Tooltip("weight_label:N", title="비중"),
-            ],
+            order=alt.Order("weight:Q", sort="descending"),
+            color=color,
+            opacity=alt.condition(hover, alt.value(1), alt.value(0.4)),
         )
+        .add_params(hover, pick)
     )
-    center = (
+    total = (
         alt.Chart(alt.Data(values=[{"label": "100%"}]))
         .mark_text(fontSize=24, color="#1b2a41")
-        .encode(text="label:N")
+        .encode(
+            text="label:N",
+            opacity=alt.condition(nothing_hovered, alt.value(1), alt.value(0)),
+        )
     )
-    return chart_style((chart + center).properties(height=185))
+
+    def centre(field, **style):
+        # One text per ETF at the centre; only the pointed one is visible.
+        return (
+            alt.Chart(data)
+            .mark_text(color="#1b2a41", **style)
+            .encode(
+                text=f"{field}:N",
+                opacity=alt.condition(hover, alt.value(1), alt.value(0), empty=False),
+            )
+        )
+
+    donut = alt.layer(
+        arcs,
+        total,
+        centre("ticker", fontSize=13, dy=-14),
+        centre("weight_label", fontSize=24, dy=10),
+    ).properties(width=185, height=185)
+
+    row = alt.Chart(data).encode(
+        y=alt.Y("ticker:N", sort=tickers, axis=None, title=None)
+    )
+    band = (
+        row.mark_rect(cornerRadius=6, cursor="pointer", color="#2f6fed")
+        .encode(
+            x=alt.value(0),
+            x2=alt.value(TABLE_WIDTH),
+            opacity=alt.condition(
+                hover, alt.value(0.12), alt.value(0.001), empty=False
+            ),
+        )
+        .add_params(hover, pick)
+    )
+    swatch = row.mark_square(size=110).encode(x=alt.value(16), color=color)
+    name = row.mark_text(align="left", fontSize=14, color="#1b2a41").encode(
+        x=alt.value(32), text="ticker:N"
+    )
+    weight = row.mark_text(
+        align="right", fontSize=14, fontWeight="bold", color="#1b2a41"
+    ).encode(x=alt.value(TABLE_WIDTH - 12), text="weight_label:N")
+    table = alt.layer(band, swatch, name, weight).properties(
+        width=TABLE_WIDTH, height=alt.Step(34)
+    )
+    return chart_style(alt.hconcat(donut, table, spacing=28))
 
 
 def summary_plot(records, features):

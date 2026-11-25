@@ -57,7 +57,22 @@ def prepare_page(monkeypatch):
         "get_health",
         lambda: api_client.HealthStatus(status="ok", model_loaded=True),
     )
+    from frontend import insights_client
+
+    # The "start today" proposal lives on the report's trade history page now;
+    # its rebalancing card gets an empty history instead of a live server.
+    monkeypatch.setattr(
+        insights_client,
+        "load_rebalancing",
+        lambda *a, **kw: {
+            "observations": 0,
+            "rebalanced_days": 0,
+            "average_turnover": 0.0,
+            "events": [],
+        },
+    )
     app = AppTest.from_file("frontend/app.py", default_timeout=20).run()
+    app.switch_page("app_pages/trades.py").run()
     app.session_state["investment_session_token"] = "old"
     return app
 

@@ -76,6 +76,9 @@ backend/performance/**
 !frontend/shap_state.py
 !frontend/correlation_client.py
 !frontend/insights_client.py
+!frontend/periods.py
+!frontend/portfolio_sections.py
+!frontend/etf_choice.py
 !config/multi_model.json
 
 !shared/training_inputs.zip

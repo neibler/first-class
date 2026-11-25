@@ -1,44 +1,80 @@
-"""Market relationships, independent of model explanations and news research."""
+"""ETF analysis for beginners: three plain answers, each with a detail page."""
 
-import altair as alt
-import pandas as pd
 import streamlit as st
+
 from frontend.api_client import APIError
+from frontend.charts import asset_return
 from frontend.correlation_client import load_correlations
-from frontend.charts import asset_return, chart_style, indicator_line
-from frontend.guide import ETF_GUIDE
+from frontend.etf_choice import WINDOWS, choose_asset, choose_window, etf_name
 from frontend.insights_client import load_asset_history
-from frontend.shap_explanations import ASSET_NAMES
-from frontend.ui import card, page_heading
+from frontend.shap_client import load_model_shap
+from frontend.shap_explanations import group_shap_features
+from frontend.shap_presentation import select_factors
+from frontend.ui import card, detail_link, page_heading
+
+DIRECTIONS = {"increase": "▲ 비중을 높이는 쪽", "decrease": "▼ 비중을 낮추는 쪽"}
 
 page_heading(
-    "자산 상세",
-    "ASSET DETAIL / 03",
-    "ETF가 무엇인지, 실제 시장에서 무엇과 같이 움직였는지 살펴보세요.",
+    "ETF 분석",
+    "ETF ANALYSIS / 02",
+    "궁금한 ETF를 골라 보세요. AI가 왜 이만큼 담았는지, 요즘 가격은 어땠는지 알려 드려요.",
 )
-st.caption(
-    "AI 결정 기여를 설명하는 SHAP, 시장 사건을 설명하는 뉴스 리서치와 별개의 분석입니다."
+ticker = choose_asset("correlation", where=st.columns(2)[0])
+
+with card("factors"):
+    st.subheader("AI는 왜 이 비중을 정했나요?")
+    try:
+        shap = load_model_shap(None)
+    except APIError as exc:
+        st.warning(str(exc))
+        shap = None
+    if shap and ticker not in shap["assets"]:
+        st.info(f"{ticker}의 AI 판단 기록이 없습니다.")
+    elif shap:
+        row = shap["assets"][ticker]["decisions"][-1]
+        # The period selector below does not apply here: SHAP is stored per
+        # monthly decision, so this card always shows the latest one.
+        st.caption(
+            f"{row['date']} 결정 기준 (가장 최근) · AI 판단 기록은 한 달에 한 번 저장됩니다."
+        )
+        st.markdown(
+            f"AI가 계산한 {ticker} 목표 비중은 **{row['final_value']:.0%}**입니다."
+        )
+        if not any(row["shap_values"]):
+            # Every contribution is exactly 0: the AI gave this ETF the same weight
+            # whatever the inputs were, so no signal moved it.
+            st.info(
+                f"AI는 평소에도, 이날에도 {ticker}에 {row['final_value']:.0%}를 줬습니다. "
+                "어떤 신호를 봐도 비중이 달라지지 않아서, 비중을 움직인 신호가 없습니다."
+            )
+        else:
+            factors = group_shap_features(
+                shap["features"], row["shap_values"], ticker, row
+            )
+            selected, _ = select_factors(factors, "unknown")
+            st.caption("비중을 가장 크게 움직인 신호 3개입니다.")
+            for factor in selected:
+                st.markdown(
+                    f"**{factor['label']}** · "
+                    f"{DIRECTIONS.get(factor['direction'], '영향 없음')}",
+                    help=factor["explanation"],
+                )
+        st.caption(
+            f"자세히 보기에서는 결정일을 바꿔 지난 {len(shap['assets'][ticker]['decisions'])}번의 "
+            "월별 판단도 볼 수 있습니다. AI 판단에 대한 설명이며 투자 권유가 아닙니다."
+        )
+    detail_link("shap", "AI 판단 근거 자세히 보기 · 지난 결정일도 보기")
+
+# Applies to the two market cards below only, so it sits right above them.
+window = choose_window(
+    "correlation",
+    "가격·관계 분석 기간",
+    where=st.columns(2)[0],
 )
-a, b = st.columns(2)
-ticker = a.selectbox(
-    "ETF",
-    list(ASSET_NAMES),
-    format_func=lambda t: f"{t} · {ASSET_NAMES[t]}",
-    key="correlation_asset",
-)
-window = b.selectbox(
-    "분석 기간",
-    [20, 60, 120, 252],
-    index=1,
-    format_func=lambda n: f"{n}거래일",
-    key="correlation_window",
-)
-with card("etf-intro"):
-    st.subheader(f"{ticker}는 무엇인가요?")
-    st.write(ETF_GUIDE.get(ticker, "이 ETF의 소개 글은 아직 준비되지 않았습니다."))
-    st.caption("ETF가 따라가는 대상에 대한 일반적인 소개이며 투자 권유가 아닙니다.")
+st.caption("아래 두 카드는 실제 시장 가격 데이터 기준입니다.")
+
 with card("asset-history"):
-    st.subheader(f"{ticker} 가격과 지표 흐름")
+    st.subheader("가격은 어떻게 움직였나요?")
     try:
         history = load_asset_history(ticker, window)
     except APIError as exc:
@@ -46,208 +82,32 @@ with card("asset-history"):
         history = None
     if history:
         rows = history["rows"]
-        st.caption(
-            f"{rows[0]['date']} ~ {history['as_of']} · "
-            f"최근 {history['observations']}거래일 · 모델이 학습·평가에 쓴 실제 시장 데이터"
+        change = rows[-1]["cumulative_return"]
+        st.markdown(
+            f"최근 {WINDOWS[window]}({rows[0]['date']} ~ {rows[-1]['date']}) 동안 "
+            f"{ticker} 가격이 **{abs(change):.1%} "
+            f"{'올랐' if change >= 0 else '내렸'}습니다.**"
         )
-        st.markdown("**누적 수익률** · 기간 첫날을 0%로 맞춘 가격 변화")
-        first, last = rows[0]["close"], rows[-1]["close"]
-        if first is not None and last is not None:
-            st.caption(f"가격 ${last:,.2f} · 기간 첫날 ${first:,.2f} (달러, 종가 기준)")
         st.altair_chart(asset_return(rows), width="stretch")
-        rsi, macd = st.columns(2)
-        with rsi:
-            st.markdown(f"**RSI** · 현재 {rows[-1]['rsi']:.0f}")
-            st.altair_chart(
-                indicator_line(rows, "rsi", "RSI", [30, 70], [0, 100]),
-                width="stretch",
-            )
-            st.caption("70 이상은 과매수, 30 이하는 과매도 상태로 봅니다.")
-        with macd:
-            st.markdown(f"**MACD** · 현재 {rows[-1]['macd']:+.2f}")
-            st.altair_chart(indicator_line(rows, "macd", "MACD", [0]), width="stretch")
-            st.caption("0보다 크면 최근 흐름이 장기 흐름보다 강하다는 뜻입니다.")
-try:
-    data = load_correlations(ticker, window)
-except APIError as exc:
-    st.error(str(exc))
-    if st.button("다시 시도", key="retry_correlation"):
-        st.rerun()
-    data = None
-if data is not None:
-    st.subheader(f"{ticker} 자산 관계 분석")
-    st.caption(f"데이터 기준일: {data['date'] or '없음'} · 최근 {window}거래일")
-    if data["window_start"]:
+    detail_link("price", "가격·지표(RSI·MACD) 자세히 보기")
+
+with card("relations"):
+    st.subheader("다른 자산과 같이 움직이나요?")
+    try:
+        data = load_correlations(ticker, window)
+    except APIError as exc:
+        st.warning(str(exc))
+        data = None
+    if data and data["relationships"]:
         st.caption(
-            f"분석 구간: {data['window_start']} ~ {data['date']}"
-            " · ETF 로그수익률 / WTI 단순수익률 / 금리·VIX·금리차 일별 변화량 기준"
+            "같이 움직이는 자산끼리는 함께 오르고 함께 떨어져서, 서로의 손실을 덜어 주지 못합니다. "
+            f"최근 {WINDOWS[window]} 동안 {ticker}와 관계가 가장 큰 3개입니다."
         )
-    st.caption(data["alignment_note"])
-    st.caption(
-        "관계 강도는 이해를 돕기 위한 구간 표현이며 절대적인 통계 기준이 아닙니다."
-    )
-    relationships = data["relationships"]
-    if not relationships:
+        for item in data["relationships"][:3]:
+            st.markdown(
+                f"**{etf_name(item['display_name'])}** · "
+                f"{item['relationship_label']} ({item['strength']})"
+            )
+    elif data:
         st.info(data["message"])
-    else:
-        st.markdown("**관계가 큰 항목 Top 5**")
-        for item in relationships:
-            name = item["display_name"]
-            if item["type"] == "ETF":
-                name = f"{ASSET_NAMES.get(name, name)}({name})"
-            st.markdown(f"**{name} · {item['correlation']:+.2f}**")
-            st.caption(
-                f"{item['strength']} · {item['relationship_label']} · 최근 {window}거래일"
-            )
-        selected = st.selectbox(
-            "비교할 자산·지표",
-            [r["name"] for r in relationships],
-            format_func=lambda name: next(
-                r["display_name"] for r in relationships if r["name"] == name
-            ),
-            key="correlation_pair",
-        )
-        item = next(r for r in relationships if r["name"] == selected)
-        st.markdown(f"**{ticker} ↔ {item['display_name']}**")
-        current, previous, difference = st.columns(3)
-        current.metric("현재 구간 상관계수", f"{item['correlation']:+.2f}")
-        prior = item.get("previous_correlation")
-        previous.metric(
-            "이전 구간 상관계수", f"{prior:+.2f}" if prior is not None else "자료 부족"
-        )
-        difference.metric(
-            "상관계수 변화",
-            f"{item['correlation']-prior:+.2f}" if prior is not None else "—",
-        )
-        st.caption(f"{item['strength']} · {item['relationship_label']}")
-        if item.get("change_description"):
-            st.caption(item["change_description"])
-            st.caption(
-                f"이전 구간은 {item['previous_date']}에 끝나는 겹치지 않는 {window}거래일입니다."
-            )
-
-        comparison = data.get("comparisons", {}).get(selected, {})
-        kind = "가격" if item["type"] == "ETF" else "시장값"
-        st.markdown(f"**최근 {window}거래일 정규화 {kind} 변화 비교**")
-        if comparison.get("status") == "ok":
-            records = comparison["records"]
-            points = [
-                {**record, "series": comparison[label], "normalized": record[key]}
-                for record in records
-                for key, label in [
-                    ("selected", "selected_label"),
-                    ("comparison", "comparison_label"),
-                ]
-            ]
-            paths = (
-                alt.Chart(pd.DataFrame(points))
-                .mark_line()
-                .encode(
-                    x=alt.X("date:T", title="날짜"),
-                    y=alt.Y(
-                        "normalized:Q",
-                        title="시작값 = 100",
-                        scale=alt.Scale(zero=False),
-                    ),
-                    color=alt.Color(
-                        "series:N",
-                        title="비교 대상",
-                        scale=alt.Scale(range=["#2f6fed", "#f2a33a"]),
-                    ),
-                    tooltip=[
-                        alt.Tooltip("date:T", title="날짜"),
-                        alt.Tooltip(
-                            "selected:Q",
-                            title=f"{comparison['selected_label']} (시작=100)",
-                            format=".2f",
-                        ),
-                        alt.Tooltip(
-                            "comparison:Q",
-                            title=f"{comparison['comparison_label']} (시작=100)",
-                            format=".2f",
-                        ),
-                    ],
-                )
-            )
-            st.altair_chart(chart_style(paths.properties(height=260)), width="stretch")
-            st.caption(
-                f"{comparison['start']} ~ {comparison['end']} · "
-                "두 시계열의 시작값을 100으로 맞춰 상대 움직임을 비교합니다."
-            )
-            st.caption(comparison["source_note"])
-            if comparison.get("message"):
-                st.info(comparison["message"])
-        else:
-            st.info(
-                comparison.get(
-                    "message",
-                    "정규화 비교 자료가 없습니다. API 서버를 재시작해 주세요.",
-                )
-            )
-        st.caption(
-            (
-                "이 그래프는 상관계수 계산에 사용하지 않습니다. "
-                "통계는 일별 수익률·변화량으로 계산하며, 모든 날짜가 같은 방향으로 움직인다는 뜻은 아닙니다."
-            )
-        )
-        st.markdown(f"**{window}거래일 Rolling Correlation 변화**")
-        st.caption(
-            (
-                f"각 날짜에서 직전 {window}거래일 데이터를 이용해 계산한 상관계수입니다. "
-                "그래프는 여러 분석 구간의 변화를 보여줍니다."
-            )
-        )
-        history = pd.DataFrame(data["rolling"][selected])
-        line = (
-            alt.Chart(history)
-            .mark_line(color="#2f6fed")
-            .encode(
-                x=alt.X("date:T", title="날짜"),
-                y=alt.Y(
-                    "correlation:Q", title="상관계수", scale=alt.Scale(domain=[-1, 1])
-                ),
-                tooltip=[
-                    alt.Tooltip("date:T", title="날짜"),
-                    alt.Tooltip("correlation:Q", format="+.3f", title="상관계수"),
-                ],
-            )
-        )
-        zero = (
-            alt.Chart(pd.DataFrame({"zero": [0]}))
-            .mark_rule(color="#8a97a8", strokeDash=[4, 4])
-            .encode(y="zero:Q")
-        )
-        st.altair_chart(
-            chart_style((line + zero).properties(height=260)), width="stretch"
-        )
-        st.caption(item["description"])
-
-    with st.expander("상세 관계와 계산 기준 보기"):
-        if data["all_relationships"]:
-            table = pd.DataFrame(data["all_relationships"])
-            st.dataframe(
-                table[
-                    [
-                        "display_name",
-                        "type",
-                        "correlation",
-                        "strength",
-                        "transformation",
-                        "observations",
-                    ]
-                ],
-                hide_index=True,
-                width="stretch",
-            )
-        st.caption(
-            "ETF: 로그수익률 · 금리/VIX/장단기 차이: 일별 차분 · WTI: 일별 단순수익률. 각 구간 전체 관측이 필요합니다."
-        )
-        for excluded in data["excluded_features"] + data["unavailable_relationships"]:
-            st.caption(f"{excluded['name']}: {excluded['reason']}")
-        st.caption(
-            "강도: |r| < 0.2 매우 약함 / < 0.4 약함 / < 0.6 보통 / < 0.8 강함 / 그 이상 매우 강함"
-        )
-    st.caption(data["disclaimer"])
-    st.caption(
-        "상관관계가 높다고 AI가 해당 정보를 사용했다는 뜻은 아닙니다. 수익률 예측이나 투자 추천이 아닙니다."
-    )
+    detail_link("relations", "자산 관계 자세히 보기")

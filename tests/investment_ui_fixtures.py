@@ -26,7 +26,20 @@ def investment_ui_fixture(request, monkeypatch):
         # Distinct market values so captions can be told apart from VaR/CVaR.
         data.setdefault(
             "benchmark_metrics",
-            {"max_drawdown": 0.0731, "annualized_volatility": 0.1222},
+            {
+                "max_drawdown": 0.0731,
+                "annualized_volatility": 0.1222,
+                "total_return": 0.1242,
+            },
+        )
+        # Server metrics the report summarizes (volatility close to the market's).
+        data.setdefault(
+            "metrics",
+            {
+                "annualized_volatility": 0.13,
+                "total_return": 0.0466,
+                "total_cost_initial_capital": 0.1971,
+            },
         )
         return data
 
@@ -59,9 +72,14 @@ REBALANCING = {
             "reasons": ["portfolio_weight_distance"],
             "turnover": 1.31,
             "cash_weight": 0.0,
+            # Every held asset (the page asks for min_change=0); each side sums to 1.
             "changes": [
-                {"ticker": "SHY", "before": 0.712, "after": 0.344, "change": -0.368},
-                {"ticker": "GLD", "before": 0.0, "after": 0.344, "change": 0.344},
+                {"ticker": "SHY", "before": 0.7121, "after": 0.3439, "change": -0.3682},
+                {"ticker": "GLD", "before": 0.0, "after": 0.3439, "change": 0.3439},
+                {"ticker": "EFA", "before": 0.0, "after": 0.2720, "change": 0.2720},
+                {"ticker": "DBB", "before": 0.2417, "after": 0.0, "change": -0.2417},
+                {"ticker": "TIP", "before": 0.0462, "after": 0.0, "change": -0.0462},
+                {"ticker": "SMH", "before": 0.0, "after": 0.0402, "change": 0.0402},
             ],
         },
         {
@@ -127,6 +145,6 @@ def insights_ui_fixture(request, monkeypatch):
     monkeypatch.setattr(
         insights_client,
         "load_rebalancing",
-        lambda observations=None, limit=30: REBALANCING,
+        lambda observations=None, limit=30, min_change=None: REBALANCING,
     )
     monkeypatch.setattr(insights_client, "load_asset_history", asset_history)
