@@ -127,7 +127,8 @@ class InvestmentService(SessionRegistry):
                 "Saved input or explicit parquet path required; "
                 "API never generates data"
             )
-        self.data, _ = load_data(
+        # The raw frame keeps close prices for read-only dashboard views.
+        self.data, self.market_frame = load_data(
             config, ROOT if external else bundle_input_root(paths[0], ROOT)
         )
         self.config = self.model_config.copy()
