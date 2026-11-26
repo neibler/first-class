@@ -69,9 +69,12 @@ def news_coverage(api_base_url):
     return api_client.get_research_coverage()
 
 
-def out_of_coverage(as_of):
-    """True only when the range is known and the date (YYYY-MM-DD) is outside."""
-    known = news_coverage(api_client.get_api_base_url())
+def out_of_coverage(as_of, known):
+    """True only when the range is known and the date (YYYY-MM-DD) is outside.
+
+    `known` is the page's one coverage snapshot, so the check and the message
+    always use the same range even if the cache expires mid-run.
+    """
     if not known or not as_of:
         return False
     try:
@@ -150,7 +153,7 @@ with st.container(key="card-request"):
             key="research_submit",
             on_click=queue_research,
         )
-    if selected_date and out_of_coverage(selected_date.isoformat()):
+    if selected_date and out_of_coverage(selected_date.isoformat(), coverage):
         st.warning(
             f"선택한 기준일이 뉴스 DB 자료 범위({coverage[0]:%Y-%m-%d} ~ "
             f"{coverage[1]:%Y-%m-%d}) 밖이라 분석하지 않습니다."
@@ -173,7 +176,7 @@ if pending is not None:
         if reusable_input and saved is not None and saved["request"] == pending:
             outcome["result"] = saved["result"]
             outcome["reused"] = True
-        elif out_of_coverage(pending["as_of"]):
+        elif out_of_coverage(pending["as_of"], coverage):
             # Refuse at once: outside the DB the server could only answer
             # "no evidence" after several paid calls. The server checks too.
             raise api_client.ResearchAPIError("research_out_of_range")

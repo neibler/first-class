@@ -492,6 +492,12 @@ def test_range_edges_are_still_requested(page, post, body, as_of):
     assert not any("자료 범위" in item.value for item in page.warning)
 
 
+def test_coverage_with_invalid_api_url_is_unknown(monkeypatch):
+    # httpx raises InvalidURL (not an HTTPError) before any network call.
+    monkeypatch.setenv("API_BASE_URL", "http://localhost:bad")
+    assert api_client.get_research_coverage() is None
+
+
 def test_unknown_range_never_blocks(page, post, body, coverage):
     coverage.return_value = None
     st.cache_data.clear()

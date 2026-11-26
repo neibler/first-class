@@ -35,6 +35,8 @@ services:
   # only when chroma.sqlite3 changes. Opening it straight from a Windows folder
   # took ~40s per request; from the volume ~2s. Set NEWS_CHROMA_HOST_PATH in .env
   # when the DB lives elsewhere. Without a DB, /research reports it is missing.
+  # A failed copy exits 1 so api does not start on a partial DB. A missing source
+  # clears the old copy (exit 0) so api starts and reports the DB as missing.
   news-db-init:
     build:
       context: .
@@ -47,9 +49,11 @@ services:
         stamp=$$(stat -c %s-%Y /source/chroma.sqlite3);
         if [ "$$(cat /news/chroma/.source 2>/dev/null)" != "$$stamp" ]; then
         echo "copying news DB"; rm -rf /news/chroma/* /news/chroma/.source;
-        cp -a /source/. /news/chroma/ && echo "$$stamp" > /news/chroma/.source;
+        if ! cp -a /source/. /news/chroma/; then echo "news DB copy failed"; exit 1; fi;
+        echo "$$stamp" > /news/chroma/.source;
         else echo "news DB up to date"; fi;
-        else echo "news DB not found; AI assistant will report it"; fi;
+        else echo "news DB not found; clearing old copy, AI assistant will report it";
+        rm -rf /news/chroma/* /news/chroma/.source; fi;
         chown -R 10001:10001 /news/chroma
     volumes:
       - ${NEWS_CHROMA_HOST_PATH:-./data/processed/news/chroma}:/source:ro

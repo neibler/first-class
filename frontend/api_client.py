@@ -183,7 +183,9 @@ def get_research_coverage() -> tuple[date, date] | None:
         response.raise_for_status()
         body = response.json()
         start, end = date.fromisoformat(body["start"]), date.fromisoformat(body["end"])
-    except (httpx.HTTPError, ValueError, KeyError, TypeError):
+    # InvalidURL is not an HTTPError; a bad API_BASE_URL must not break the page
+    # (post_research then shows its own invalid_api_url message).
+    except (httpx.HTTPError, httpx.InvalidURL, ValueError, KeyError, TypeError):
         return None
     return (start, end) if start <= end else None
 
