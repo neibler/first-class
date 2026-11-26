@@ -209,6 +209,9 @@ def page(monkeypatch, get):
         "get_health",
         lambda: api_client.HealthStatus(status="ok", model_loaded=False),
     )
+    # The AI assistant page asks for the news range; keep these counts about
+    # the statistics endpoint only.
+    monkeypatch.setattr(api_client, "get_research_coverage", lambda: None)
     app = AppTest.from_file("frontend/app.py", default_timeout=15).run()
     return app.switch_page("app_pages/anova.py").run()
 

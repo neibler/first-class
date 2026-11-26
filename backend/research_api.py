@@ -11,9 +11,24 @@ from backend.research_schemas import (
     ResearchRequest,
     ResearchResponse,
 )
-from backend.research_service import ResearchFailure, run_research
+from backend.research_service import ResearchFailure, coverage, run_research
 
 router = APIRouter()
+
+
+@router.get(
+    "/research/coverage",
+    responses={code: {"model": ResearchErrorResponse} for code in (503,)},
+)
+def research_coverage() -> dict:
+    """First and last news date in the DB; requests outside it are refused."""
+    try:
+        return coverage()
+    except ResearchFailure as exc:
+        raise HTTPException(
+            status_code=exc.status,
+            detail={"code": exc.code, "message": exc.message},
+        ) from None
 
 
 @router.post(
