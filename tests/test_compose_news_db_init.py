@@ -5,6 +5,7 @@ The real container copies the host news DB into a volume; here /source and
 """
 
 import os
+import shlex
 import shutil
 import subprocess
 from pathlib import Path
@@ -37,10 +38,15 @@ pytestmark = pytest.mark.skipif(BASH is None, reason="needs bash")
 def script(source, target):
     compose = yaml.safe_load((ROOT / "docker-compose.yml").read_text(encoding="utf-8"))
     text = compose["services"]["news-db-init"]["command"][0]
+    # Placeholders first so one substituted path can never be rewritten by the
+    # next replace; quoted so temp paths with spaces stay one shell word.
+    # Suffixes such as /. and /* stay outside the quotes and keep working.
     return (
         text.replace("$$", "$")
-        .replace("/news/chroma", target.as_posix())
-        .replace("/source", source.as_posix())
+        .replace("/news/chroma", "@TARGET@")
+        .replace("/source", "@SOURCE@")
+        .replace("@TARGET@", shlex.quote(target.as_posix()))
+        .replace("@SOURCE@", shlex.quote(source.as_posix()))
         .replace("chown -R 10001:10001", "true")
     )
 
@@ -49,7 +55,7 @@ def run(source, target, path_prefix=None):
     text = script(source, target)
     if path_prefix:
         # Set inside bash: Windows PATH uses ";" and Git Bash converts it.
-        text = f'PATH="{path_prefix}:$PATH"; {text}'
+        text = f'PATH={shlex.quote(path_prefix)}:"$PATH"; {text}'
     return subprocess.run(
         [BASH, "-c", text], capture_output=True, text=True, timeout=60
     )
@@ -65,8 +71,9 @@ def posix(path):
 
 @pytest.fixture
 def dirs(tmp_path):
-    source, target = tmp_path / "source", tmp_path / "volume"
-    source.mkdir()
+    # A space in every path: the substituted paths must stay one shell word.
+    source, target = tmp_path / "news db" / "source", tmp_path / "docker vol"
+    source.mkdir(parents=True)
     target.mkdir()
     (source / "chroma.sqlite3").write_text("db", encoding="utf-8")
     (source / "index.bin").write_text("index", encoding="utf-8")
@@ -86,7 +93,7 @@ def test_copies_once_then_reports_up_to_date(dirs):
 
 def test_failed_copy_fails_the_initializer(dirs, tmp_path):
     source, target = dirs
-    shim = tmp_path / "bin"
+    shim = tmp_path / "fake bin"
     shim.mkdir()
     (shim / "cp").write_text("#!/bin/sh\nexit 1\n", encoding="utf-8")
     (shim / "cp").chmod(0o755)
