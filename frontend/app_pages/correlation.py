@@ -38,7 +38,7 @@ with card("factors"):
             f"{row['date']} 결정 기준 (가장 최근) · AI 판단 기록은 평가 기간 중 일부 결정일만 저장됩니다."
         )
         st.markdown(
-            f"AI가 계산한 {ticker} 목표 비중은 **{row['final_value']:.0%}**입니다."
+            f"AI가 계산한 {ticker} 목표 비중은 **{row['final_value']:.0%}** 입니다."
         )
         if not any(row["shap_values"]):
             # Every contribution is 0 for this decision only: relative to the

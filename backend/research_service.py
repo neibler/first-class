@@ -47,6 +47,67 @@ class _BoundedLLM:
         return result
 
 
+_coverage_cache: dict = {}
+
+
+def news_coverage(db_path: Path) -> tuple[str, str] | None:
+    """(first, last) news date in the DB, from Chroma's indexed date_int metadata.
+
+    A read-only SQLite min/max (well under a second on the 200k-chunk DB),
+    cached until chroma.sqlite3 changes. None when it cannot be read, so a
+    coverage problem never blocks research on its own.
+    """
+    import sqlite3
+
+    sqlite = Path(db_path) / "chroma.sqlite3"
+    try:
+        stat = sqlite.stat()
+    except OSError:
+        return None
+    key = (str(sqlite), stat.st_mtime_ns, stat.st_size)
+    if key in _coverage_cache:
+        return _coverage_cache[key]
+    try:
+        with sqlite3.connect(f"{sqlite.as_uri()}?mode=ro", uri=True) as connection:
+            low, high = connection.execute(
+                "SELECT min(int_value), max(int_value) FROM embedding_metadata "
+                "WHERE key = 'date_int' AND int_value IS NOT NULL"
+            ).fetchone()
+    except sqlite3.Error:
+        return None
+    if low is None or high is None:
+        return None
+
+    def iso(value: int) -> str:
+        text = str(value)
+        return f"{text[:4]}-{text[4:6]}-{text[6:8]}"
+
+    _coverage_cache.clear()
+    _coverage_cache[key] = (iso(low), iso(high))
+    return _coverage_cache[key]
+
+
+def coverage() -> dict:
+    """Date range the AI assistant can answer for; raises ResearchFailure."""
+    try:
+        from backend.news_research.settings import news_db_path
+    except ImportError:
+        raise ResearchFailure(
+            503, "research_unavailable", "리서치 실행 환경이 준비되지 않았습니다."
+        ) from None
+    db_path = news_db_path()
+    if not (db_path / "chroma.sqlite3").is_file():
+        raise ResearchFailure(
+            503, "research_db_missing", "리서치 DB가 준비되지 않았습니다."
+        )
+    found = news_coverage(db_path)
+    if found is None:
+        raise ResearchFailure(
+            503, "research_db_unavailable", "리서치 DB를 사용할 수 없습니다."
+        )
+    return {"start": found[0], "end": found[1]}
+
+
 def _run(request: ResearchRequest) -> ResearchResponse:
     # Kept inside the request so the base API image works without RAG packages.
     try:
@@ -64,6 +125,14 @@ def _run(request: ResearchRequest) -> ResearchResponse:
     if not (db_path / "chroma.sqlite3").is_file():
         raise ResearchFailure(
             503, "research_db_missing", "리서치 DB가 준비되지 않았습니다."
+        )
+    # Before any paid call: a date outside the DB can only end in "no evidence".
+    found = news_coverage(db_path)
+    if found and not found[0] <= request.as_of.isoformat() <= found[1]:
+        raise ResearchFailure(
+            422,
+            "research_out_of_range",
+            f"기준일이 뉴스 DB 범위({found[0]} ~ {found[1]}) 밖입니다.",
         )
     try:
         import anthropic
