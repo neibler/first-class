@@ -36,8 +36,10 @@ with card("report-compare"):
     spy = ((portfolio or {}).get("benchmark_metrics") or {}).get("total_return")
     if mine is not None and spy is not None:
         st.markdown(
+            # Bold must not end right before Hangul after "%": CommonMark then
+            # leaves the closing ** unmatched and shows the asterisks.
             f"같은 기간 AI 포트폴리오는 **{mine:+.1%}**, "
-            f"{MARKET}만 들고 있었다면 **{spy:+.1%}**였어요."
+            f"{MARKET}만 들고 있었다면 **{spy:+.1%}** 였어요."
         )
         st.caption(
             "같은 비용 규칙으로 계산한 다른 전략들과의 비교와, 그 차이가 우연인지 확인하는 "

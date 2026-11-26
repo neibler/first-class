@@ -5,6 +5,7 @@ from unittest.mock import Mock
 
 import httpx
 import pytest
+import streamlit as st
 from streamlit.testing.v1 import AppTest
 
 from backend.research_schemas import ResearchResponse
@@ -61,8 +62,21 @@ def post(monkeypatch, body):
     return mock
 
 
+COVERAGE = (date(2017, 1, 6), date(2026, 11, 24))
+
+
 @pytest.fixture
-def page(monkeypatch, post):
+def coverage(monkeypatch):
+    """Server-reported news range; the page caches it, so start each test clean."""
+    found = Mock(return_value=COVERAGE)
+    monkeypatch.setattr(api_client, "get_research_coverage", found)
+    st.cache_data.clear()
+    yield found
+    st.cache_data.clear()
+
+
+@pytest.fixture
+def page(monkeypatch, post, coverage):
     monkeypatch.setattr(
         statistics_client,
         "get_statistics",
@@ -201,7 +215,8 @@ def submit(page, question="최근 QQQ 위험?", as_of=date(2025, 4, 10)):
 def test_no_post_before_submit_or_on_rerun_and_navigation(page, post):
     assert page.date_input(key="research_date").value == date(2025, 4, 10)
     assert "질문과 기준일" in page.info[0].value
-    assert "2023~2025" in " ".join(item.value for item in page.caption)
+    # The range comes from the server, not a fixed "2023~2025" text.
+    assert "2017-01-06 ~ 2026-11-24" in " ".join(item.value for item in page.caption)
     page.text_area(key="research_question").set_value("아직 제출하지 않은 질문").run()
     page.run()
     page.switch_page("app_pages/shap.py").run()
@@ -232,11 +247,19 @@ def test_submit_displays_response_and_preserves_it_without_duplicate_post(
         assert expected in text
     assert page.dataframe[0].value.iloc[0]["뉴스 위험 지표"] == 0.48
     assert page.get("link_button")[0].proto.url == body["sources"][0]["url"]
-    assert [e.label for e in page.expander][:3] == [
+    assert [e.label for e in page.expander][:4] == [
         "출처 보기 (1건)",
         "위험 태그 보기 (1건)",
+        "AI가 답을 찾은 과정 보기",
         "완료 후 실행 요약 로그",
     ]
+    # The process groups the server's own log and plan; nothing is recomputed.
+    for expected in (
+        "① 질문 나누기",
+        "· 검색 계획 완료",
+        "'export restrictions' · QQQ",
+    ):
+        assert any(expected in item.value for item in [*page.markdown, *page.text])
     page.text_area(key="research_question").set_value("새 질문").run()
     page.date_input(key="research_date").set_value(date(2024, 1, 1)).run()
     page.switch_page("app_pages/anova.py").run()
@@ -450,14 +473,32 @@ def test_endpoint_change_invalidates_success_without_automatic_post(
     assert post.call_count == 2
 
 
-@pytest.mark.parametrize("as_of", [date(2022, 12, 31), date(2026, 1, 1)])
-def test_outside_demo_range_warns_without_blocking(page, post, body, as_of):
+@pytest.mark.parametrize("as_of", [date(2017, 1, 5), date(2026, 11, 25)])
+def test_outside_news_range_is_refused_without_post(page, post, as_of):
+    # Outside the DB the server could only answer "no evidence" after paid calls.
+    submit(page, as_of=as_of)
+    post.assert_not_called()
+    assert "자료 범위(2017-01-06 ~ 2026-11-24) 밖" in page.warning[0].value
+    assert page.error[0].value == api_client.RESEARCH_ERRORS["research_out_of_range"]
+    assert "리서치가 완료되었습니다." not in [item.value for item in page.success]
+
+
+@pytest.mark.parametrize("as_of", [date(2017, 1, 6), date(2026, 11, 24)])
+def test_range_edges_are_still_requested(page, post, body, as_of):
     post.return_value = response(200, dict(body, as_of=as_of.isoformat()))
     submit(page, as_of=as_of)
     assert post.call_count == 1
-    assert post.call_args.kwargs["json"]["as_of"] == as_of.isoformat()
-    assert "자료 범위(2023~2025년) 밖" in page.warning[0].value
-    assert page.success
+    assert "리서치가 완료되었습니다." in [item.value for item in page.success]
+    assert not any("자료 범위" in item.value for item in page.warning)
+
+
+def test_unknown_range_never_blocks(page, post, body, coverage):
+    coverage.return_value = None
+    st.cache_data.clear()
+    post.return_value = response(200, dict(body, as_of="2016-05-01"))
+    submit(page, as_of=date(2016, 5, 1))
+    assert post.call_count == 1
+    assert "확인하지 못했습니다" in " ".join(item.value for item in page.caption)
 
 
 def test_invalid_input_after_success_still_reaches_api_validation(page, post):

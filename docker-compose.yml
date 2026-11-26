@@ -12,6 +12,16 @@ services:
     #   - ./results:/results:ro
     environment:
       RESULTS_DIR: /results
+      # Optional: read from the root .env. Without a key, /research says the key
+      # is missing; the rest of the dashboard does not need it.
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      NEWS_CHROMA_PATH: /news/chroma
+    volumes:
+      # News DB copy prepared by news-db-init (fast Linux volume).
+      - news-chroma:/news/chroma
+    depends_on:
+      news-db-init:
+        condition: service_completed_successfully
     ports:
       - "127.0.0.1:${API_PORT:-8000}:8000"
     healthcheck:
@@ -20,6 +30,31 @@ services:
       timeout: 5s
       retries: 12
       start_period: 10s
+
+  # Copies the Git-excluded news DB (~1.4GB) into a Docker volume once, and again
+  # only when chroma.sqlite3 changes. Opening it straight from a Windows folder
+  # took ~40s per request; from the volume ~2s. Set NEWS_CHROMA_HOST_PATH in .env
+  # when the DB lives elsewhere. Without a DB, /research reports it is missing.
+  news-db-init:
+    build:
+      context: .
+      target: api
+    user: "0:0"
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        if [ -f /source/chroma.sqlite3 ]; then
+        stamp=$$(stat -c %s-%Y /source/chroma.sqlite3);
+        if [ "$$(cat /news/chroma/.source 2>/dev/null)" != "$$stamp" ]; then
+        echo "copying news DB"; rm -rf /news/chroma/* /news/chroma/.source;
+        cp -a /source/. /news/chroma/ && echo "$$stamp" > /news/chroma/.source;
+        else echo "news DB up to date"; fi;
+        else echo "news DB not found; AI assistant will report it"; fi;
+        chown -R 10001:10001 /news/chroma
+    volumes:
+      - ${NEWS_CHROMA_HOST_PATH:-./data/processed/news/chroma}:/source:ro
+      - news-chroma:/news/chroma
+    restart: "no"
 
   dashboard:
     build:
@@ -38,3 +73,6 @@ services:
       timeout: 5s
       retries: 12
       start_period: 10s
+
+volumes:
+  news-chroma:
