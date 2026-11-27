@@ -84,6 +84,34 @@ def out_of_coverage(as_of, known):
     return not known[0] <= day <= known[1]
 
 
+def refresh_research(request):
+    """Ask again for the same question, skipping the server's stored answer."""
+    st.session_state["research_pending"] = {
+        "question": request["question"],
+        "as_of": request["as_of"],
+        "refresh": True,
+    }
+
+
+def stored_answer(result, request):
+    """Say when the server reused a stored answer, and offer a fresh run."""
+    if result.cached == "similar":
+        st.info(
+            f"비슷한 질문 “{result.cached_question}”에 저장된 답을 보여 드려요. "
+            "뜻이 다른 질문이면 새로 분석해 보세요."
+        )
+    elif result.cached == "exact":
+        st.caption("같은 질문의 저장된 분석이라 바로 보여 드려요.")
+    else:
+        return
+    st.button(
+        "새로 분석하기",
+        key="research_refresh",
+        on_click=refresh_research,
+        args=(request,),
+    )
+
+
 def use_suggestion(question):
     """Fill the question box only; the user still presses 분석 실행."""
     st.session_state["research_question"] = question
@@ -186,7 +214,8 @@ if pending is not None:
             outcome["result"] = result
             if result.status == "complete":
                 st.session_state["research_last_success"] = {
-                    "request": pending,
+                    # Without "refresh", so the same question is reused next time.
+                    "request": {k: pending[k] for k in ("question", "as_of")},
                     "result": result,
                     "api_base_url": api_base_url,
                 }
@@ -218,6 +247,7 @@ else:
                     )
                 else:
                     st.success("리서치가 완료되었습니다.")
+                stored_answer(result, outcome["request"])
                 st.text(f"분석 기준일: {result.as_of.isoformat()}")
                 st.text(result.answer, width="stretch")
                 with st.expander(f"출처 보기 ({len(result.sources)}건)"):

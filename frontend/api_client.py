@@ -63,6 +63,8 @@ class ResearchResult(BaseModel):
     plan: list[ResearchPlan]
     log: list[str]
     disclaimer: str
+    cached: Literal["exact", "similar"] | None = None
+    cached_question: str | None = None
 
     @model_validator(mode="after")
     def check_evidence(self):
@@ -133,14 +135,22 @@ def get_api_base_url() -> str:
     return os.getenv("API_BASE_URL", "http://127.0.0.1:8000").rstrip("/")
 
 
-def post_research(question: str, as_of: str | None) -> ResearchResult:
-    """One explicit POST, no retry or fallback. Input validation belongs to the API."""
+def post_research(
+    question: str, as_of: str | None, refresh: bool = False
+) -> ResearchResult:
+    """One explicit POST, no retry or fallback. Input validation belongs to the API.
+
+    `refresh` asks the server to skip its stored answer and analyze again.
+    """
     question = question.strip()
     base_url = get_api_base_url()
+    body = {"question": question, "as_of": as_of}
+    if refresh:
+        body["refresh"] = True
     try:
         response = httpx.post(
             f"{base_url}/research",
-            json={"question": question, "as_of": as_of},
+            json=body,
             timeout=RESEARCH_TIMEOUT,
             follow_redirects=False,
         )

@@ -36,8 +36,9 @@ with content:
         back_link(slug)
     page.run()
     with st.container(key="fc-footer"):
+        # Spec (docs/reference, ethics): every output carries this disclaimer —
+        # education only, not investment advice, past results not guaranteed.
         st.caption(
-            "교육용 데모 · 본 시스템은 교육 목적으로 개발되며 실제 투자 조언에 사용할 수 없습니다. "
-            "백테스팅 성과는 미래 수익을 보장하지 않습니다."
+            "교육용 데모 · 투자 조언이 아니며, 과거 성과가 미래 수익을 보장하지 않아요."
         )
     health_panel(slug)

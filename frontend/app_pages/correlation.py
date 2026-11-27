@@ -5,8 +5,15 @@ import streamlit as st
 from frontend.api_client import APIError
 from frontend.charts import asset_return
 from frontend.correlation_client import load_correlations
-from frontend.etf_choice import WINDOWS, choose_asset, choose_window, etf_name
+from frontend.etf_choice import WINDOWS, choose_asset, choose_window
 from frontend.insights_client import load_asset_history
+from frontend.relations_text import (
+    conclusion,
+    etf_label,
+    opposite_title,
+    partners,
+    top_partners,
+)
 from frontend.shap_client import load_model_shap
 from frontend.shap_explanations import group_shap_features
 from frontend.shap_presentation import select_factors
@@ -100,16 +107,22 @@ with card("relations"):
     except APIError as exc:
         st.warning(str(exc))
         data = None
-    if data and data["relationships"]:
-        st.caption(
-            "같이 움직이는 자산끼리는 함께 오르고 함께 떨어져서, 서로의 손실을 덜어 주지 못합니다. "
-            f"최근 {WINDOWS[window]} 동안 {ticker}와 관계가 가장 큰 3개입니다."
-        )
-        for item in data["relationships"][:3]:
-            st.markdown(
-                f"**{etf_name(item['display_name'])}** · "
-                f"{item['relationship_label']} ({item['strength']})"
-            )
+    together, opposite = partners(data["all_relationships"]) if data else (None, None)
+    if together:
+        # Beginners: one conclusion and two names each side (most together /
+        # most apart first); numbers live on the expert page.
+        st.markdown(conclusion(ticker, together, opposite))
+        same, apart = top_partners(data["all_relationships"], count=2)
+        left, right = st.columns(2)
+        with left:
+            st.markdown("**같이 움직여요**")
+            for row in same:
+                st.markdown(f"{etf_label(row['name'])} · {row['strength']}")
+        with right:
+            st.markdown(f"**{opposite_title(opposite)}**")
+            for row in apart:
+                st.markdown(f"{etf_label(row['name'])} · {row['strength']}")
+        st.caption(f"최근 {WINDOWS[window]} 실제 가격 기준 · 다른 ETF와 비교")
     elif data:
-        st.info(data["message"])
-    detail_link("relations", "자산 관계 자세히 보기")
+        st.info(data["message"] or "비교할 ETF 관계가 없습니다.")
+    detail_link("relations", "전문가용 자세히 보기 · 관계 지도와 내 포트폴리오")

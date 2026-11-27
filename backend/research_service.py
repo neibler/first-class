@@ -205,7 +205,63 @@ def _run(request: ResearchRequest) -> ResearchResponse:
         ) from None
 
 
+def _cache_context():
+    """(cache, context key) or (None, None); research works without either."""
+    try:
+        from backend.news_research.settings import news_db_path
+        from backend.research_cache import context_key, get_cache
+
+        cache = get_cache()
+        context = context_key(news_db_path()) if cache else None
+    except Exception:
+        logger.warning("research_cache_unavailable")
+        return None, None
+    return (cache, context) if context else (None, None)
+
+
+def _cached_answer(request: ResearchRequest, cache, context):
+    try:
+        found = cache.lookup(request.question, request.as_of.isoformat(), context)
+    except Exception:
+        logger.warning("research_cache_read_failed")
+        return None
+    if found is None:
+        return None
+    payload, kind, stored_question = found
+    try:
+        # A similar question's answer is shown under the asked question, with the
+        # stored question kept so the page can say which one it answers.
+        return ResearchResponse.model_validate(
+            {
+                **payload,
+                "question": request.question,
+                "cached": kind,
+                "cached_question": stored_question,
+            }
+        )
+    except ValidationError:
+        return None
+
+
 def run_research(request: ResearchRequest) -> ResearchResponse:
+    cache, context = _cache_context()
+    if cache and not request.refresh:
+        hit = _cached_answer(request, cache, context)
+        if hit is not None:
+            return hit
+    response = _locked_research(request)
+    if cache and response.status == "complete":
+        try:
+            payload = response.model_dump(
+                mode="json", exclude={"cached", "cached_question"}
+            )
+            cache.save(request.question, request.as_of.isoformat(), context, payload)
+        except Exception:
+            logger.warning("research_cache_write_failed")
+    return response
+
+
+def _locked_research(request: ResearchRequest) -> ResearchResponse:
     if not _research_lock.acquire(blocking=False):
         raise ResearchFailure(
             503, "research_busy", "리서치가 진행 중입니다. 완료 후 다시 요청하세요."

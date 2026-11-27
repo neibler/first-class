@@ -3,23 +3,78 @@
 import altair as alt
 import pandas as pd
 import streamlit as st
+from frontend import correlation_client, investment_client
 from frontend.api_client import APIError
-from frontend.charts import chart_style
+from frontend.charts import chart_style, correlation_heatmap
 from frontend.correlation_client import load_correlations
 from frontend.etf_choice import choose_etf
+from frontend.relations_text import etf_label, mix_sentence
 from frontend.shap_explanations import ASSET_NAMES
 from frontend.ui import page_heading
 
 page_heading(
     "자산 관계 상세",
-    "ETF ANALYSIS / RELATIONS",
-    "고른 ETF가 다른 ETF·시장 지표와 얼마나 같이 움직였는지 숫자와 그래프로 자세히 봅니다.",
+    "ETF ANALYSIS / RELATIONS · 전문가용",
+    "내 포트폴리오가 얼마나 잘 섞였는지, ETF끼리 얼마나 같이 움직였는지 숫자와 그래프로 봅니다.",
 )
 ticker, window = choose_etf("relations")
 st.caption(
     "상관계수는 +1에 가까울수록 같이, −1에 가까울수록 반대로 움직였다는 뜻입니다. "
     "시장 데이터만으로 계산했으며 AI 판단 근거(SHAP)나 뉴스 리서치와 별개입니다."
 )
+
+# Expert view first: how mixed the actual holdings are, then the whole ETF map.
+with st.container(key="relations-mix"):
+    st.subheader("내 포트폴리오는 잘 섞였나요?")
+    st.caption(
+        "고른 ETF와 상관없이 AI가 지금 담은 ETF 전체를 기준으로 해요. "
+        "그래서 ETF를 바꿔도 이 값은 같고, 기간을 바꾸면 달라져요."
+    )
+    try:
+        portfolio = investment_client.load_portfolio(None)
+        held = {
+            a["ticker"]: a["weight"]
+            for a in portfolio["assets"]
+            if a["weight"] > 0 and a["ticker"] in ASSET_NAMES
+        }
+    except investment_client.InvestmentAPIError as exc:
+        st.caption(str(exc))
+        held = None
+    try:
+        grid = correlation_client.load_correlation_matrix(window, held)
+    except APIError as exc:
+        st.warning(str(exc))
+        grid = None
+    if grid and grid["portfolio"]:
+        mix = grid["portfolio"]
+        st.metric(
+            "담긴 ETF끼리의 평균 관계",
+            f"{mix['average_correlation']:+.2f}",
+            help=(
+                "AI가 지금 담은 ETF끼리 상관계수를 비중으로 평균한 값입니다. "
+                "낮을수록 서로 따로 움직여 섞은 효과가 큽니다."
+            ),
+        )
+        st.write(mix_sentence(mix["average_correlation"], mix["strength"]))
+        st.caption(
+            "담긴 ETF: "
+            + ", ".join(etf_label(t) for t in mix["holdings"])
+            + f" · 최근 {window}거래일"
+        )
+    elif grid:
+        st.info("두 개 이상의 ETF를 담고 있을 때 평균 관계를 보여 줍니다.")
+    if grid:
+        st.markdown("**ETF 관계 지도**")
+        st.caption(
+            "빨강은 같이, 파랑은 반대로 움직였다는 뜻이에요. "
+            f"{grid['window_start']} ~ {grid['date']} · "
+            f"진하게 보이는 줄이 고른 {ticker}와 다른 ETF의 관계예요."
+        )
+        st.altair_chart(
+            correlation_heatmap(grid["tickers"], grid["matrix"], ticker),
+            width="stretch",
+        )
+
 try:
     data = load_correlations(ticker, window)
 except APIError as exc:

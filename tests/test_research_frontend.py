@@ -113,7 +113,7 @@ def test_http_contract_and_separate_timeout(monkeypatch, post, body, base, url):
     )
     assert api_client.RESEARCH_TIMEOUT.read == 120
     assert api_client.RESEARCH_TIMEOUT.connect == 5
-    assert result.model_dump(mode="json") == body
+    assert result.model_dump(mode="json", exclude_none=True) == body
 
 
 @pytest.mark.parametrize(
@@ -353,7 +353,7 @@ def test_same_success_is_reused_with_full_response(page, post, body, question):
     assert post.call_count == 1
     assert "동일한 요청의 이전 분석 결과입니다." in [item.value for item in page.info]
     saved = page.session_state["research_last_success"]
-    assert saved["result"].model_dump(mode="json") == body
+    assert saved["result"].model_dump(mode="json", exclude_none=True) == body
     assert page.session_state["research_outcome"]["result"] == saved["result"]
     text = "\n".join(item.value for item in page.text)
     for expected in (body["answer"], body["disclaimer"], *body["log"]):
@@ -385,7 +385,9 @@ def test_changed_request_replaces_only_success_slot(page, post, body, question, 
     submit(page)
     assert post.call_count == 3  # A was replaced, not kept in a history list.
     assert (
-        page.session_state["research_last_success"]["result"].model_dump(mode="json")
+        page.session_state["research_last_success"]["result"].model_dump(
+            mode="json", exclude_none=True
+        )
         == body
     )
     assert not page.session_state["research_outcome"]["reused"]
@@ -420,7 +422,9 @@ def test_unsuccessful_b_is_displayed_but_keeps_success_a(page, post, body, kind)
     else:
         assert page.error
     assert (
-        page.session_state["research_last_success"]["result"].model_dump(mode="json")
+        page.session_state["research_last_success"]["result"].model_dump(
+            mode="json", exclude_none=True
+        )
         == body
     )
     submit(page)
@@ -490,6 +494,31 @@ def test_range_edges_are_still_requested(page, post, body, as_of):
     assert post.call_count == 1
     assert "리서치가 완료되었습니다." in [item.value for item in page.success]
     assert not any("자료 범위" in item.value for item in page.warning)
+
+
+def test_similar_stored_answer_is_labelled_and_can_be_refreshed(page, post, body):
+    post.return_value = response(
+        200, dict(body, cached="similar", cached_question="GLD 위험은?")
+    )
+    submit(page)
+    assert any("비슷한 질문 “GLD 위험은?”" in i.value for i in page.info)
+    # The button asks again without the stored answer; the body says so.
+    post.return_value = response(200, body)
+    page.button(key="research_refresh").click().run()
+    assert post.call_count == 2
+    assert post.call_args.kwargs["json"] == {
+        "question": body["question"],
+        "as_of": body["as_of"],
+        "refresh": True,
+    }
+    assert not any("비슷한 질문" in i.value for i in page.info)
+
+
+def test_exact_stored_answer_says_so(page, post, body):
+    post.return_value = response(200, dict(body, cached="exact"))
+    submit(page)
+    assert any("저장된 분석이라 바로" in c.value for c in page.caption)
+    assert page.button(key="research_refresh")
 
 
 def test_coverage_with_invalid_api_url_is_unknown(monkeypatch):

@@ -16,9 +16,12 @@ services:
       # is missing; the rest of the dashboard does not need it.
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       NEWS_CHROMA_PATH: /news/chroma
+      RESEARCH_CACHE_DIR: /research-cache
     volumes:
       # News DB copy prepared by news-db-init (fast Linux volume).
       - news-chroma:/news/chroma
+      # Stored AI assistant answers (diskcache); results/ is Git-excluded.
+      - ./results/research_cache:/research-cache
     depends_on:
       news-db-init:
         condition: service_completed_successfully

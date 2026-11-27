@@ -969,7 +969,9 @@ print(len(router.routes))
         [sys.executable, "-c", script], capture_output=True, text=True
     )
     assert result.returncode == 0, result.stderr
-    assert int(result.stdout.strip()) == 7
+    # health, backtest, explain, statistics, summary, model-shap,
+    # correlation-matrix, correlation/{ticker}
+    assert int(result.stdout.strip()) == 8
 
 
 def test_reward_samples_fall_back_to_validation_csv(tmp_path):

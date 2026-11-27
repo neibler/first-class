@@ -90,7 +90,14 @@ def test_trades_page_shows_rebalancing_changes_from_the_api(page):
     assert not page.exception
     assert page.selectbox(key="rebalance_date").value == "2026-09-30"
     text = " ".join(m.value for m in page.markdown)
-    assert "비중 차이가 조정 기준 이상 벌어져서" in text
+    # Beginners read why and what first; the table sits behind "자세히 보기".
+    assert "💬 AI가 정한 비중과 실제 비중이 많이 벌어져서 다시 맞췄어요." in text
+    # Same rounded changes as the table: +34 GLD, +27 EFA, +4 SMH / -36 SHY ...
+    assert "▲ **늘린 자산** 금(GLD), 미국 외 선진국 주식(EFA) 외 1개" in text
+    assert "▼ **줄인 자산** 미국 단기국채(SHY), 산업금속(DBB) 외 1개" in text
+    details = next(e for e in page.expander if e.label.startswith("자세히 보기"))
+    assert details.label == "자세히 보기 · 날짜별 비중 표"
+    assert [d for d in details.dataframe]
     table = next(d.value for d in page.dataframe if "변화" in d.value.columns)
     assert list(table["자산"]) == ["SHY", "GLD", "EFA", "DBB", "TIP", "SMH"]
     assert list(table["변화"]) == ["-36%p", "+34%p", "+27%p", "-24%p", "-5%p", "+4%p"]
@@ -100,7 +107,9 @@ def test_trades_page_shows_rebalancing_changes_from_the_api(page):
     assert sum(int(v[:-2]) for v in table["변화"]) == 0
     page.selectbox(key="rebalance_date").select("2026-09-29").run()
     assert any("비중이 바뀐 자산이 없습니다" in c.value for c in page.caption)
-    assert "월간 정기 점검일이라서" in " ".join(m.value for m in page.markdown)
+    text = " ".join(m.value for m in page.markdown)
+    assert "💬 한 달에 한 번 하는 정기 점검일이라 비중을 다시 맞췄어요." in text
+    assert "표시할 만큼 바뀐 자산은 없어요." in text
     assert any(e.label == "오늘 새로 시작한다면? (참고용)" for e in page.expander)
 
 
@@ -173,6 +182,39 @@ def test_risk_page_shows_only_portfolio_wide_risk(page):
     ]
     assert any("Safe-Guard 미작동" in s.value for s in page.success)
     assert len(page.get("vega_lite_chart")) == 1
+    # One short summary first (fixture: both about the same as the market).
+    assert [i.value for i in page.info] == [
+        "S&P500과 비교하면 비슷하게 떨어지고, 비슷하게 오르내렸어요."
+    ]
+    # The period stays visible in one line, since the portfolio page can differ.
+    assert (
+        "평가 기간 전체(2026-01-01 ~ 2026-06-30) 기준 · 현재 낙폭만 마지막 날 · "
+        "숫자 아래 회색 글씨는 S&P500"
+    ) in [c.value for c in page.caption]
+    readings = [c.value for c in page.caption if c.value.startswith("👉")]
+    # No sentences under the three main numbers; inside the folded VaR part only
+    # the market comparison remains (the money example says the rest).
+    assert readings == [
+        "👉 평소 나쁜 날의 손실이 S&P500과 비슷했어요.",
+        "👉 아주 나쁜 날의 손실은 S&P500과 비슷했어요.",
+    ]
+    # The drawdown chart says whose drawdown it is.
+    assert any(
+        c.value.startswith("하락폭은 내 돈이 가장 많았던 때보다") for c in page.caption
+    )
+    assert (
+        "1,000만 원이었다면 평소 나쁜 날 하루 약 15만 원, "
+        "아주 나쁜 날에는 평균 약 19만 원을 잃은 셈이에요."
+    ) in [c.value for c in page.caption]
+    assert "1,000만 원이었다면" in page.metric[0].help
+    assert any(e.label == "계산 기준과 원자료 (검증용)" for e in page.expander)
+    # VaR·CVaR are folded away for beginners, explained inside.
+    folded = next(e for e in page.expander if "VaR·CVaR" in e.label)
+    assert folded.label == "자세히 보기 · 하루 예상 손실(VaR·CVaR)"
+    assert [m.label for m in folded.metric] == [
+        "하루 예상 손실 · VaR 95%",
+        "나쁜 날 평균 손실 · CVaR 95%",
+    ]
 
 
 def test_gain_only_var_is_not_shown_as_a_loss(page, monkeypatch):
@@ -250,7 +292,7 @@ def test_etf_analysis_answers_three_questions(page, monkeypatch):
     assert links[4:] == [
         "AI 판단 근거 자세히 보기 · 지난 결정일도 보기",
         "가격·지표(RSI·MACD) 자세히 보기",
-        "자산 관계 자세히 보기",
+        "전문가용 자세히 보기 · 관계 지도와 내 포트폴리오",
     ]
     # The detail page opens on the same ETF and returns to ETF analysis.
     page.switch_page("app_pages/shap.py").run()
@@ -270,6 +312,45 @@ def test_etf_analysis_answers_three_questions(page, monkeypatch):
     page.selectbox(key="correlation_asset").set_value("SMH").run()
     assert not page.exception
     assert any("SMH의 AI 판단 기록이 없습니다" in i.value for i in page.info)
+
+
+RELATIONS = {
+    "ticker": "QQQ",
+    "window": 60,
+    "status": "ok",
+    "message": None,
+    "relationships": [],
+    "all_relationships": [
+        {
+            "name": "SPY",
+            "type": "ETF",
+            "correlation": 0.9,
+            "strength": "매우 강한 관계",
+        },
+        {"name": "TLT", "type": "ETF", "correlation": -0.35, "strength": "약한 관계"},
+        # Macros are not ETFs to hold, so they never become the "partner".
+        {"name": "vix_change", "type": "macro", "correlation": -0.8, "strength": "x"},
+    ],
+}
+
+
+def test_relations_card_gives_one_conclusion_and_two_names(page, monkeypatch):
+    from frontend import correlation_client
+
+    monkeypatch.setattr(
+        correlation_client, "load_correlations", lambda *a, **k: RELATIONS
+    )
+    page.switch_page("app_pages/correlation.py").run()
+    page.selectbox(key="correlation_asset").set_value("QQQ").run()
+    assert not page.exception
+    text = [m.value for m in page.markdown]
+    assert (
+        "기술주는 미국 대형주와 같이, 미국 장기국채와 반대로 움직이는 편이에요. "
+        "반대로 움직이는 자산을 함께 담으면 서로 버텨 줘서 흔들림이 줄어요."
+    ) in text
+    assert "**같이 움직여요**" in text and "**반대로 움직여요**" in text
+    names = [t.value for t in page.text] + text
+    assert "미국 대형주(SPY)" in " ".join(str(n) for n in names)
 
 
 def test_shared_choice_wins_over_a_stale_widget_value(page):
@@ -327,6 +408,23 @@ def test_price_story_and_price_detail_page(page, monkeypatch):
     # Escaped so Markdown shows the dollar signs instead of a formula.
     assert "가격 \\$762.63 · 기간 첫날 \\$765.61" in captions
     assert "70 이상이면" in captions
+    # Each chart starts with what it is and what today's value means.
+    text = [m.value for m in page.markdown]
+    assert sum(t.startswith("**이게 뭔가요?**") for t in text) == 3
+    assert (
+        "**지금은?** 현재 49은(는) 30~70 사이라 한쪽으로 크게 쏠리지 않은 "
+        "중립 구간이에요." in text
+    )
+    assert any(t.startswith("**지금은?** 현재 +1.30은(는) 0보다 커서") for t in text)
+
+
+@pytest.mark.parametrize(
+    "value,word", [(70, "과매수"), (30, "과매도"), (50, "중립"), (69.9, "중립")]
+)
+def test_rsi_example_uses_the_chart_thresholds(value, word):
+    from frontend.guide import rsi_example
+
+    assert word in rsi_example(value)
 
 
 def test_asset_detail_has_etf_intro_for_every_asset():
