@@ -56,7 +56,8 @@ def rsi_example(value):
         zone = "30 이하라 단기간에 많이 내린 '과매도' 쪽"
     else:
         zone = "30~70 사이라 한쪽으로 크게 쏠리지 않은 중립 구간"
-    return f"현재 {value:.0f}은(는) {zone}이에요."
+    # One decimal so 69.9 is not shown as "70" while called neutral.
+    return f"현재 {value:.1f}은(는) {zone}이에요."
 
 
 def macd_example(value):
@@ -67,6 +68,12 @@ def macd_example(value):
         trend = "0보다 작아서, 최근 흐름이 긴 흐름보다 아래쪽(하락 쪽)이라는 뜻이에요."
     else:
         trend = "0이라 최근 흐름과 긴 흐름이 같은 수준이에요."
+    if value != 0 and abs(value) < 0.01:
+        # "+0.00" next to "greater than zero" would contradict itself.
+        trend = trend.replace("0보다 커서", "0보다 아주 조금 커서").replace(
+            "0보다 작아서", "0보다 아주 조금 작아서"
+        )
+        return f"현재 {value:+.4f}은(는) {trend}"
     return f"현재 {value:+.2f}은(는) {trend}"
 
 

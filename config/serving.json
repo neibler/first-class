@@ -1,4 +1,4 @@
 {
   "model_type": "ppo",
-  "model_path": "models/ppo/PPO_FINAL2026_20261113_164403/holdout/ppo_return_mdd_seed22"
+  "model_path": "models/ppo/ppo_FINAL2026_SEED22_20261124_133956/window_0/ppo_return_mdd_seed22"
 }

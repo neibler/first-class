@@ -40,7 +40,9 @@ def top_partners(relationships, count=3):
         key=lambda r: r["correlation"],
         reverse=True,
     )
-    together = etfs[:count]
+    # Only clearly positive partners count as "together"; a negative or weak one
+    # can never fill that column, it belongs on the apart side.
+    together = [r for r in etfs if r["correlation"] >= TOGETHER][:count]
     apart = [r for r in reversed(etfs) if r not in together][:count]
     return together, apart
 
@@ -58,6 +60,20 @@ def conclusion(ticker, together, opposite):
     me = ASSET_NAMES.get(ticker, ticker)
     if together is None:
         return None
+    if together["correlation"] < TOGETHER:
+        # No clearly positive partner: never call any ETF "같이".
+        if opposite["correlation"] <= APART:
+            other = josa(
+                ASSET_NAMES.get(opposite["name"], opposite["name"]), "과", "와"
+            )
+            return (
+                f"{josa(me, '은', '는')} 뚜렷하게 같이 움직이는 ETF가 없고, "
+                f"{other} 반대로 움직여요. 다른 자산과 함께 담으면 흔들림이 줄어요."
+            )
+        return (
+            f"{josa(me, '은', '는')} 다른 ETF들과 뚜렷하게 같이 움직이지 않아요. "
+            "다른 자산과 함께 담으면 흔들림이 줄어요."
+        )
     pair = josa(ASSET_NAMES.get(together["name"], together["name"]), "과", "와")
     if opposite["correlation"] <= APART:
         other = josa(ASSET_NAMES.get(opposite["name"], opposite["name"]), "과", "와")

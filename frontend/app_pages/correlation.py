@@ -118,6 +118,8 @@ with card("relations"):
             st.markdown("**같이 움직여요**")
             for row in same:
                 st.markdown(f"{etf_label(row['name'])} · {row['strength']}")
+            if not same:
+                st.caption("뚜렷하게 같이 움직이는 ETF가 없어요.")
         with right:
             st.markdown(f"**{opposite_title(opposite)}**")
             for row in apart:

@@ -65,8 +65,10 @@ def news_coverage(db_path: Path) -> tuple[str, str] | None:
     except OSError:
         return None
     key = (str(sqlite), stat.st_mtime_ns, stat.st_size)
-    if key in _coverage_cache:
-        return _coverage_cache[key]
+    # One read, no membership-then-index: another thread may clear the dict.
+    cached = _coverage_cache.get(key)
+    if cached is not None:
+        return cached
     try:
         with sqlite3.connect(f"{sqlite.as_uri()}?mode=ro", uri=True) as connection:
             low, high = connection.execute(
@@ -82,9 +84,10 @@ def news_coverage(db_path: Path) -> tuple[str, str] | None:
         text = str(value)
         return f"{text[:4]}-{text[4:6]}-{text[6:8]}"
 
+    found = (iso(low), iso(high))
     _coverage_cache.clear()
-    _coverage_cache[key] = (iso(low), iso(high))
-    return _coverage_cache[key]
+    _coverage_cache[key] = found
+    return found
 
 
 def coverage() -> dict:

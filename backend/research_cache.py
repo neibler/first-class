@@ -24,7 +24,15 @@ import numpy as np
 logger = logging.getLogger(__name__)
 
 ROOT = Path(__file__).resolve().parents[1]
-SETTINGS_FILES = ("config/agent.yaml", "config/etf_news_map.yaml")
+# Everything that changes an answer for the same question: model/settings files
+# and the agent code holding the planner/grader/rewriter/analyst prompts.
+SETTINGS_FILES = (
+    "config/agent.yaml",
+    "config/etf_news_map.yaml",
+    "backend/news_research/research_agent.py",
+)
+# Bump when answer-shaping logic changes outside the files above.
+CACHE_VERSION = "1"
 TTL_SECONDS = 7 * 24 * 3600
 SIZE_LIMIT = 100 * 1024 * 1024
 MAX_INDEX = 200  # similar-question candidates kept per (as_of, DB, settings)
@@ -47,7 +55,9 @@ def context_key(db_path: Path) -> str | None:
     except OSError:
         return None
     return _digest(
-        f"{stat.st_size}-{stat.st_mtime_ns}", hashlib.sha256(settings).hexdigest()
+        CACHE_VERSION,
+        f"{stat.st_size}-{stat.st_mtime_ns}",
+        hashlib.sha256(settings).hexdigest(),
     )
 
 

@@ -1,3 +1,5 @@
+import re
+
 import pytest
 from streamlit.testing.v1 import AppTest
 
@@ -91,7 +93,8 @@ def test_trades_page_shows_rebalancing_changes_from_the_api(page):
     assert page.selectbox(key="rebalance_date").value == "2026-09-30"
     text = " ".join(m.value for m in page.markdown)
     # Beginners read why and what first; the table sits behind "자세히 보기".
-    assert "💬 AI가 정한 비중과 실제 비중이 많이 벌어져서 다시 맞췄어요." in text
+    # Policy-neutral: low-churn compares with the last trade, not the AI target.
+    assert "💬 비중 차이가 조정 기준보다 커져서 다시 맞췄어요." in text
     # Same rounded changes as the table: +34 GLD, +27 EFA, +4 SMH / -36 SHY ...
     assert "▲ **늘린 자산** 금(GLD), 미국 외 선진국 주식(EFA) 외 1개" in text
     assert "▼ **줄인 자산** 미국 단기국채(SHY), 산업금속(DBB) 외 1개" in text
@@ -349,8 +352,13 @@ def test_relations_card_gives_one_conclusion_and_two_names(page, monkeypatch):
         "반대로 움직이는 자산을 함께 담으면 서로 버텨 줘서 흔들림이 줄어요."
     ) in text
     assert "**같이 움직여요**" in text and "**반대로 움직여요**" in text
-    names = [t.value for t in page.text] + text
-    assert "미국 대형주(SPY)" in " ".join(str(n) for n in names)
+    # Each name sits in its own column: TLT (-0.35) never under "같이".
+    together, opposite = text.index("**같이 움직여요**"), text.index(
+        "**반대로 움직여요**"
+    )
+    spy = text.index("미국 대형주(SPY) · 매우 강한 관계")
+    tlt = text.index("미국 장기국채(TLT) · 약한 관계")
+    assert together < spy < opposite < tlt
 
 
 def test_shared_choice_wins_over_a_stale_widget_value(page):
@@ -411,20 +419,41 @@ def test_price_story_and_price_detail_page(page, monkeypatch):
     # Each chart starts with what it is and what today's value means.
     text = [m.value for m in page.markdown]
     assert sum(t.startswith("**이게 뭔가요?**") for t in text) == 3
-    assert (
-        "**지금은?** 현재 49은(는) 30~70 사이라 한쪽으로 크게 쏠리지 않은 "
-        "중립 구간이에요." in text
+    # The subheader rounds RSI to a whole number; the example keeps one decimal.
+    assert any(
+        re.fullmatch(
+            r"\*\*지금은\?\*\* 현재 (48\.[5-9]|49\.[0-4])은\(는\) "
+            r"30~70 사이라 한쪽으로 크게 쏠리지 않은 중립 구간이에요\.",
+            t,
+        )
+        for t in text
     )
     assert any(t.startswith("**지금은?** 현재 +1.30은(는) 0보다 커서") for t in text)
 
 
 @pytest.mark.parametrize(
-    "value,word", [(70, "과매수"), (30, "과매도"), (50, "중립"), (69.9, "중립")]
+    "value,shown,word",
+    [
+        (70, "70.0", "과매수"),
+        (30, "30.0", "과매도"),
+        (50, "50.0", "중립"),
+        (69.9, "69.9", "중립"),
+    ],
 )
-def test_rsi_example_uses_the_chart_thresholds(value, word):
+def test_rsi_example_never_shows_a_threshold_it_is_not_on(value, shown, word):
     from frontend.guide import rsi_example
 
-    assert word in rsi_example(value)
+    text = rsi_example(value)
+    # 69.9 must not read "70" while being called neutral.
+    assert text.startswith(f"현재 {shown}은(는)") and word in text
+
+
+def test_tiny_macd_is_not_shown_as_zero():
+    from frontend.guide import macd_example
+
+    assert macd_example(0.004).startswith("현재 +0.0040은(는) 0보다 아주 조금 커서")
+    assert macd_example(-0.004).startswith("현재 -0.0040은(는) 0보다 아주 조금 작아서")
+    assert macd_example(1.3).startswith("현재 +1.30은(는) 0보다 커서")
 
 
 def test_asset_detail_has_etf_intro_for_every_asset():

@@ -247,11 +247,25 @@ def correlation_matrix(data, window=60, as_of=None, weights=None):
         for t, w in (weights or {}).items()
         if t in data.assets and np.isfinite(w) and w > 0
     }
+    # Scale to shares first: huge or tiny raw weights must give the same answer
+    # without the pair products overflowing or underflowing.
+    # Dividing by the largest weight keeps every value in (0, 1] even when the
+    # sum itself would overflow; the shares then add up to 1.
+    if held:
+        largest = max(held.values())
+        held = {t: w / largest for t, w in held.items()}
+        total_weight = sum(held.values())
+        held = {t: w / total_weight for t, w in held.items()}
     pairs = [(a, b) for a in held for b in held if a < b]
     usable = [(a, b) for a, b in pairs if np.isfinite(matrix.loc[a, b])]
-    if usable:
-        total = sum(held[a] * held[b] for a, b in usable)
-        average = sum(held[a] * held[b] * matrix.loc[a, b] for a, b in usable) / total
+    total = sum(held[a] * held[b] for a, b in usable)
+    average = (
+        sum(held[a] * held[b] * matrix.loc[a, b] for a, b in usable) / total
+        if usable and total > 0
+        else float("nan")
+    )
+    # A non-finite average must never reach the JSON response.
+    if np.isfinite(average):
         direction, strength, label = describe_correlation(float(average))
         result["portfolio"] = {
             "average_correlation": float(average),

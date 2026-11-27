@@ -1,0 +1,34 @@
+{
+  "format_version": 1,
+  "models": {
+    "ppo": {
+      "path": "models/ppo/PPO_FINAL2026_20261113_164403/holdout/ppo_return_mdd_seed22",
+      "steps": 100000,
+      "data_hash": "f4693f4d60b5003c0c007fcdfb48f047900b84757a5511d0359d0b2297a5242b"
+    }
+  },
+  "purpose": "inference and evaluation; replay buffers excluded",
+  "archive_sha256": "9769d5157392da9e172e2135fe85f38ffc431b62d0ed20824fb698f4b1fa5d1b",
+  "files": {
+    "models/ppo/PPO_FINAL2026_20261113_164403/holdout/ppo_return_mdd_seed22/model.zip": "b5678d9deb439c83f860ca791229545bef27cdb01519365808065f89d90e62c3",
+    "models/ppo/PPO_FINAL2026_20261113_164403/holdout/ppo_return_mdd_seed22/config.json": "80e25c676835836b15b5d06278e6b1082d4fb126645158ae91926e61be20eaa5",
+    "models/ppo/PPO_FINAL2026_20261113_164403/holdout/ppo_return_mdd_seed22/schema.json": "2aaa2b0468117f558866646c6d5c67468c6be58e3b68d051c36a5175eee16e4c",
+    "models/ppo/PPO_FINAL2026_20261113_164403/holdout/ppo_return_mdd_seed22/scaler.json": "b0f94de2e676b4c32899af5940c4a522f56af35156fa8076a283ec6f5792acb8",
+    "models/ppo/PPO_FINAL2026_20261113_164403/holdout/ppo_return_mdd_seed22/manifest.json": "5ae3ccf33ba6a38e3874f120cdd1963d7b51234eed06062f3808de74c986ec02",
+    "models/ppo/PPO_FINAL2026_20261113_164403/holdout/ppo_return_mdd_seed22/run_spec.json": "8e85d2eb77114cb2d52457d46ab004b14baa5321a843abfaba0f4af8b21aaed3",
+    "models/ppo/PPO_FINAL2026_20261113_164403/holdout/ppo_return_mdd_seed22/evaluation.json": "fff129df1238d07c21b5bee005b7019ff4f166b38e93e0dbd23bd1901d2df51a",
+    "models/ppo/PPO_FINAL2026_20261113_164403/holdout/ppo_return_mdd_seed22/shap.json": "360bc659fafbcfd7980c0471d2bf52ff76a6683c2f9a56a79a7539a568e59043",
+    "models/ppo/PPO_FINAL2026_20261113_164403/holdout/ppo_return_mdd_seed22/evaluation/comparison.csv": "a98e6e9843626d0f59513b4488b0cecb220848e906f6c9dc2af2fe5ebf9f453a",
+    "models/ppo/PPO_FINAL2026_20261113_164403/holdout/ppo_return_mdd_seed22/evaluation/equal_buy_hold_asset_history.csv": "c09dc47a00c89c1479b39e017b1726980991301956d9633ee149d99d21a14dc2",
+    "models/ppo/PPO_FINAL2026_20261113_164403/holdout/ppo_return_mdd_seed22/evaluation/equal_buy_hold_history.csv": "b40775c9fe8620894c66da8b88f9e64bd066eb781ced0c0a6cccee57f795dbce",
+    "models/ppo/PPO_FINAL2026_20261113_164403/holdout/ppo_return_mdd_seed22/evaluation/equal_rebalanced_asset_history.csv": "94a5fc19f92168a85ae04f1b539c625a7ee3446421660dcd688bd221ae5e9063",
+    "models/ppo/PPO_FINAL2026_20261113_164403/holdout/ppo_return_mdd_seed22/evaluation/equal_rebalanced_history.csv": "63a9e19e9c3066ac17636251fb7f5a4a94db674edfaf2b0dac3248583b61fa0a",
+    "models/ppo/PPO_FINAL2026_20261113_164403/holdout/ppo_return_mdd_seed22/evaluation/ppo_asset_history.csv": "7242db9dbdc1f7a99e8cc6630e1dcb0d2bbc55899845cb9e7fb0b0422d16441c",
+    "models/ppo/PPO_FINAL2026_20261113_164403/holdout/ppo_return_mdd_seed22/evaluation/ppo_history.csv": "9f25923dc23755056f95253166f771fa00ec03a47112422b151ca3a74c49cb03",
+    "models/ppo/PPO_FINAL2026_20261113_164403/holdout/ppo_return_mdd_seed22/evaluation/spy_buy_hold_asset_history.csv": "bab866c1d52c6557ddd914094f71d84e9a3f4d2605b33a0b176d32325991f839",
+    "models/ppo/PPO_FINAL2026_20261113_164403/holdout/ppo_return_mdd_seed22/evaluation/spy_buy_hold_history.csv": "9434507d63417ee5fa4d829cb1ec526f8f63a49f7525910d6ff84fbdbc302a29",
+    "data/prepared/d1e0a7c0b46d/market.parquet": "ef419978cbe80a4e7e75dc1341aab23b66e58f323b5470977014c0bce298f222",
+    "data/prepared/d1e0a7c0b46d/news.parquet": "7e0273fb31f063e2c854cde7e79c60773680ff3695fa133a692fcd9bf589f9d8",
+    "data/prepared/d1e0a7c0b46d/shared_provenance.json": "5e2a5741550eff3b67b078e60a31ee7b31b5a6e3f39749ddeca80806ceee3233"
+  }
+}

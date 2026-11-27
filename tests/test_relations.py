@@ -13,6 +13,7 @@ from frontend.relations_text import (
     mix_sentence,
     opposite_title,
     partners,
+    top_partners,
 )
 
 
@@ -40,6 +41,34 @@ def test_conclusion_depends_on_the_least_related_etf(opposite, title, ending):
     assert (together["name"], other["name"]) == ("SPY", "GLD")
     assert opposite_title(other) == title
     assert conclusion("QQQ", together, other).endswith(ending)
+
+
+def test_negative_or_weak_etfs_never_fill_the_together_column():
+    rows = [row("SPY", 0.9), row("TLT", -0.35)]
+    together, apart = top_partners(rows, count=2)
+    assert [r["name"] for r in together] == ["SPY"]
+    assert [r["name"] for r in apart] == ["TLT"]
+    together, apart = top_partners([row("GLD", 0.1), row("TLT", -0.5)], count=2)
+    assert together == [] and [r["name"] for r in apart] == ["TLT", "GLD"]
+
+
+@pytest.mark.parametrize(
+    "rows,expected",
+    [
+        # The only ETF is negative: it is not "같이" and "반대로" at once.
+        (
+            [row("TLT", -0.5)],
+            "뚜렷하게 같이 움직이는 ETF가 없고, 미국 장기국채와 반대로",
+        ),
+        (
+            [row("GLD", 0.1), row("SHY", 0.05)],
+            "다른 ETF들과 뚜렷하게 같이 움직이지 않아요",
+        ),
+    ],
+)
+def test_no_clear_partner_is_never_called_together(rows, expected):
+    together, opposite = partners(rows)
+    assert expected in conclusion("QQQ", together, opposite)
 
 
 def test_no_etf_partner_means_no_conclusion():
@@ -83,6 +112,15 @@ def test_matrix_and_portfolio_average():
     # Unknown tickers are ignored; two held ETFs give one pair.
     assert mix["holdings"] == ["AAA", "BBB"] and mix["pairs"] == 1
     assert mix["average_correlation"] == pytest.approx(matrix[0, 1])
+
+
+@pytest.mark.parametrize("size", [1e200, 1e-200, 1.0])
+def test_weight_scale_never_changes_or_breaks_the_average(size):
+    expected = correlation_matrix(market(), 60, None, {"AAA": 1, "BBB": 1})
+    result = correlation_matrix(market(), 60, None, {"AAA": size, "BBB": size})
+    assert result["portfolio"]["average_correlation"] == pytest.approx(
+        expected["portfolio"]["average_correlation"]
+    )
 
 
 def test_one_holding_or_flat_pairs_give_no_portfolio_average():

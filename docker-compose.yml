@@ -40,6 +40,8 @@ services:
   # when the DB lives elsewhere. Without a DB, /research reports it is missing.
   # A failed copy exits 1 so api does not start on a partial DB. A missing source
   # clears the old copy (exit 0) so api starts and reports the DB as missing.
+  # It also hands the research answer cache folder to the API user (UID 10001):
+  # on Linux Docker creates a missing bind folder as root. Stored answers stay.
   news-db-init:
     build:
       context: .
@@ -48,6 +50,7 @@ services:
     entrypoint: ["/bin/sh", "-c"]
     command:
       - >-
+        mkdir -p /research-cache && chown -R 10001:10001 /research-cache;
         if [ -f /source/chroma.sqlite3 ]; then
         stamp=$$(stat -c %s-%Y /source/chroma.sqlite3);
         if [ "$$(cat /news/chroma/.source 2>/dev/null)" != "$$stamp" ]; then
@@ -61,6 +64,7 @@ services:
     volumes:
       - ${NEWS_CHROMA_HOST_PATH:-./data/processed/news/chroma}:/source:ro
       - news-chroma:/news/chroma
+      - ./results/research_cache:/research-cache
     restart: "no"
 
   dashboard:

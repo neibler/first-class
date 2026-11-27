@@ -72,6 +72,21 @@ def test_context_changes_with_the_news_db(tmp_path):
     assert context_key(tmp_path / "absent") is None
 
 
+def test_context_changes_with_the_agent_prompts(tmp_path, monkeypatch):
+    # Prompts live in research_agent.py; editing them must invalidate answers.
+    root = tmp_path / "repo"
+    for name in research_cache.SETTINGS_FILES:
+        (root / name).parent.mkdir(parents=True, exist_ok=True)
+        (root / name).write_text("v1", encoding="utf-8")
+    db = tmp_path / "chroma"
+    db.mkdir()
+    (db / "chroma.sqlite3").write_bytes(b"db")
+    monkeypatch.setattr(research_cache, "ROOT", root)
+    before = context_key(db)
+    (root / "backend/news_research/research_agent.py").write_text("v2", "utf-8")
+    assert context_key(db) != before
+
+
 @pytest.fixture
 def service(tmp_path, monkeypatch):
     """run_research with a fake paid step that counts calls."""

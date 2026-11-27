@@ -44,7 +44,9 @@ def script(source, target):
     return (
         text.replace("$$", "$")
         .replace("/news/chroma", "@TARGET@")
+        .replace("/research-cache", "@CACHE@")
         .replace("/source", "@SOURCE@")
+        .replace("@CACHE@", shlex.quote((target.parent / "answer cache").as_posix()))
         .replace("@TARGET@", shlex.quote(target.as_posix()))
         .replace("@SOURCE@", shlex.quote(source.as_posix()))
         .replace("chown -R 10001:10001", "true")
@@ -102,6 +104,16 @@ def test_failed_copy_fails_the_initializer(dirs, tmp_path):
     assert result.returncode == 1
     assert "copy failed" in result.stdout
     assert not (target / ".source").exists()
+
+
+def test_research_cache_folder_is_created_and_kept(dirs):
+    source, target = dirs
+    cache = target.parent / "answer cache"
+    cache.mkdir()
+    (cache / "cache.db").write_text("stored", encoding="utf-8")
+    assert run(posix(source), posix(target)).returncode == 0
+    # Existing stored answers survive; only ownership is set (stubbed here).
+    assert (cache / "cache.db").read_text(encoding="utf-8") == "stored"
 
 
 def test_missing_source_clears_the_old_copy_and_still_succeeds(dirs):

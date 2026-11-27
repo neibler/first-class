@@ -202,7 +202,9 @@ def why_changed(changes):
 PLAIN_REASONS = {
     "monthly": "한 달에 한 번 하는 정기 점검일이라 비중을 다시 맞췄어요.",
     "risk_score": "뉴스 위험이 기준을 넘어서, 위험을 줄이려고 비중을 다시 나눴어요.",
-    "portfolio_weight_distance": "AI가 정한 비중과 실제 비중이 많이 벌어져서 다시 맞췄어요.",
+    # Policy-neutral like REASONS: low-churn compares with the last trade, not
+    # the AI target.
+    "portfolio_weight_distance": "비중 차이가 조정 기준보다 커져서 다시 맞췄어요.",
     "mdd_stop": "손실이 커져서 안전장치(Safe-Guard)가 작동해 현금으로 바꿨어요.",
 }
 MOVED_SHOWN = 2  # names per line; the rest is counted ("외 1개")
@@ -484,7 +486,8 @@ def portfolio_risk(data):
             f"{result['mdd']:.2%}",
             help=(
                 "평가 기간에 최고점 대비 가장 많이 떨어진 폭입니다. "
-                f"1,000만 원이었다면 {won(abs(result['mdd']))}이 줄어든 셈이에요."
+                f"가장 많았을 때 1,000만 원이었다면, 거기서 {won(abs(result['mdd']))}이 "
+                "줄어든 셈이에요."
             ),
         )
         if market_mdd is not None:
