@@ -18,6 +18,100 @@ def queue_research():
     }
 
 
+STEP_NAMES = {
+    "Planner": "① 질문 나누기",
+    "Researcher": "② 뉴스 찾기",
+    "Verifier": "③ 관련 있는 뉴스 고르기",
+    "Rewriter": "③-1 검색어 고쳐 다시 찾기",
+    "Analyst": "④ 근거로 답 쓰기",
+}
+
+
+def reasoning_steps(result):
+    """The server's plan and step log, grouped by step. Nothing is recomputed."""
+    with st.expander("AI가 답을 찾은 과정 보기"):
+        st.caption(
+            "AI는 질문을 검색 계획으로 나누고, 저장된 뉴스에서 찾은 뒤 관련 있는 것만 골라 "
+            "답을 씁니다. 아래는 이번 답의 실제 진행 기록입니다."
+        )
+        if result.plan:
+            # Plain text, not a table: the only tables on this page are the
+            # evidence (risk tags), so a no-evidence answer shows none.
+            st.markdown("**검색 계획**")
+            for step in result.plan:
+                etf = f" · {step.etf}" if step.etf else ""
+                st.text(
+                    f"· '{step.query}'{etf} · 기준일 전 {step.lookback_days}일",
+                    width="stretch",
+                )
+        grouped = {}
+        for line in result.log:
+            role = line[1 : line.find("]")] if line.startswith("[") else ""
+            text = line[line.find("]") + 1 :].strip() if role else line
+            grouped.setdefault(STEP_NAMES.get(role, "기타"), []).append(text)
+        for name, lines in grouped.items():
+            st.markdown(f"**{name}**")
+            for text in lines:
+                st.text(f"· {text}", width="stretch")
+        st.markdown(f"**찾은 뉴스 {len(result.sources)}건**")
+        for source in result.sources:
+            st.text(
+                f"[{source.n}] {source.title} ({source.source} · {source.date})",
+                width="stretch",
+            )
+        if not result.plan and not result.log:
+            st.caption("제공된 진행 기록이 없습니다.")
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def news_coverage(api_base_url):
+    """Server-reported news date range; the base URL keys the cache."""
+    return api_client.get_research_coverage()
+
+
+def out_of_coverage(as_of, known):
+    """True only when the range is known and the date (YYYY-MM-DD) is outside.
+
+    `known` is the page's one coverage snapshot, so the check and the message
+    always use the same range even if the cache expires mid-run.
+    """
+    if not known or not as_of:
+        return False
+    try:
+        day = date.fromisoformat(as_of)
+    except ValueError:
+        return False
+    return not known[0] <= day <= known[1]
+
+
+def refresh_research(request):
+    """Ask again for the same question, skipping the server's stored answer."""
+    st.session_state["research_pending"] = {
+        "question": request["question"],
+        "as_of": request["as_of"],
+        "refresh": True,
+    }
+
+
+def stored_answer(result, request):
+    """Say when the server reused a stored answer, and offer a fresh run."""
+    if result.cached == "similar":
+        st.info(
+            f"비슷한 질문 “{result.cached_question}”에 저장된 답을 보여 드려요. "
+            "뜻이 다른 질문이면 새로 분석해 보세요."
+        )
+    elif result.cached == "exact":
+        st.caption("같은 질문의 저장된 분석이라 바로 보여 드려요.")
+    else:
+        return
+    st.button(
+        "새로 분석하기",
+        key="research_refresh",
+        on_click=refresh_research,
+        args=(request,),
+    )
+
+
 def use_suggestion(question):
     """Fill the question box only; the user still presses 분석 실행."""
     st.session_state["research_question"] = question
@@ -35,11 +129,17 @@ page_heading(
     "AI ASSISTANT / 04",
     "궁금한 점을 물어보면 뉴스 근거와 출처를 찾아 답해 드려요.",
 )
+coverage = news_coverage(api_base_url)
 with st.container(key="analysis-availability"):
-    st.caption(
-        "현재 공유 뉴스 DB는 2023~2025년 자료입니다. 데모 기준일은 2025-04-10이며, "
-        "다른 날짜도 요청할 수 있지만 관련 근거가 부족할 수 있습니다."
-    )
+    if coverage:
+        st.caption(
+            f"뉴스 DB 자료 범위는 **{coverage[0]:%Y-%m-%d} ~ {coverage[1]:%Y-%m-%d}**입니다. "
+            "이 범위 밖의 기준일은 분석하지 않고 바로 알려 드립니다."
+        )
+    else:
+        st.caption(
+            "뉴스 DB 자료 범위를 확인하지 못했습니다. 범위 밖 기준일은 판단할 근거가 부족할 수 있습니다."
+        )
 
 with st.container(key="card-suggestions"):
     st.markdown("**이런 질문은 어때요?**")
@@ -81,10 +181,10 @@ with st.container(key="card-request"):
             key="research_submit",
             on_click=queue_research,
         )
-    if selected_date and not 2023 <= selected_date.year <= 2025:
+    if selected_date and out_of_coverage(selected_date.isoformat(), coverage):
         st.warning(
-            "선택한 기준일이 현재 공유 DB의 자료 범위(2023~2025년) 밖입니다. "
-            "요청은 가능하지만 판단할 근거가 부족할 수 있습니다."
+            f"선택한 기준일이 뉴스 DB 자료 범위({coverage[0]:%Y-%m-%d} ~ "
+            f"{coverage[1]:%Y-%m-%d}) 밖이라 분석하지 않습니다."
         )
     st.caption(
         "버튼을 누를 때만 처리합니다. 마지막 성공 결과와 질문·기준일이 같으면 현재 세션에서 재사용합니다. "
@@ -104,13 +204,18 @@ if pending is not None:
         if reusable_input and saved is not None and saved["request"] == pending:
             outcome["result"] = saved["result"]
             outcome["reused"] = True
+        elif out_of_coverage(pending["as_of"], coverage):
+            # Refuse at once: outside the DB the server could only answer
+            # "no evidence" after several paid calls. The server checks too.
+            raise api_client.ResearchAPIError("research_out_of_range")
         else:
             with st.spinner("뉴스 리서치 응답을 기다리고 있습니다…"):
                 result = api_client.post_research(**pending)
             outcome["result"] = result
             if result.status == "complete":
                 st.session_state["research_last_success"] = {
-                    "request": pending,
+                    # Without "refresh", so the same question is reused next time.
+                    "request": {k: pending[k] for k in ("question", "as_of")},
                     "result": result,
                     "api_base_url": api_base_url,
                 }
@@ -142,6 +247,7 @@ else:
                     )
                 else:
                     st.success("리서치가 완료되었습니다.")
+                stored_answer(result, outcome["request"])
                 st.text(f"분석 기준일: {result.as_of.isoformat()}")
                 st.text(result.answer, width="stretch")
                 with st.expander(f"출처 보기 ({len(result.sources)}건)"):
@@ -184,6 +290,7 @@ else:
                     else:
                         st.caption("제공된 위험 태그가 없습니다.")
                 st.text(result.disclaimer, width="stretch")
+                reasoning_steps(result)
                 with st.expander("완료 후 실행 요약 로그"):
                     st.caption(
                         "응답에 포함된 실행 요약입니다. 실시간 진행 상황이 아닙니다."

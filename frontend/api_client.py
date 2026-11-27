@@ -63,6 +63,8 @@ class ResearchResult(BaseModel):
     plan: list[ResearchPlan]
     log: list[str]
     disclaimer: str
+    cached: Literal["exact", "similar"] | None = None
+    cached_question: str | None = None
 
     @model_validator(mode="after")
     def check_evidence(self):
@@ -86,6 +88,10 @@ RESEARCH_ERRORS = {
     "research_db_unavailable": "서버에서 뉴스 DB를 사용할 수 없습니다. 서버 담당자에게 확인해 주세요.",
     "research_embedding_unavailable": "서버의 검색용 임베딩 모델이 준비되지 않았습니다. 서버 담당자에게 확인해 주세요.",
     "research_unavailable": "서버의 리서치 실행 환경이 준비되지 않았습니다. 서버 담당자에게 확인해 주세요.",
+    "research_out_of_range": (
+        "기준일이 뉴스 DB 자료 범위 밖이라 분석하지 않았습니다. "
+        "위에 표시된 범위 안의 날짜를 골라 주세요."
+    ),
     "research_busy": "다른 리서치가 실행 중입니다. 잠시 후 분석 버튼을 다시 눌러 주세요.",
     "research_upstream_error": "외부 분석 서비스 요청에 실패했습니다. 잠시 후 다시 실행하거나 서버 담당자에게 확인해 주세요.",
     "research_invalid_result": "분석 결과를 검증하지 못했습니다. 질문을 조정하거나 서버 담당자에게 확인해 주세요.",
@@ -129,14 +135,22 @@ def get_api_base_url() -> str:
     return os.getenv("API_BASE_URL", "http://127.0.0.1:8000").rstrip("/")
 
 
-def post_research(question: str, as_of: str | None) -> ResearchResult:
-    """One explicit POST, no retry or fallback. Input validation belongs to the API."""
+def post_research(
+    question: str, as_of: str | None, refresh: bool = False
+) -> ResearchResult:
+    """One explicit POST, no retry or fallback. Input validation belongs to the API.
+
+    `refresh` asks the server to skip its stored answer and analyze again.
+    """
     question = question.strip()
     base_url = get_api_base_url()
+    body = {"question": question, "as_of": as_of}
+    if refresh:
+        body["refresh"] = True
     try:
         response = httpx.post(
             f"{base_url}/research",
-            json={"question": question, "as_of": as_of},
+            json=body,
             timeout=RESEARCH_TIMEOUT,
             follow_redirects=False,
         )
@@ -167,6 +181,23 @@ def post_research(question: str, as_of: str | None) -> ResearchResult:
         raise ResearchAPIError("connection_failed") from None
     except (ValueError, ValidationError):
         raise ResearchAPIError("invalid_response") from None
+
+
+def get_research_coverage() -> tuple[date, date] | None:
+    """News DB date range from the server; None when it cannot be told.
+
+    Unknown coverage never blocks a request; the server checks again anyway.
+    """
+    try:
+        response = httpx.get(f"{get_api_base_url()}/research/coverage", timeout=5.0)
+        response.raise_for_status()
+        body = response.json()
+        start, end = date.fromisoformat(body["start"]), date.fromisoformat(body["end"])
+    # InvalidURL is not an HTTPError; a bad API_BASE_URL must not break the page
+    # (post_research then shows its own invalid_api_url message).
+    except (httpx.HTTPError, httpx.InvalidURL, ValueError, KeyError, TypeError):
+        return None
+    return (start, end) if start <= end else None
 
 
 def get_health() -> HealthStatus:

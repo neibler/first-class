@@ -7,6 +7,7 @@ backend/**
 !backend/research_api.py
 !backend/research_schemas.py
 !backend/research_service.py
+!backend/research_cache.py
 !backend/insights_api.py
 !backend/news_research/
 backend/news_research/**
@@ -79,6 +80,7 @@ backend/performance/**
 !frontend/periods.py
 !frontend/portfolio_sections.py
 !frontend/etf_choice.py
+!frontend/relations_text.py
 !config/multi_model.json
 
 !shared/training_inputs.zip

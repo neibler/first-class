@@ -202,6 +202,51 @@ def model_shap(
     return attach_decisions(attach_market_context(payload, bundle), bundle)
 
 
+@router.get("/correlation-matrix")
+def correlation_matrix(
+    window: int = Query(60),
+    weights: str | None = Query(
+        default=None,
+        description="보유 비중 'SPY:0.3,GLD:0.2' — 포트폴리오 평균 상관 계산용",
+        max_length=500,
+    ),
+    as_of: str | None = None,
+):
+    """ETF x ETF correlation map, plus how mixed the given holdings are."""
+    from datetime import date
+    from .correlation import CONFIG, correlation_matrix as build, load_correlation_data
+
+    if window not in CONFIG.windows:
+        raise HTTPException(422, "window는 20, 60, 120, 252 중 하나여야 합니다.")
+    if as_of is not None:
+        try:
+            if date.fromisoformat(as_of).isoformat() != as_of:
+                raise ValueError("Invalid date")
+        except ValueError:
+            raise HTTPException(422, "as_of는 YYYY-MM-DD 형식이어야 합니다.") from None
+    held = {}
+    for part in (weights or "").split(","):
+        if not part.strip():
+            continue
+        ticker, _, value = part.partition(":")
+        try:
+            held[ticker.strip().upper()] = float(value)
+        except ValueError:
+            raise HTTPException(
+                422, "weights는 'SPY:0.3,GLD:0.2' 형식이어야 합니다."
+            ) from None
+    try:
+        data = load_correlation_data()
+    except (OSError, ValueError, KeyError):
+        raise HTTPException(
+            503, "실제 시장 입력을 읽지 못했습니다. 입력 데이터와 설정을 확인하세요."
+        ) from None
+    try:
+        return build(data, window, as_of, held)
+    except ValueError:
+        raise HTTPException(422, "선택한 기간의 관측이 부족합니다.") from None
+
+
 @router.get("/correlation/{ticker}")
 def correlation(
     ticker: str,

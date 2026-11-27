@@ -211,6 +211,73 @@ def analyze_correlations(data, ticker, window=60, top_k=5, as_of=None):
     }
 
 
+def correlation_matrix(data, window=60, as_of=None, weights=None):
+    """ETF x ETF correlations over the last `window` days, and how mixed a
+    portfolio is: the weight-averaged correlation between its held ETFs.
+
+    Same returns and window as /correlation/{ticker}; only ETFs (no macros).
+    """
+    if window not in CONFIG.windows:
+        raise ValueError("Invalid window")
+    index = pd.DatetimeIndex(data.dates)
+    frame = pd.DataFrame(data.returns, index=index, columns=data.assets, dtype=float)
+    cutoff = pd.Timestamp(as_of) if as_of else index[-1]
+    recent = frame.loc[:cutoff].replace([np.inf, -np.inf], np.nan).tail(window)
+    if len(recent) < window:
+        raise ValueError("Not enough observations")
+    # A pair needs every day of the window, as in the rolling correlation.
+    matrix = recent.corr(min_periods=window).clip(-1, 1)
+    # A flat series has no correlation (same 1e-12 rule as the rolling version).
+    moving = recent.std().gt(1e-12).to_numpy()
+    matrix = matrix.where(moving[:, None] & moving[None, :])
+
+    def cell(value):
+        return float(value) if np.isfinite(value) else None
+
+    result = {
+        "window": window,
+        "date": str(recent.index[-1].date()),
+        "window_start": str(recent.index[0].date()),
+        "tickers": list(data.assets),
+        "matrix": [[cell(v) for v in row] for row in matrix.to_numpy()],
+        "portfolio": None,
+    }
+    held = {
+        t: float(w)
+        for t, w in (weights or {}).items()
+        if t in data.assets and np.isfinite(w) and w > 0
+    }
+    # Scale to shares first: huge or tiny raw weights must give the same answer
+    # without the pair products overflowing or underflowing.
+    # Dividing by the largest weight keeps every value in (0, 1] even when the
+    # sum itself would overflow; the shares then add up to 1.
+    if held:
+        largest = max(held.values())
+        held = {t: w / largest for t, w in held.items()}
+        total_weight = sum(held.values())
+        held = {t: w / total_weight for t, w in held.items()}
+    pairs = [(a, b) for a in held for b in held if a < b]
+    usable = [(a, b) for a, b in pairs if np.isfinite(matrix.loc[a, b])]
+    total = sum(held[a] * held[b] for a, b in usable)
+    average = (
+        sum(held[a] * held[b] * matrix.loc[a, b] for a, b in usable) / total
+        if usable and total > 0
+        else float("nan")
+    )
+    # A non-finite average must never reach the JSON response.
+    if np.isfinite(average):
+        direction, strength, label = describe_correlation(float(average))
+        result["portfolio"] = {
+            "average_correlation": float(average),
+            "direction": direction,
+            "strength": strength,
+            "relationship_label": label,
+            "holdings": sorted(held),
+            "pairs": len(usable),
+        }
+    return result
+
+
 def load_correlation_data():
     from pathlib import Path
     from backend.investment_ai.settings import ROOT, read_config

@@ -13,8 +13,12 @@ COPY backend/news_research/requirements.txt /app/news-requirements.txt
 # Investment inference explicitly loads on CPU; avoid unused CUDA packages.
 RUN python -m pip install 'torch>=2.3,<3' --index-url https://download.pytorch.org/whl/cpu \
     && python -m pip install -r requirements.txt -r news-requirements.txt
+# /research never downloads embeddings per request, so bake Chroma's default
+# all-MiniLM-L6-v2 ONNX model into appuser's cache at build time.
+RUN HOME=/home/appuser python -c "from chromadb.utils.embedding_functions.onnx_mini_lm_l6_v2 import ONNXMiniLM_L6_V2 as E; E()(['warmup'])" \
+    && chown -R appuser:appuser /home/appuser/.cache
 COPY backend/main.py /app/backend/main.py
-COPY backend/research_api.py backend/research_schemas.py backend/research_service.py backend/insights_api.py /app/backend/
+COPY backend/research_api.py backend/research_schemas.py backend/research_service.py backend/research_cache.py backend/insights_api.py /app/backend/
 COPY backend/investment_ai/ /app/backend/investment_ai/
 COPY backend/news_research/ /app/backend/news_research/
 # 결과 JSON 을 읽어 내보내는 /performance 라우터. 분석 실행용 무거운 의존성

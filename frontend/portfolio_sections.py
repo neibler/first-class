@@ -16,6 +16,7 @@ from frontend.investment_client import (
     InvestmentAPIError,
     UnknownInvestmentSessionError,
 )
+from frontend.shap_explanations import ASSET_NAMES
 from frontend.ui import card, detail_link
 from frontend.weight_format import format_weights, round_weights
 
@@ -179,24 +180,72 @@ def why_changed(changes):
             f"날짜 (최근 순 · {len(events)}일)", list(events), key="rebalance_date"
         )
         event = events[day]
-        reasons = [REASONS.get(r, r) for r in event["reasons"]]
-        st.markdown(f"**{day} 조정 이유:** {', '.join(reasons) or '기록 없음'}")
         rows = change_rows(event)
-        if rows:
-            st.dataframe(rows, hide_index=True, height="content")
-        else:
-            st.caption("표시 기준으로 비중이 바뀐 자산이 없습니다.")
-        st.caption(
-            f"{event['decision_date']} 장 마감 정보로 결정하고 {day}에 반영한 비중입니다. "
-            "이전·이후 비중은 각각 합계 100%가 되도록 반올림하고, 변화는 그 차이입니다. "
-            "표시상 변화가 없는 자산은 생략합니다. "
-            "이유를 쉬운 문장으로 풀어 주는 설명은 준비 중입니다."
-        )
+        # Beginners first: why, in plain words, then what moved; numbers below.
+        st.markdown(f"💬 {plain_reason(event['reasons'])}")
+        for line in moved_lines(rows):
+            st.markdown(line)
+        with st.expander("자세히 보기 · 날짜별 비중 표"):
+            if rows:
+                st.dataframe(rows, hide_index=True, height="content")
+            else:
+                st.caption("표시 기준으로 비중이 바뀐 자산이 없습니다.")
+            st.caption(
+                f"{event['decision_date']} 장 마감 정보로 결정하고 {day}에 반영한 비중입니다. "
+                "이전·이후 비중은 각각 합계 100%가 되도록 반올림하고, 변화는 그 차이입니다. "
+                "표시상 변화가 없는 자산은 생략합니다."
+            )
+
+
+# The recorded rebalance reason, as one sentence a beginner can read. Same
+# facts as REASONS (report card), only worded as a full sentence.
+PLAIN_REASONS = {
+    "monthly": "한 달에 한 번 하는 정기 점검일이라 비중을 다시 맞췄어요.",
+    "risk_score": "뉴스 위험이 기준을 넘어서, 위험을 줄이려고 비중을 다시 나눴어요.",
+    # Policy-neutral like REASONS: low-churn compares with the last trade, not
+    # the AI target.
+    "portfolio_weight_distance": "비중 차이가 조정 기준보다 커져서 다시 맞췄어요.",
+    "mdd_stop": "손실이 커져서 안전장치(Safe-Guard)가 작동해 현금으로 바꿨어요.",
+}
+MOVED_SHOWN = 2  # names per line; the rest is counted ("외 1개")
+
+
+def plain_reason(reasons):
+    sentences = [PLAIN_REASONS.get(r, f"기록된 조정 이유: {r}") for r in reasons]
+    return " ".join(sentences) or "이날 조정 이유는 기록되지 않았어요."
+
+
+def moved_lines(rows):
+    """'늘린 자산' / '줄인 자산' from the displayed table rows, largest first.
+
+    Uses the table's own rounded changes, so the lines never disagree with it.
+    """
+    if not rows:
+        return ["표시할 만큼 바뀐 자산은 없어요."]
+
+    def label(name):
+        return name if name == "현금" else f"{ASSET_NAMES.get(name, name)}({name})"
+
+    def line(mark, title, names):
+        shown = ", ".join(label(n) for n in names[:MOVED_SHOWN])
+        more = f" 외 {len(names) - MOVED_SHOWN}개" if len(names) > MOVED_SHOWN else ""
+        return f"{mark} **{title}** {shown}{more}"
+
+    change = {row["자산"]: int(row["변화"][:-2]) for row in rows}
+    ups = [n for n in change if change[n] > 0]  # rows are already largest first
+    downs = [n for n in change if change[n] < 0]
+    lines = []
+    if ups:
+        lines.append(line("▲", "늘린 자산", ups))
+    if downs:
+        lines.append(line("▼", "줄인 자산", downs))
+    return lines
 
 
 def assumptions(data):
     result = data["display_metrics"]
-    with st.expander("계산 가정"):
+    with st.expander("계산 기준과 원자료 (검증용)"):
+        st.caption("숫자를 직접 확인하려는 분을 위한 계산 기준과 날짜별 원자료입니다.")
         st.write(
             "서버에 저장된 모델 평가 결과입니다. 합성 데이터 결과는 실제 투자 성능을 뜻하지 않습니다."
         )
@@ -293,76 +342,175 @@ def market(column, text):
     column.caption(f"{MARKET} {text}")
 
 
-def portfolio_risk(data):
-    """Portfolio-wide risk next to the market, then the drawdown trend."""
-    result = data["display_metrics"]
-    benchmark = data.get("benchmark_metrics") or {}
-    with card("risk-now"):
-        st.subheader("시장과 비교한 위험도")
-        st.caption(
-            f"같은 기간 {MARKET}(SPY 매수 후 보유)에 투자했을 때의 값을 숫자 아래에 함께 표시합니다. "
-            "포트폴리오 전체 평가 기간 값입니다."
-        )
-        if data["stopped"] or data.get("safeguard_triggered"):
-            st.warning(
-                "Safe-Guard가 작동했습니다. 손실 제한 규칙에 따라 현금으로 전환된 결과입니다."
-            )
-        else:
-            st.success(
-                "Safe-Guard 미작동 · 평가 기간에 손실 제한 규칙이 발동하지 않았습니다."
-            )
-        worst, now, swing = st.columns(3)
-        worst.metric(
-            "최대 하락폭 · MDD",
-            f"{result['mdd']:.2%}",
-            help="평가 기간에 최고점 대비 가장 많이 떨어진 폭입니다.",
-        )
-        if benchmark.get("max_drawdown") is not None:
-            market(worst, loss(benchmark["max_drawdown"]))
-        now.metric(
-            "현재 낙폭",
-            f"{result['current_drawdown']:.2%}",
-            help="기준일에 최고점 대비 얼마나 내려와 있는지입니다.",
-        )
-        volatility = (data.get("metrics") or {}).get("annualized_volatility")
-        swing.metric(
-            "변동성 · 연환산",
-            f"{volatility:.2%}" if volatility is not None else "—",
-            help="수익률이 얼마나 크게 오르내렸는지를 1년 기준으로 나타낸 값입니다.",
-        )
-        if benchmark.get("annualized_volatility") is not None:
-            market(swing, f"{benchmark['annualized_volatility']:.2%}")
+def compare(mine, market_value):
+    """'less' / 'same' / 'more' than the market; within ±15% reads as the same
+    (the report's risk card uses the same band). None when either is missing."""
+    # A market value at or below 0 (no loss at all) gives no meaningful ratio.
+    if mine is None or market_value is None or market_value <= 0:
+        return None
+    ratio = mine / market_value
+    return "same" if 0.85 <= ratio <= 1.15 else "less" if ratio < 0.85 else "more"
+
+
+def risk_summary(drop, swing):
+    """One line: how far it fell and how much it swung, next to the market."""
+    drops = {"less": "덜 떨어지고", "same": "비슷하게 떨어지고", "more": "더 떨어지고"}
+    swings = {
+        "less": "덜 오르내렸어요",
+        "same": "비슷하게 오르내렸어요",
+        "more": "더 크게 오르내렸어요",
+    }
+    if drop and swing:
+        return f"{MARKET}과 비교하면 {drops[drop]}, {swings[swing]}."
+    if drop:
+        alone = {
+            "less": "덜 떨어졌어요",
+            "same": "비슷하게 떨어졌어요",
+            "more": "더 떨어졌어요",
+        }
+        return f"{MARKET}과 비교하면 {alone[drop]}."
+    if swing:
+        return f"{MARKET}과 비교하면 {swings[swing]}."
+    return None
+
+
+EXAMPLE_WON = 10_000_000  # "1,000만 원이었다면" — display only, no recalculation
+
+
+def won(rate):
+    """A loss rate as money on the example amount, rounded for reading."""
+    amount = EXAMPLE_WON * rate
+    return (
+        f"약 {amount / 10_000:,.0f}만 원" if amount >= 10_000 else f"약 {amount:,.0f}원"
+    )
+
+
+def meaning(column, level, less, same, more):
+    """One plain line under a metric: what the number means next to the market."""
+    if level:
+        column.caption("👉 " + {"less": less, "same": same, "more": more}[level])
+
+
+def daily_loss():
+    """VaR/CVaR folded away: explained in words, values and one reading each."""
+    with st.expander("자세히 보기 · 하루 예상 손실(VaR·CVaR)"):
         try:
             tail = insights_client.load_risk()
         except APIError as exc:
             st.caption(str(exc))
             tail = None
         if tail:
-            risk_label = f"{tail['level']:.0%}"
-            mine, spy = tail["portfolio"], tail["benchmark_risk"]
-            var, cvar = st.columns(2)
-            var.metric(
-                f"하루 예상 손실 · VaR {risk_label}",
-                loss(mine["var"]),
-                help=(
-                    "평가 기간의 하루 수익률 중 나쁜 쪽 5% 경계입니다. "
-                    "20일 중 19일은 하루 손실이 이 값보다 작았다는 뜻입니다."
-                ),
-            )
-            market(var, loss(spy["var"]))
-            cvar.metric(
-                f"나쁜 날 평균 손실 · CVaR {risk_label}",
-                loss(mine["cvar"]),
-                help="하루 손실이 VaR보다 컸던 나쁜 날들의 평균 손실입니다.",
-            )
-            market(cvar, loss(spy["cvar"]))
+            # The period first, so the numbers below are read against it.
             st.caption(
                 f"VaR·CVaR: {tail['start']}~{tail['as_of']} "
                 f"{tail['observations']}거래일 실제 수익률 기준"
             )
-        st.caption(f"{data['as_of']} 기준 · 모든 값은 서버 계산값입니다.")
+        st.markdown(
+            "**VaR**는 '평소 나쁜 날, 하루에 얼마까지 잃었나'이고, "
+            "**CVaR**는 '그보다 더 나쁜 날에는 평균 얼마를 잃었나'입니다. "
+            "둘 다 평가 기간의 실제 하루 수익률로 계산한 과거 값이에요."
+        )
+        if not tail:
+            return
+        risk_label = f"{tail['level']:.0%}"
+        mine, spy = tail["portfolio"], tail["benchmark_risk"]
+        var, cvar = st.columns(2)
+        var.metric(
+            f"하루 예상 손실 · VaR {risk_label}",
+            loss(mine["var"]),
+            help=(
+                "평가 기간의 하루 수익률 중 나쁜 쪽 5% 경계입니다. "
+                "20일 중 19일은 하루 손실이 이 값보다 작았다는 뜻입니다."
+            ),
+        )
+        market(var, loss(spy["var"]))
+        meaning(
+            var,
+            compare(mine["var"], spy["var"]),
+            f"평소 나쁜 날의 손실이 {MARKET}보다 작았어요.",
+            f"평소 나쁜 날의 손실이 {MARKET}과 비슷했어요.",
+            f"평소 나쁜 날의 손실이 {MARKET}보다 컸어요.",
+        )
+        cvar.metric(
+            f"나쁜 날 평균 손실 · CVaR {risk_label}",
+            loss(mine["cvar"]),
+            help="하루 손실이 VaR보다 컸던 나쁜 날들의 평균 손실입니다.",
+        )
+        market(cvar, loss(spy["cvar"]))
+        meaning(
+            cvar,
+            compare(mine["cvar"], spy["cvar"]),
+            f"아주 나쁜 날의 손실도 {MARKET}보다 작았어요.",
+            f"아주 나쁜 날의 손실은 {MARKET}과 비슷했어요.",
+            f"아주 나쁜 날의 손실은 {MARKET}보다 컸어요.",
+        )
+        if (mine["var"] or 0) > 0 and (mine["cvar"] or 0) > 0:
+            st.caption(
+                f"1,000만 원이었다면 평소 나쁜 날 하루 {won(mine['var'])}, "
+                f"아주 나쁜 날에는 평균 {won(mine['cvar'])}을 잃은 셈이에요."
+            )
+
+
+def portfolio_risk(data):
+    """Portfolio-wide risk next to the market, then the drawdown trend."""
+    result = data["display_metrics"]
+    benchmark = data.get("benchmark_metrics") or {}
+    start, end = data["returns"][0]["date"], data["as_of"]
+    volatility = (data.get("metrics") or {}).get("annualized_volatility")
+    market_mdd = benchmark.get("max_drawdown")
+    market_volatility = benchmark.get("annualized_volatility")
+    with card("risk-now"):
+        st.subheader("시장과 비교한 위험도")
+        # One plain line first; the numbers below carry no extra sentences.
+        summary = risk_summary(
+            compare(abs(result["mdd"]), abs(market_mdd) if market_mdd else None),
+            compare(volatility, market_volatility),
+        )
+        if summary:
+            st.info(summary)
+        # The portfolio page lets the user pick a shorter period; this page
+        # always uses the whole evaluation, so the dates stay visible.
+        st.caption(
+            f"평가 기간 전체({start} ~ {end}) 기준 · 현재 낙폭만 마지막 날 · "
+            f"숫자 아래 회색 글씨는 {MARKET}"
+        )
+        if data["stopped"] or data.get("safeguard_triggered"):
+            st.warning("손실 제한 안전장치(Safe-Guard)가 작동해 현금으로 바꿨어요.")
+        else:
+            st.success(
+                "Safe-Guard 미작동 · 손실 제한 안전장치는 이 기간에 작동하지 않았어요."
+            )
+        worst, now, swing = st.columns(3)
+        worst.metric(
+            "최대 하락폭 · MDD",
+            f"{result['mdd']:.2%}",
+            help=(
+                "평가 기간에 최고점 대비 가장 많이 떨어진 폭입니다. "
+                f"가장 많았을 때 1,000만 원이었다면, 거기서 {won(abs(result['mdd']))}이 "
+                "줄어든 셈이에요."
+            ),
+        )
+        if market_mdd is not None:
+            market(worst, loss(market_mdd))
+        now.metric(
+            "현재 낙폭",
+            f"{result['current_drawdown']:.2%}",
+            help=f"마지막 날({end}) 최고점 대비 얼마나 내려와 있는지입니다.",
+        )
+        swing.metric(
+            "변동성 · 연환산",
+            f"{volatility:.2%}" if volatility is not None else "—",
+            help="수익률이 얼마나 크게 오르내렸는지를 1년 기준으로 나타낸 값입니다.",
+        )
+        if market_volatility is not None:
+            market(swing, f"{market_volatility:.2%}")
+        daily_loss()
 
     with card("drawdown"):
         st.subheader("하락폭 추이")
-        st.caption("0%는 최고점, 아래로 내려갈수록 최고점보다 많이 떨어진 상태입니다.")
+        st.caption("하락폭은 내 돈이 가장 많았던 때보다 그날 얼마나 줄어 있었는지예요.")
+        st.caption(
+            "예: 최고 110만 원이었다가 그날 99만 원이면 −10%, "
+            "0%는 최고 기록을 새로 쓴 날이에요."
+        )
         st.altair_chart(drawdown_trend(result["path"]), theme=None, width="stretch")

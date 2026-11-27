@@ -15,6 +15,8 @@ class ResearchRequest(BaseModel):
 
     question: str = Field(min_length=1, max_length=2000)
     as_of: date
+    # True skips the stored answer (the page's "새로 분석하기" button).
+    refresh: bool = False
 
     @field_validator("question", mode="before")
     @classmethod
@@ -76,6 +78,9 @@ class ResearchResponse(BaseModel):
     plan: list[ResearchPlanStep]
     log: list[str]
     disclaimer: str
+    # Set only when the answer came from the research cache.
+    cached: Literal["exact", "similar"] | None = None
+    cached_question: str | None = None
 
     @model_validator(mode="after")
     def check_citations(self):

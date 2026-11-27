@@ -394,3 +394,42 @@ def drawdown_trend(path):
         )
     )
     return chart_style(chart.properties(height=210))
+
+
+def correlation_heatmap(tickers, matrix, highlight=None):
+    """ETF x ETF correlation map from the server; red = together, blue = opposite."""
+    cells = [
+        {"row": a, "col": b, "value": value}
+        for a, row in zip(tickers, matrix)
+        for b, value in zip(tickers, row)
+        if value is not None
+    ]
+    base = alt.Chart(alt.Data(values=cells)).encode(
+        x=alt.X("col:N", title=None, sort=tickers, axis=alt.Axis(labelAngle=-45)),
+        y=alt.Y("row:N", title=None, sort=tickers),
+    )
+    # The chosen ETF's row and column stay bright; the rest fade, so the map
+    # visibly changes with the ETF selector (the values themselves do not).
+    chosen = (
+        (alt.datum.row == highlight) | (alt.datum.col == highlight)
+        if highlight in tickers
+        else alt.datum.row == alt.datum.row
+    )
+    heat = base.mark_rect(stroke="white", strokeWidth=0.5).encode(
+        color=alt.Color(
+            "value:Q",
+            title="관계",
+            scale=alt.Scale(scheme="redblue", domain=[-1, 1], reverse=True),
+        ),
+        opacity=alt.condition(chosen, alt.value(1.0), alt.value(0.25)),
+        tooltip=[
+            alt.Tooltip("row:N", title="ETF"),
+            alt.Tooltip("col:N", title="비교"),
+            alt.Tooltip("value:Q", title="상관계수", format="+.2f"),
+        ],
+    )
+    labels = base.mark_text(fontSize=10).encode(
+        text=alt.Text("value:Q", format=".1f"),
+        opacity=alt.condition(chosen, alt.value(1.0), alt.value(0.0)),
+    )
+    return chart_style(alt.layer(heat, labels).properties(height=420))

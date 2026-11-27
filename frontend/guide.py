@@ -47,6 +47,36 @@ INDICATOR_GUIDE = [
     },
 ]
 
+
+def rsi_example(value):
+    """Today's RSI in words, with the same 30/70 lines the chart draws."""
+    if value >= 70:
+        zone = "70 이상이라 단기간에 많이 오른 '과매수' 쪽"
+    elif value <= 30:
+        zone = "30 이하라 단기간에 많이 내린 '과매도' 쪽"
+    else:
+        zone = "30~70 사이라 한쪽으로 크게 쏠리지 않은 중립 구간"
+    # One decimal so 69.9 is not shown as "70" while called neutral.
+    return f"현재 {value:.1f}은(는) {zone}이에요."
+
+
+def macd_example(value):
+    """Today's MACD in words, against the chart's 0 line."""
+    if value > 0:
+        trend = "0보다 커서, 최근 흐름이 긴 흐름보다 위쪽(상승 쪽)이라는 뜻이에요."
+    elif value < 0:
+        trend = "0보다 작아서, 최근 흐름이 긴 흐름보다 아래쪽(하락 쪽)이라는 뜻이에요."
+    else:
+        trend = "0이라 최근 흐름과 긴 흐름이 같은 수준이에요."
+    if value != 0 and abs(value) < 0.01:
+        # "+0.00" next to "greater than zero" would contradict itself.
+        trend = trend.replace("0보다 커서", "0보다 아주 조금 커서").replace(
+            "0보다 작아서", "0보다 아주 조금 작아서"
+        )
+        return f"현재 {value:+.4f}은(는) {trend}"
+    return f"현재 {value:+.2f}은(는) {trend}"
+
+
 SUGGESTED_QUESTIONS = [
     "최근 QQQ에 어떤 위험이 있었나요?",
     "반도체(SMH) 관련 주요 뉴스는 무엇인가요?",

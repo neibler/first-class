@@ -47,6 +47,70 @@ class _BoundedLLM:
         return result
 
 
+_coverage_cache: dict = {}
+
+
+def news_coverage(db_path: Path) -> tuple[str, str] | None:
+    """(first, last) news date in the DB, from Chroma's indexed date_int metadata.
+
+    A read-only SQLite min/max (well under a second on the 200k-chunk DB),
+    cached until chroma.sqlite3 changes. None when it cannot be read, so a
+    coverage problem never blocks research on its own.
+    """
+    import sqlite3
+
+    sqlite = Path(db_path) / "chroma.sqlite3"
+    try:
+        stat = sqlite.stat()
+    except OSError:
+        return None
+    key = (str(sqlite), stat.st_mtime_ns, stat.st_size)
+    # One read, no membership-then-index: another thread may clear the dict.
+    cached = _coverage_cache.get(key)
+    if cached is not None:
+        return cached
+    try:
+        with sqlite3.connect(f"{sqlite.as_uri()}?mode=ro", uri=True) as connection:
+            low, high = connection.execute(
+                "SELECT min(int_value), max(int_value) FROM embedding_metadata "
+                "WHERE key = 'date_int' AND int_value IS NOT NULL"
+            ).fetchone()
+    except sqlite3.Error:
+        return None
+    if low is None or high is None:
+        return None
+
+    def iso(value: int) -> str:
+        text = str(value)
+        return f"{text[:4]}-{text[4:6]}-{text[6:8]}"
+
+    found = (iso(low), iso(high))
+    _coverage_cache.clear()
+    _coverage_cache[key] = found
+    return found
+
+
+def coverage() -> dict:
+    """Date range the AI assistant can answer for; raises ResearchFailure."""
+    try:
+        from backend.news_research.settings import news_db_path
+    except ImportError:
+        raise ResearchFailure(
+            503, "research_unavailable", "리서치 실행 환경이 준비되지 않았습니다."
+        ) from None
+    db_path = news_db_path()
+    if not (db_path / "chroma.sqlite3").is_file():
+        raise ResearchFailure(
+            503, "research_db_missing", "리서치 DB가 준비되지 않았습니다."
+        )
+    found = news_coverage(db_path)
+    if found is None:
+        raise ResearchFailure(
+            503, "research_db_unavailable", "리서치 DB를 사용할 수 없습니다."
+        )
+    return {"start": found[0], "end": found[1]}
+
+
 def _run(request: ResearchRequest) -> ResearchResponse:
     # Kept inside the request so the base API image works without RAG packages.
     try:
@@ -64,6 +128,14 @@ def _run(request: ResearchRequest) -> ResearchResponse:
     if not (db_path / "chroma.sqlite3").is_file():
         raise ResearchFailure(
             503, "research_db_missing", "리서치 DB가 준비되지 않았습니다."
+        )
+    # Before any paid call: a date outside the DB can only end in "no evidence".
+    found = news_coverage(db_path)
+    if found and not found[0] <= request.as_of.isoformat() <= found[1]:
+        raise ResearchFailure(
+            422,
+            "research_out_of_range",
+            f"기준일이 뉴스 DB 범위({found[0]} ~ {found[1]}) 밖입니다.",
         )
     try:
         import anthropic
@@ -136,7 +208,63 @@ def _run(request: ResearchRequest) -> ResearchResponse:
         ) from None
 
 
+def _cache_context():
+    """(cache, context key) or (None, None); research works without either."""
+    try:
+        from backend.news_research.settings import news_db_path
+        from backend.research_cache import context_key, get_cache
+
+        cache = get_cache()
+        context = context_key(news_db_path()) if cache else None
+    except Exception:
+        logger.warning("research_cache_unavailable")
+        return None, None
+    return (cache, context) if context else (None, None)
+
+
+def _cached_answer(request: ResearchRequest, cache, context):
+    try:
+        found = cache.lookup(request.question, request.as_of.isoformat(), context)
+    except Exception:
+        logger.warning("research_cache_read_failed")
+        return None
+    if found is None:
+        return None
+    payload, kind, stored_question = found
+    try:
+        # A similar question's answer is shown under the asked question, with the
+        # stored question kept so the page can say which one it answers.
+        return ResearchResponse.model_validate(
+            {
+                **payload,
+                "question": request.question,
+                "cached": kind,
+                "cached_question": stored_question,
+            }
+        )
+    except ValidationError:
+        return None
+
+
 def run_research(request: ResearchRequest) -> ResearchResponse:
+    cache, context = _cache_context()
+    if cache and not request.refresh:
+        hit = _cached_answer(request, cache, context)
+        if hit is not None:
+            return hit
+    response = _locked_research(request)
+    if cache and response.status == "complete":
+        try:
+            payload = response.model_dump(
+                mode="json", exclude={"cached", "cached_question"}
+            )
+            cache.save(request.question, request.as_of.isoformat(), context, payload)
+        except Exception:
+            logger.warning("research_cache_write_failed")
+    return response
+
+
+def _locked_research(request: ResearchRequest) -> ResearchResponse:
     if not _research_lock.acquire(blocking=False):
         raise ResearchFailure(
             503, "research_busy", "리서치가 진행 중입니다. 완료 후 다시 요청하세요."
